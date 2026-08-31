@@ -1,44 +1,36 @@
 # Project Development Rules
 
-## 1. Purpose of This Document
+## 1. Purpose
 
 This document contains the global development rules for this project.
 
-These rules apply to **every prompt, feature, modification, bug fix, refactor, optimization, database change, UI change, API change, and code change** made to this project.
+These rules apply to every:
 
-The project also contains a separate:
+* Feature
+* Modification
+* Bug fix
+* Refactor
+* Optimization
+* Database change
+* UI change
+* API change
+* Code change
+* Configuration change
+* Deployment-related change
+
+The project also contains:
 
 ```text
 SECURITY_RULES.md
 ```
 
-`SECURITY_RULES.md` contains the project's mandatory security requirements.
+`SECURITY_RULES.md` contains the mandatory security requirements.
 
-Both documents must be followed for every development task.
-
-### Rule Priority
-
-For every request:
-
-```text
-PROJECT_RULES.md
-        +
-SECURITY_RULES.md
-        +
-User's Current Request
-        ↓
-Final Implementation
-```
-
-The current request determines what should be changed, while these rule files determine **how the change must be implemented**.
-
-Security requirements must always be applied when relevant.
+Both documents must be followed for every applicable development task.
 
 ---
 
 # 2. Technology Stack
-
-The project uses the following technology stack.
 
 ## Backend
 
@@ -77,14 +69,14 @@ Development should primarily be performed locally using XAMPP.
 
 The local environment should be used for:
 
-* Developing features
-* Testing functionality
-* Testing database operations
-* Testing PHP
-* Testing JavaScript
-* Testing email functionality
-* Testing security controls
-* Testing approved offline functionality
+* Feature development
+* Functional testing
+* Database testing
+* PHP testing
+* JavaScript testing
+* Email testing
+* Security testing
+* Approved offline functionality testing
 
 The production Z.com environment should not be used as the primary development environment.
 
@@ -92,58 +84,63 @@ The production Z.com environment should not be used as the primary development e
 
 # 4. Master Development Rule
 
-**Implement only what the current prompt requests, while following all applicable rules in `PROJECT_RULES.md` and `SECURITY_RULES.md`.**
+Implement only what the current user request requires while following:
 
-Do not automatically add unrelated features.
+* `PROJECT_RULES.md`
+* `SECURITY_RULES.md`
 
-Do not automatically refactor unrelated code.
+Do not automatically:
 
-Do not automatically redesign unrelated interfaces.
+* Add unrelated features.
+* Refactor unrelated code.
+* Redesign unrelated interfaces.
+* Modify unrelated database structures.
+* Modify unrelated APIs.
+* Add unnecessary dependencies.
+* Change existing functionality without a reason.
+* Apply offline functionality without explicit approval.
 
-Do not automatically modify unrelated database structures.
-
-Do not automatically add new dependencies.
-
-Do not automatically apply offline functionality.
-
-Keep changes as targeted and minimal as reasonably possible.
+Keep changes targeted and minimal.
 
 ---
 
-# 5. Every Prompt Must Follow These Rules
+# 5. Development Process
 
-For every prompt I provide, follow this process:
+For every development task, follow this general process:
 
 ```text
-                    MY PROMPT
-                       ↓
-             Understand the Request
-                       ↓
-             Check PROJECT_RULES.md
-                       ↓
-             Check SECURITY_RULES.md
-                       ↓
-            Identify Security Impact
-                       ↓
-          Identify Required Dependencies
-                       ↓
-         Determine Whether Offline Support
-                 Is Relevant
-                       ↓
-              Implement the Request
-                       ↓
-              Apply Security Controls
-                       ↓
-                Test Functionality
-                       ↓
-                 Test Security
-                       ↓
-                 Return Changes
+User Request
+     ↓
+Understand Requirement
+     ↓
+Inspect Existing Implementation
+     ↓
+Read Project Rules
+     ↓
+Read Security Rules
+     ↓
+Identify Affected Components
+     ↓
+Identify Security Requirements
+     ↓
+Identify Required Dependencies
+     ↓
+Determine Whether Offline Support Is Relevant
+     ↓
+If Offline Is Relevant → STOP AND REQUEST APPROVAL
+     ↓
+Implement Requested Functionality
+     ↓
+Apply Security Controls
+     ↓
+Test Functionality
+     ↓
+Test Security
+     ↓
+Review Changes
 ```
 
-Do not require me to repeat these rules in every prompt.
-
-These rules should be treated as persistent project instructions.
+Do not require the user to repeat these rules in every prompt.
 
 ---
 
@@ -160,17 +157,17 @@ When modifying the project:
 * Avoid unnecessary dependencies.
 * Avoid unnecessary file creation.
 * Avoid changing unrelated files.
-* Avoid changing existing functionality simply because another implementation may be preferred.
+* Avoid replacing working implementations without a reason.
 
-If an existing implementation already works and does not conflict with the requested change or security requirements, do not unnecessarily replace it.
+If an existing implementation works and does not conflict with the requested change or security requirements, do not unnecessarily replace it.
 
 ---
 
-# 7. Do Not Add Unrequested Features
+# 7. Unrequested Features
 
-Do not add features simply because they may be useful.
+Do not implement features merely because they may be useful.
 
-Examples of features that must not be added without being requested include:
+Examples include:
 
 * New authentication methods
 * New dashboards
@@ -182,56 +179,17 @@ Examples of features that must not be added without being requested include:
 * New UI components
 * New caching systems
 * New background processes
-* Offline functionality
 * Additional analytics
 * Additional automation
+* Offline functionality
 
-If a feature would be useful but was not requested, mention it separately rather than implementing it automatically.
-
----
-
-# 8. Security Rules
-
-The project has a dedicated:
-
-```text
-SECURITY_RULES.md
-```
-
-This file contains the complete security requirements.
-
-It must be followed for every applicable change.
-
-Security must be implemented together with functionality rather than added afterward.
-
-The general development principle is:
-
-```text
-Build Feature
-      ↓
-Implement Required Security Controls
-      ↓
-Test Functionality
-      ↓
-Test Security
-      ↓
-Continue Development
-```
-
-Never intentionally implement an insecure approach merely because it is easier or faster.
-
-If the requested implementation conflicts with a security requirement:
-
-1. Do not knowingly implement the insecure approach.
-2. Explain the security issue.
-3. Use a secure implementation where possible.
-4. Preserve the requested functionality.
+If an unrequested feature would be useful, mention it separately rather than implementing it automatically.
 
 ---
 
-# 9. Environment Configuration
+# 8. Environment Configuration
 
-Sensitive configuration must be stored in environment variables.
+Environment-specific and sensitive configuration must be stored outside tracked source code.
 
 Use:
 
@@ -239,7 +197,7 @@ Use:
 .env
 ```
 
-for local and production environment-specific secrets.
+for environment-specific configuration and secrets.
 
 Use:
 
@@ -251,27 +209,27 @@ as a safe template containing placeholders only.
 
 The `.env` file must never be committed to GitHub.
 
-Example:
-
-```text
-.env
-.env.example
-.gitignore
-```
-
 The `.env` file may contain:
 
 * Database credentials
 * SMTP credentials
 * Application secrets
 * API keys
-* Other environment-specific sensitive configuration
+* Environment-specific configuration
 
-Never hard-code production credentials into PHP, JavaScript, HTML, or configuration files that are committed to GitHub.
+Never hard-code production credentials into:
+
+* PHP
+* JavaScript
+* HTML
+* CSS
+* SQL
+* Configuration files
+* Other files intended to be committed to GitHub
 
 ---
 
-# 10. Git and GitHub
+# 9. Git and GitHub
 
 Git and GitHub are used for version control throughout development.
 
@@ -284,6 +242,8 @@ Develop
   ↓
 Test Locally
   ↓
+Review Changes
+  ↓
 Git Commit
   ↓
 Git Push
@@ -291,7 +251,7 @@ Git Push
 GitHub
 ```
 
-Commit changes regularly using meaningful commit messages.
+Use meaningful commit messages.
 
 Do not commit:
 
@@ -303,28 +263,31 @@ Do not commit:
 * Private secrets
 * Sensitive production configuration
 
-The following project files should normally be tracked:
+Normally tracked:
 
 ```text
 PROJECT_RULES.md
 SECURITY_RULES.md
+AGENTS.md
 .env.example
 Source Code
 ```
 
-The following should normally not be tracked:
+Normally not tracked:
 
 ```text
 .env
 ```
 
+Codex must not automatically create commits or push to GitHub unless explicitly requested.
+
 ---
 
-# 11. Deployment and Production Workflow
+# 10. Deployment and Production Workflow
 
-The project should be developed locally first.
+The system should be developed locally first.
 
-Do not deploy the unfinished system to Z.com merely to establish a live website.
+Do not deploy an unfinished system merely to establish a live website.
 
 The intended production workflow is:
 
@@ -352,23 +315,19 @@ Production Testing
 Live Website
 ```
 
-The production deployment should be established through the Git deployment workflow rather than manually uploading the finished system first and connecting Git deployment afterward.
+Git deployment does not need to be configured during early development.
 
-### Important
-
-Git deployment does **not** need to be configured immediately during early development.
-
-Git/GitHub version control should be used now.
+Git/GitHub version control should be used during development.
 
 Z.com Git deployment should be configured when the project is approaching production deployment.
 
 ---
 
-# 12. Z.com Production Environment
+# 11. Z.com Production Environment
 
 When preparing for production deployment, configure the Z.com environment separately from the local XAMPP environment.
 
-Production configuration should include, where applicable:
+Where applicable, production configuration should include:
 
 * Production `.env`
 * Production MySQL database
@@ -379,19 +338,19 @@ Production configuration should include, where applicable:
 * Secure file permissions
 * Secure upload directories
 * Production error handling
-* Required security headers
+* Security headers
 * Production session/cookie settings
 * Database backups
 
-The production `.env` must not be copied into GitHub.
+The production `.env` must never be copied into GitHub.
 
 ---
 
-# 13. Local and Production Environments
+# 12. Local and Production Environments
 
-The local and production environments may use different configuration values.
+Local and production environments may use different configuration values.
 
-### Local
+## Local
 
 ```text
 XAMPP
@@ -399,9 +358,10 @@ localhost
 Local MySQL
 Local database credentials
 Development email configuration
+Development settings
 ```
 
-### Production
+## Production
 
 ```text
 Z.com
@@ -409,105 +369,118 @@ HTTPS
 Production MySQL
 Production database credentials
 Production email configuration
+Production settings
 ```
 
-Application code should use environment configuration rather than hard-coded environment-specific values.
+Application code should use environment configuration instead of hard-coded environment-specific values.
 
 ---
 
-# 14. Offline Functionality — Explicit Confirmation Required
+# 13. Offline Functionality — Explicit Confirmation Required
 
-The project may support offline functionality using:
+Offline functionality is opt-in for individual features.
 
-* Service Worker
+The project may support:
+
+* Service Workers
 * Cache API
 * IndexedDB
 * JavaScript
 * PHP API endpoints
 * MySQL
-
-However, offline functionality is **opt-in for individual features**.
+* Background synchronization
+* Network reconnection synchronization
 
 ## CRITICAL RULE
 
-**Never automatically add offline functionality to a feature simply because the project has an offline architecture.**
+Never automatically add offline functionality to a new or modified feature.
 
 For every future prompt:
 
-1. Determine whether the requested change involves a feature that could benefit from offline functionality.
-2. If offline functionality is not relevant, implement the requested feature normally.
+1. Determine whether offline functionality is relevant.
+2. If offline functionality is not relevant, implement the request normally.
 3. If offline functionality is relevant, identify the required offline changes.
-4. Explain which files/components would need to be modified.
-5. **STOP and wait for my explicit confirmation.**
-6. Only implement the offline portion after I explicitly approve it.
+4. Explain which files/components would be modified.
+5. Explain any relevant security considerations.
+6. **STOP.**
+7. Wait for the user's explicit confirmation.
+8. Only implement the offline portion after explicit confirmation.
 
 Do not assume approval.
 
-Do not silently add IndexedDB support.
+A request to implement or modify a feature does not automatically authorize offline functionality.
 
-Do not silently modify the Service Worker.
+Do not silently:
 
-Do not silently add offline caching.
+* Add IndexedDB.
+* Modify `sw.js`.
+* Add Cache API logic.
+* Queue requests.
+* Modify submission logic for offline use.
+* Add background synchronization.
+* Add reconnection synchronization.
+* Cache additional resources.
 
-Do not silently modify submission logic to queue requests.
-
-This rule exists to prevent unnecessary modifications and conserve usage limits.
+This rule exists to prevent unnecessary changes and conserve usage limits.
 
 ---
 
-# 15. Offline Feature Architecture
+# 14. Offline Feature Architecture
 
-Only implement the following offline architecture after explicit confirmation for the relevant feature.
+Only use the following architecture after explicit approval for the relevant feature.
 
-The intended architecture is:
+General architecture:
 
 ```text
 USER SUBMITS DATA
         ↓
-navigator.onLine?
-     /       \
-   YES        NO
-    |          |
-    ↓          ↓
- PHP API    IndexedDB
-    |          |
-    ↓          |
-  MySQL        |
-               |
-        Network Restored
-               |
-               ↓
-        Service Worker
-               |
-               ↓
-          IndexedDB
-               |
-               ↓
-          PHP API
-               |
-               ↓
-             MySQL
-               |
-               ↓
-      Successful Response
-               |
-               ↓
-       Remove Local Record
+Connectivity Check
+        ↓
+Attempt Normal API Request
+        ↓
+Server Request Successful?
+      /       \
+    YES        NO
+     ↓          ↓
+   MySQL    Determine Whether
+             Failure Is Network-Related
+                    ↓
+             Store in IndexedDB
+                    ↓
+             Network Restored
+                    ↓
+             Synchronization
+                    ↓
+                PHP API
+                    ↓
+               Server Validation
+                    ↓
+                 MySQL
+                    ↓
+              Successful Response
+                    ↓
+             Remove Local Record
 ```
+
+`navigator.onLine` may be used as an initial connectivity indicator, but it must not be treated as definitive proof that the application's server/API is reachable.
+
+The actual network request and server response should determine whether communication succeeded.
 
 ---
 
-# 16. IndexedDB
+# 15. IndexedDB
 
-When offline functionality has been approved for a feature, use IndexedDB to store pending data locally.
+When offline functionality has been explicitly approved for a feature, IndexedDB may be used to store pending records locally.
 
-Frontend submission logic should check:
+Frontend logic may use:
 
 ```javascript
 navigator.onLine
 ```
 
-### When Online
+as an initial connectivity hint.
+
+## When Online
 
 The application should:
 
@@ -516,20 +489,22 @@ The application should:
 3. Process the server response.
 4. Update the interface.
 
-### When Offline
+## When Offline
 
 The application should:
 
 1. Validate the data locally where appropriate.
 2. Store the pending payload in IndexedDB.
 3. Inform the user that the data was saved locally.
-4. Keep the record until it can be synchronized.
+4. Keep the record until synchronization succeeds.
 
-Offline records should persist through page refreshes and navigation.
+Offline records should persist through page refreshes and navigation where appropriate.
+
+Do not store sensitive information in IndexedDB unless there is a documented security justification and appropriate protection.
 
 ---
 
-# 17. Service Worker
+# 16. Service Worker
 
 When offline functionality has been explicitly approved, create or modify:
 
@@ -537,9 +512,9 @@ When offline functionality has been explicitly approved, create or modify:
 /sw.js
 ```
 
-The Service Worker should use the Cache API to store core static resources needed for offline operation.
+The Service Worker should use the Cache API for safe static resources required for offline operation.
 
-Potential cached resources include:
+Potential resources include:
 
 * Core HTML
 * CSS
@@ -550,51 +525,34 @@ Potential cached resources include:
 
 Do not blindly cache:
 
-* Sensitive API responses
 * Authentication responses
 * Private user data
+* Sensitive API responses
 * Database responses
-* Other sensitive dynamic content
+* Personalized dynamic content
+* Other sensitive information
 
-The Service Worker should clearly distinguish static resources from dynamic application requests.
-
----
-
-# 18. Service Worker Registration
-
-The Service Worker should be registered from frontend JavaScript.
-
-Example:
-
-```javascript
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-                console.log(
-                    'Service Worker registered:',
-                    registration.scope
-                );
-            })
-            .catch(error => {
-                console.error(
-                    'Service Worker registration failed:',
-                    error
-                );
-            });
-    });
-}
-```
-
-Prefer centralized registration instead of unnecessarily duplicating registration logic across pages.
+The Service Worker must clearly distinguish static resources from dynamic application requests.
 
 ---
 
-# 19. HTTPS Requirement for Offline Features
+# 17. Service Worker Registration
+
+When approved, the Service Worker should be registered through frontend JavaScript.
+
+Prefer centralized registration instead of unnecessarily duplicating registration logic across multiple pages.
+
+The Service Worker should use the appropriate scope for the application.
+
+Do not register or modify Service Worker behavior merely because a new feature was added.
+
+---
+
+# 18. HTTPS Requirement for Offline Features
 
 Production Service Worker functionality requires a secure context.
 
-The Z.com production environment must therefore use HTTPS.
+The Z.com production environment must use HTTPS.
 
 Verify:
 
@@ -604,7 +562,7 @@ Verify:
 * HTTPS authentication
 * Secure cookies
 * HTTPS transmission of sensitive data
-* Service Worker served from HTTPS
+* Service Worker served through HTTPS
 
 Local development may use:
 
@@ -616,9 +574,9 @@ because localhost is generally treated as a secure development context by modern
 
 ---
 
-# 20. PHP API Receiver for Offline Synchronization
+# 19. PHP API Receiver for Offline Synchronization
 
-When offline synchronization is explicitly approved for a feature, use a dedicated PHP API endpoint.
+When offline synchronization has been explicitly approved, use a dedicated PHP API endpoint where appropriate.
 
 Example:
 
@@ -628,38 +586,40 @@ Example:
 
 The endpoint must:
 
-* Accept raw JSON
-* Validate the HTTP method
-* Validate Content-Type
-* Decode JSON safely
-* Validate required fields
-* Validate data types
-* Validate allowed values
-* Perform server-side validation
-* Authenticate requests where required
-* Authorize requests where required
-* Apply appropriate CSRF protection
-* Apply rate limiting where appropriate
-* Use prepared SQL statements
-* Insert validated data into MySQL
-* Return JSON
-* Use appropriate HTTP status codes
-* Never render HTML
+* Accept the intended HTTP method only.
+* Accept raw JSON where specified.
+* Validate `Content-Type`.
+* Decode JSON safely.
+* Validate required fields.
+* Validate data types.
+* Validate allowed values.
+* Perform server-side validation.
+* Authenticate protected requests.
+* Authorize protected operations.
+* Apply CSRF protection where applicable.
+* Apply rate limiting where appropriate.
+* Use prepared SQL statements.
+* Perform the required database operation.
+* Return JSON.
+* Use appropriate HTTP status codes.
+* Never render HTML.
 
-The API must follow all applicable requirements in `SECURITY_RULES.md`.
+Offline synchronization must not bypass the application's authentication, authorization, CSRF protection, or other security controls.
+
+The authentication mechanism for background synchronization must be compatible with the application's existing security architecture.
+
+Do not weaken security merely to make background synchronization easier.
 
 ---
 
-# 21. Offline Synchronization
+# 20. Offline Synchronization
 
 When explicitly approved, synchronization may occur after network connectivity is restored.
 
-The process should be:
+General process:
 
 ```text
 Network Restored
-       ↓
-Service Worker
        ↓
 Open IndexedDB
        ↓
@@ -679,23 +639,27 @@ Delete      Keep Record
 Record      for Retry
 ```
 
-Never delete a local record merely because the request was attempted.
+Never delete a local record merely because a request was attempted.
 
-A record should only be removed after the server confirms successful processing.
+A local record should only be removed after the server confirms successful processing.
 
 Failed records should remain available for retry.
 
+Synchronization should account for duplicate submissions and should use an appropriate idempotency or duplicate-prevention strategy where necessary.
+
 ---
 
-# 22. Visibility-Aware Polling
+# 21. Visibility-Aware Polling
 
-The application should use visibility-aware polling for applicable pages.
+All pages that perform periodic data refreshing should use visibility-aware polling.
 
-Polling should use separate intervals depending on whether the page is visible.
+Pages that do not require periodic data refreshing should not receive polling merely to satisfy this rule.
+
+Use separate intervals for visible and hidden pages.
 
 ## Fast Polling
 
-When the page is visible, use a faster polling interval.
+When the page is visible, use a faster refresh interval.
 
 Example:
 
@@ -707,7 +671,7 @@ The exact value should remain configurable.
 
 ## Slow Polling
 
-When the page is hidden, use a slower polling interval.
+When the page is hidden, use a slower refresh interval.
 
 Example:
 
@@ -719,7 +683,7 @@ The exact value should remain configurable.
 
 ---
 
-# 23. Page Visibility API
+# 22. Page Visibility API
 
 Use the Page Visibility API:
 
@@ -733,7 +697,7 @@ and:
 document.addEventListener('visibilitychange', ...)
 ```
 
-### When Visible
+## When Visible
 
 The polling system should:
 
@@ -742,7 +706,7 @@ The polling system should:
 3. Optionally perform an immediate refresh.
 4. Start the fast polling timer.
 
-### When Hidden
+## When Hidden
 
 The polling system should:
 
@@ -752,11 +716,13 @@ The polling system should:
 
 Never allow multiple polling timers to run simultaneously.
 
+Avoid unnecessary polling when the browser is offline.
+
 ---
 
-# 24. Centralized Polling
+# 23. Centralized Polling
 
-Where practical, use a reusable polling utility rather than duplicating polling logic across every page.
+Where practical, use a reusable polling utility rather than duplicating polling logic across pages.
 
 A possible location is:
 
@@ -764,49 +730,49 @@ A possible location is:
 /assets/js/polling.js
 ```
 
-Individual pages should be able to provide their own data-refresh function while the shared polling utility handles:
+Individual pages should provide their own data-refresh function while the shared utility handles:
 
 * Visibility detection
 * Fast polling
 * Slow polling
 * Timer management
-* Preventing duplicate timers
-* Refreshing when visibility changes
+* Duplicate timer prevention
+* Visibility changes
+* Optional immediate refresh
 
 Do not add polling to pages that do not require periodic data updates.
 
 ---
 
-# 25. API Development Rules
+# 24. API Development Rules
 
 Every API endpoint must follow the applicable requirements in `SECURITY_RULES.md`.
 
 APIs should:
 
-* Validate requests
-* Validate input
-* Authenticate protected operations
-* Authorize protected operations
-* Use prepared statements
-* Return appropriate HTTP status codes
-* Return safe responses
-* Avoid excessive data exposure
-* Apply rate limiting where appropriate
-* Apply CSRF protection where applicable
-* Avoid exposing internal errors
-
-Never assume an endpoint is safe simply because it is not directly linked from the frontend.
+* Validate requests.
+* Validate input.
+* Authenticate protected operations.
+* Authorize protected operations.
+* Use prepared statements.
+* Return appropriate HTTP status codes.
+* Return safe responses.
+* Avoid excessive data exposure.
+* Apply rate limiting where appropriate.
+* Apply CSRF protection where applicable.
+* Avoid exposing internal errors.
+* Never assume an endpoint is safe merely because it is not directly linked from the frontend.
 
 ---
 
-# 26. Database Development Rules
+# 25. Database Development Rules
 
 Database changes must be deliberate.
 
 Before modifying the database:
 
 1. Determine whether the requested feature actually requires a database change.
-2. Modify only the necessary tables/columns/indexes.
+2. Modify only the necessary tables, columns, constraints, or indexes.
 3. Preserve existing data where possible.
 4. Avoid destructive changes unless explicitly requested.
 5. Test database operations locally.
@@ -816,7 +782,7 @@ Use prepared statements for database operations.
 
 ---
 
-# 27. Authentication and Authorization
+# 26. Authentication and Authorization
 
 Authentication and authorization must follow `SECURITY_RULES.md`.
 
@@ -840,15 +806,15 @@ Sensitive actions must be checked server-side.
 
 ---
 
-# 28. Error Handling
+# 27. Error Handling
 
 Development and production environments must handle errors differently.
 
-### Development
+## Development
 
-Detailed debugging information may be available locally.
+Detailed debugging information may be available locally when appropriate.
 
-### Production
+## Production
 
 Do not expose:
 
@@ -859,31 +825,31 @@ Do not expose:
 * Internal server information
 * Debugging information
 
-Production responses should provide safe, user-friendly messages while detailed technical information is logged privately where appropriate.
+Production responses should provide safe user-facing messages.
+
+Detailed technical information should be logged privately where appropriate.
 
 ---
 
-# 29. Dependency Management
+# 28. Dependency Management
 
 Do not add libraries, packages, or frameworks unless they are necessary for the requested functionality.
 
 Before adding a dependency:
 
 1. Determine whether the existing stack can accomplish the task.
-2. Determine whether the dependency is actually necessary.
+2. Determine whether the dependency is necessary.
 3. Consider its security and maintenance status.
-4. Avoid adding duplicate functionality.
-5. Keep the dependency updated.
+4. Avoid duplicate functionality.
+5. Keep dependencies appropriately maintained.
 
-Existing project dependencies should also be maintained and updated when appropriate.
+Do not replace an existing dependency without a technical reason.
 
 ---
 
-# 30. File Upload Development
+# 29. File Upload Development
 
-For any feature involving file uploads, follow all applicable file-upload security rules in `SECURITY_RULES.md`.
-
-Do not assume uploaded files are safe.
+For features involving file uploads, follow all applicable file-upload security requirements in `SECURITY_RULES.md`.
 
 Consider:
 
@@ -898,27 +864,26 @@ Consider:
 * Authorization
 * Access control
 
-Do not allow uploaded files to execute as server-side code.
+Never allow uploaded files to execute as server-side code.
 
 ---
 
-# 31. Testing Requirements
+# 30. Testing Requirements
 
 Every significant change should be tested locally before deployment.
 
-Testing should include:
-
-### Functional Testing
+## Functional Testing
 
 Verify:
 
 * Normal user flow
 * Valid inputs
+* Invalid inputs
 * Expected database operations
 * Expected UI behavior
 * Expected API responses
 
-### Security Testing
+## Security Testing
 
 Where applicable, test:
 
@@ -934,7 +899,7 @@ Where applicable, test:
 * File upload abuse
 * Information disclosure
 
-### Offline Testing
+## Offline Testing
 
 Only when offline functionality has been explicitly approved for the feature, test:
 
@@ -951,7 +916,7 @@ Only when offline functionality has been explicitly approved for the feature, te
 
 ---
 
-# 32. Production Deployment Testing
+# 31. Production Deployment Testing
 
 Before making the system live on Z.com:
 
@@ -981,7 +946,7 @@ Verify that the production environment does not expose development debugging inf
 
 ---
 
-# 33. Final Security Review
+# 32. Final Security Review
 
 Before production deployment, perform a final security review using:
 
@@ -989,44 +954,18 @@ Before production deployment, perform a final security review using:
 SECURITY_RULES.md
 ```
 
-Verify that security controls were not accidentally bypassed or weakened during development.
-
-The final review should include:
-
-* Authentication
-* Authorization
-* Input validation
-* SQL injection protection
-* XSS protection
-* CSRF protection
-* Rate limiting
-* Session security
-* File upload security
-* HTTPS
-* Security headers
-* Error handling
-* Secret management
-* Database security
-* API security
-* Logging
-* Dependency security
-* Backup/recovery
-* Security testing
+Verify that security controls were not accidentally bypassed or weakened.
 
 ---
 
-# 34. Handling Conflicting Requests
+# 33. Handling Conflicting Requests
 
-If my prompt conflicts with these rules:
-
-### Security takes priority over convenience.
-
-If my requested implementation would knowingly create a security vulnerability:
+If a user request conflicts with a security requirement:
 
 1. Do not knowingly implement the insecure approach.
-2. Explain the problem.
-3. Provide a secure implementation or alternative.
-4. Preserve the intended functionality as much as possible.
+2. Explain the security issue.
+3. Provide or implement a secure alternative where possible.
+4. Preserve the requested functionality as much as reasonably possible.
 
 If the requested change requires a major architectural modification, explain the implications before making unrelated architectural changes.
 
@@ -1034,104 +973,70 @@ If the requested change requires offline functionality, follow the explicit offl
 
 ---
 
-# 35. What Must NOT Happen Automatically
+# 34. Changes That Must Not Happen Automatically
 
 Unless explicitly requested or approved, do not automatically:
 
-* Add offline support
-* Modify `sw.js`
-* Add IndexedDB logic
-* Change API submission behavior to support offline queues
-* Cache new resources
-* Add new libraries
-* Add new frameworks
-* Redesign unrelated UI
-* Refactor unrelated code
-* Change unrelated database structures
-* Change unrelated APIs
-* Change authentication behavior
-* Change authorization behavior
-* Change existing functionality
-* Deploy to Z.com
-* Change production configuration
+* Add offline support.
+* Modify `sw.js`.
+* Add IndexedDB logic.
+* Change API submission behavior to support offline queues.
+* Cache new resources.
+* Add new libraries.
+* Add new frameworks.
+* Redesign unrelated UI.
+* Refactor unrelated code.
+* Change unrelated database structures.
+* Change unrelated APIs.
+* Change authentication behavior.
+* Change authorization behavior.
+* Change existing functionality.
+* Deploy to Z.com.
+* Change production configuration.
+* Commit to Git.
+* Push to GitHub.
 
 ---
 
-# 36. Global Development Workflow
+# 35. Global Development Workflow
 
-For every feature, follow:
+For every feature:
 
 ```text
 1. Understand the requested feature
         ↓
-2. Check PROJECT_RULES.md
+2. Inspect existing implementation
         ↓
-3. Check SECURITY_RULES.md
+3. Check PROJECT_RULES.md
         ↓
-4. Identify security requirements
+4. Check SECURITY_RULES.md
         ↓
-5. Identify affected components
+5. Identify security requirements
         ↓
-6. Determine whether offline support is relevant
+6. Identify affected components
         ↓
-7. If offline is relevant → ASK FOR CONFIRMATION
+7. Determine whether offline support is relevant
         ↓
-8. Implement requested functionality
+8. If offline is relevant → ASK FOR CONFIRMATION
         ↓
-9. Implement applicable security controls
+9. Implement requested functionality
         ↓
-10. Test functionality
+10. Implement applicable security controls
         ↓
-11. Test security
+11. Test functionality
         ↓
-12. Review for unintended changes
+12. Test security
         ↓
-13. Commit to Git
+13. Review for unintended changes
         ↓
-14. Continue development
+14. Report changes and testing results
 ```
 
----
-
-# 37. Final Global Instruction
-
-**Treat `PROJECT_RULES.md` and `SECURITY_RULES.md` as permanent project instructions.**
-
-Every prompt I make for this project must follow both documents.
-
-Do not require me to repeat the rules.
-
-Always:
-
-* Develop securely by default.
-* Make minimal and targeted changes.
-* Preserve existing functionality.
-* Follow the project's technology stack.
-* Follow the security requirements.
-* Avoid unnecessary dependencies.
-* Avoid unnecessary refactoring.
-* Keep secrets out of GitHub.
-* Use XAMPP for local development.
-* Use Git/GitHub for version control.
-* Use Z.com for production deployment.
-* Deploy through Git when the project is ready for production.
-* Test before deployment.
-
-### Special Offline Rule
-
-**Offline functionality is opt-in.**
-
-Even if the project already contains a Service Worker, IndexedDB, Cache API, and offline infrastructure, do not automatically apply them to future features.
-
-If a requested feature would benefit from offline functionality:
-
-**Explain the required offline changes and WAIT FOR MY EXPLICIT CONFIRMATION before implementing them.**
-
-Do not assume approval.
+Git commits and deployment remain user-controlled unless explicitly requested.
 
 ---
 
-# 38. Core Principle
+# 36. Core Principle
 
 The project must follow:
 
@@ -1153,4 +1058,4 @@ GIT DEPLOYMENT FOR PRODUCTION
 TEST BEFORE DEPLOYMENT
 ```
 
-> **Build securely by default. Make only the changes requested. Follow both project and security rules on every prompt. Never automatically apply offline functionality without explicit approval.**
+> Build securely by default. Make only the changes requested. Preserve existing functionality. Follow both project and security rules. Never automatically apply offline functionality without explicit approval.
