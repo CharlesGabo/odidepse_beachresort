@@ -42,6 +42,7 @@ Both documents must be followed for every applicable development task.
 
 * HTML
 * CSS
+* Bootstrap (downloaded locally, not via CDN)
 * JavaScript
 
 ## Local Development
@@ -189,43 +190,9 @@ If an unrequested feature would be useful, mention it separately rather than imp
 
 # 8. Environment Configuration
 
-Environment-specific and sensitive configuration must be stored outside tracked source code.
+Environment-specific and sensitive configuration must be stored outside tracked source code using `.env`. Never commit `.env` or hard-code credentials. 
 
-Use:
-
-```text
-.env
-```
-
-for environment-specific configuration and secrets.
-
-Use:
-
-```text
-.env.example
-```
-
-as a safe template containing placeholders only.
-
-The `.env` file must never be committed to GitHub.
-
-The `.env` file may contain:
-
-* Database credentials
-* SMTP credentials
-* Application secrets
-* API keys
-* Environment-specific configuration
-
-Never hard-code production credentials into:
-
-* PHP
-* JavaScript
-* HTML
-* CSS
-* SQL
-* Configuration files
-* Other files intended to be committed to GitHub
+For full environment and secret management rules, strictly adhere to **Section 3: Secret Management** and **Section 4: Git Security** in `SECURITY_RULES.md`.
 
 ---
 
@@ -746,22 +713,7 @@ Do not add polling to pages that do not require periodic data updates.
 
 # 24. API Development Rules
 
-Every API endpoint must follow the applicable requirements in `SECURITY_RULES.md`.
-
-APIs should:
-
-* Validate requests.
-* Validate input.
-* Authenticate protected operations.
-* Authorize protected operations.
-* Use prepared statements.
-* Return appropriate HTTP status codes.
-* Return safe responses.
-* Avoid excessive data exposure.
-* Apply rate limiting where appropriate.
-* Apply CSRF protection where applicable.
-* Avoid exposing internal errors.
-* Never assume an endpoint is safe merely because it is not directly linked from the frontend.
+Every API endpoint must strictly adhere to the requirements in **Section 13: API Security** and **Section 14: JSON API Security** in `SECURITY_RULES.md`. Do not bypass these security checks for any API endpoint.
 
 ---
 
@@ -769,65 +721,29 @@ APIs should:
 
 Database changes must be deliberate.
 
-Before modifying the database:
-
 1. Determine whether the requested feature actually requires a database change.
 2. Modify only the necessary tables, columns, constraints, or indexes.
 3. Preserve existing data where possible.
 4. Avoid destructive changes unless explicitly requested.
 5. Test database operations locally.
-6. Follow all database security requirements in `SECURITY_RULES.md`.
 
-Use prepared statements for database operations.
+For all database interactions, you must rigidly follow **Section 5: Database Security** in `SECURITY_RULES.md` (e.g., using prepared statements).
 
 ---
 
 # 26. Authentication and Authorization
 
-Authentication and authorization must follow `SECURITY_RULES.md`.
+Authentication and authorization checks must be performed server-side.
 
-For protected functionality:
-
-```text
-Request
-   ↓
-Authenticated?
-   ↓
-Authorized?
-   ↓
-Valid Request?
-   ↓
-Perform Action
-```
-
-Never rely solely on frontend controls.
-
-Sensitive actions must be checked server-side.
+For full authentication and authorization rules, strictly adhere to **Section 8: Authentication** and **Section 9: Authorization** in `SECURITY_RULES.md`.
 
 ---
 
 # 27. Error Handling
 
-Development and production environments must handle errors differently.
+Do not expose database errors, stack traces, paths, or credentials in production.
 
-## Development
-
-Detailed debugging information may be available locally when appropriate.
-
-## Production
-
-Do not expose:
-
-* Database errors
-* PHP stack traces
-* File paths
-* Credentials
-* Internal server information
-* Debugging information
-
-Production responses should provide safe user-facing messages.
-
-Detailed technical information should be logged privately where appropriate.
+For full error handling requirements, strictly adhere to **Section 18: Error Handling** in `SECURITY_RULES.md`.
 
 ---
 
@@ -849,22 +765,7 @@ Do not replace an existing dependency without a technical reason.
 
 # 29. File Upload Development
 
-For features involving file uploads, follow all applicable file-upload security requirements in `SECURITY_RULES.md`.
-
-Consider:
-
-* Extension validation
-* MIME validation
-* File size limits
-* Filename sanitization
-* Randomized filenames
-* Content validation
-* Executable file restrictions
-* Safe upload directories
-* Authorization
-* Access control
-
-Never allow uploaded files to execute as server-side code.
+Features involving file uploads must strictly adhere to all guidelines in **Section 16: File Upload Security** found within `SECURITY_RULES.md`. Ensure you review that section before implementing any upload functionality.
 
 ---
 
@@ -960,14 +861,7 @@ Verify that security controls were not accidentally bypassed or weakened.
 
 # 33. Handling Conflicting Requests
 
-If a user request conflicts with a security requirement:
-
-1. Do not knowingly implement the insecure approach.
-2. Explain the security issue.
-3. Provide or implement a secure alternative where possible.
-4. Preserve the requested functionality as much as reasonably possible.
-
-If the requested change requires a major architectural modification, explain the implications before making unrelated architectural changes.
+If a user request conflicts with a security requirement, you must follow the conflict resolution steps outlined in **Section 37: Security Conflict Rule** in `SECURITY_RULES.md`.
 
 If the requested change requires offline functionality, follow the explicit offline confirmation rule.
 
