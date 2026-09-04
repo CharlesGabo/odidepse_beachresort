@@ -1,5 +1,0 @@
-services:
-  - type: web
-    name: odidepse-staging
-    env: docker
-    plan: free
