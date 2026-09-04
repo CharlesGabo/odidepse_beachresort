@@ -54,7 +54,7 @@ Four fonts, four jobs. All are free and openly licensed:
 | Display | **Geist Pixel** (Square) | Geist Mono, monospace | page titles, section number labels, big stat values |
 | Long-form | **Source Serif 4** | Georgia, serif | article/blog body text only |
 
-Geist and Geist Mono load from Google Fonts; Source Serif 4 too. Geist Pixel is Vercel's pixel variant (available via its GitHub releases / CDN as a woff2). Always load fonts with swap behavior so text renders immediately. If Geist Pixel is unavailable in some environment, fall back to Geist Mono in uppercase — never substitute a decorative font.
+Self-host production font files through the project's Vite asset pipeline; do not add runtime font CDN dependencies without explicit approval. Always load fonts with swap behavior so text renders immediately. If Geist Pixel is unavailable, fall back to Geist Mono in uppercase — never substitute a decorative font.
 
 The scale is compact — base UI text is 15px, not 16:
 

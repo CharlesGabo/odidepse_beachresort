@@ -841,3 +841,45 @@ SECURITY WITH FUNCTIONALITY
 ```
 
 > Security is a mandatory part of every applicable feature. Never knowingly introduce a security vulnerability for convenience.
+
+---
+
+# 39. Vite, XAMPP, Cloudflare, and Z.com Security Profile
+
+These requirements apply to this reusable project architecture.
+
+## Frontend build security
+
+* Treat all React code, `index.html`, compiled `dist/` files, and `VITE_*` variables as public.
+* Never place passwords, database credentials, SMTP credentials, private API keys, session secrets, or privileged tokens in Vite configuration or frontend variables.
+* Keep `package-lock.json` tracked and review it when dependencies change.
+* Do not manually modify compiled files as the source of truth; modify `src/`, rebuild, and redeploy.
+* Do not deploy development source maps unless explicitly required and reviewed for information exposure.
+* Self-host production frontend dependencies through the Vite build. Adding a third-party runtime CDN requires an explicit, reviewed reason and compatible security headers.
+
+## Local XAMPP security
+
+* Application PHP must use a dedicated least-privilege MariaDB/MySQL user, never the root account.
+* phpMyAdmin is an administration interface only. Do not expose it through public tunnels or link it from the application.
+* Keep the local `.env` untracked and deny direct HTTP access.
+* Do not use real production/customer data for publicly shared development previews.
+* Keep local, preview, and production databases logically separated. The Cloudflare preview may use the local development database only.
+
+## Cloudflare preview security
+
+* Tunnel only a restricted project-specific origin that serves compiled `dist/` files and intended PHP APIs.
+* Never tunnel the full XAMPP document root or port 80 when it would expose dashboards, phpMyAdmin, other projects, `.env`, Git metadata, backups, or internal files.
+* Confirm `/.env`, `/phpmyadmin/`, `/src/`, `/.git/`, internal Markdown files, and database backups return `403` or `404` through the public URL.
+* Quick Tunnel URLs are public bearer links, randomly generated, temporary, and unsuitable for production.
+* Keep authentication and authorization enabled during previews. A hard-to-guess URL is not access control.
+* Stop verification tunnels when testing is complete. Do not start an ongoing public tunnel without the user's authorization.
+
+## Z.com production security
+
+* Use a new production database, application user, and password. Never upload or reuse the local `.env`.
+* Prefer storing production environment configuration outside `public_html`. If hosting constraints require a protected file under the web root, deny HTTP access and verify that denial on the live domain.
+* Deploy only compiled frontend output and required PHP/runtime files into `public_html`.
+* Do not deploy `src/`, `node_modules/`, local scripts, Git metadata, rule files, logs, local database backups, or development credentials.
+* Disable public PHP error display, keep detailed logs private, enforce HTTPS, and configure secure cookies and compatible security headers.
+* Apply database migrations through a reviewed and recoverable process. Back up affected production data before destructive changes.
+* After every deployment, verify critical flows, authorization, database targeting, protected-file denial, and safe error responses over HTTPS.

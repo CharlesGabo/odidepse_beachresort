@@ -2,1219 +2,280 @@
 
 ## 1. Purpose
 
-This document contains the global development rules for this project.
+These rules define the reusable development architecture for a Vite/React frontend with a PHP/MySQL backend, XAMPP local development, Cloudflare client previews, Git/GitHub version control, and Z.com production hosting.
 
-These rules apply to every:
+The current project's names and paths live in `PROJECT_PROFILE.md`. When this repository is duplicated, update that profile and complete `TEMPLATE_CHECKLIST.md` before feature development.
 
-* Feature
-* Modification
-* Bug fix
-* Refactor
-* Optimization
-* Database change
-* UI change
-* API change
-* Code change
-* Configuration change
-* Deployment-related change
+`SECURITY_RULES.md` is mandatory and applies together with this file.
 
-The project also contains:
+## 2. Supported stack
 
-```text
-SECURITY_RULES.md
-```
+### Frontend
 
-`SECURITY_RULES.md` contains the mandatory security requirements.
+- React
+- Vite
+- JavaScript/JSX
+- CSS
 
-Both documents must be followed for every applicable development task.
+### Backend
 
----
+- PHP
+- JSON APIs under `api/`
+- Shared server code under `includes/`
+- PDO with native prepared statements
 
-# 2. Technology Stack
+### Data
 
-## Backend
+- MariaDB/MySQL supplied by XAMPP locally
+- phpMyAdmin as a database administration interface only
+- A separate MySQL database and user on Z.com for production
 
-* PHP
-* MySQL
-* PHPMailer for email sending
+### Environments
 
-## Frontend
+- Local development: XAMPP + Vite
+- Client preview: a Vite production build served locally through a restricted Cloudflare Quick Tunnel
+- Production: Z.com cPanel hosting
+- Version control: Git and GitHub
 
-* HTML
-* CSS
-* Bootstrap (downloaded locally, not via CDN)
-* JavaScript
+Docker and Render are deliberately excluded. Do not introduce them without an explicit change in hosting strategy.
 
-## Local Development
-
-* XAMPP
-* Apache
-* MySQL
-* phpMyAdmin
-
-## Production
-
-* Z.com hosting
-* HTTPS/SSL
-
-## Version Control
-
-* Git
-* GitHub
-
----
-
-# 3. Development Environment
-
-Development should primarily be performed locally using XAMPP.
-
-The local environment should be used for:
-
-* Feature development
-* Functional testing
-* Database testing
-* PHP testing
-* JavaScript testing
-* Email testing
-* Security testing
-* Approved offline functionality testing
-
-The production Z.com environment should not be used as the primary development environment.
-
----
-
-# 4. Master Development Rule
-
-Implement only what the current user request requires while following:
-
-* `PROJECT_RULES.md`
-* `SECURITY_RULES.md`
-
-Do not automatically:
-
-* Add unrelated features.
-* Refactor unrelated code.
-* Redesign unrelated interfaces.
-* Modify unrelated database structures.
-* Modify unrelated APIs.
-* Add unnecessary dependencies.
-* Change existing functionality without a reason.
-* Apply offline functionality without explicit approval.
-
-Keep changes targeted and minimal.
-
----
-
-# 5. Development Process
-
-For every development task, follow this general process:
+## 3. Canonical repository structure
 
 ```text
-User Request
-     ↓
-Understand Requirement
-     ↓
-Inspect Existing Implementation
-     ↓
-Read Project Rules
-     ↓
-Read Security Rules
-     ↓
-Identify Affected Components
-     ↓
-Identify Security Requirements
-     ↓
-Identify Required Dependencies
-     ↓
-Determine Whether Offline Support Is Relevant
-     ↓
-If Offline Is Relevant → STOP AND REQUEST APPROVAL
-     ↓
-Implement Requested Functionality
-     ↓
-Apply Security Controls
-     ↓
-Test Functionality
-     ↓
-Test Security
-     ↓
-Review Changes
+project-root/
+├── api/                         Public PHP API endpoints
+├── includes/                    Reusable non-public PHP modules
+├── scripts/                     Local preview/development automation
+├── src/                         React source code
+├── .env                         Local secrets; never tracked
+├── .env.example                 Placeholder environment-variable contract
+├── .gitignore
+├── .htaccess                    Apache protection/routing where applicable
+├── index.html                   Vite HTML entry point
+├── package.json
+├── package-lock.json
+├── start-client-preview.cmd
+└── vite.config.js
+
+Generated and never tracked:
+├── dist/                        Vite production output
+└── node_modules/                Local npm dependencies
 ```
 
-Do not require the user to repeat these rules in every prompt.
+Add folders only when required. Typical optional folders include `src/components/`, `src/pages/`, `src/hooks/`, `src/services/`, `src/assets/`, database migrations, tests, and uploads.
 
----
+Do not put reusable PHP code in `dist/`. Do not put secrets in React source, `index.html`, `dist/`, or any `VITE_*` variable.
 
-# 6. Minimal-Change Principle
+## 4. Execution model
 
-When modifying the project:
+### Daily local development
 
-* Modify only what is necessary.
-* Preserve existing functionality.
-* Preserve existing UI unless modification is requested.
-* Preserve existing database behavior unless modification is required.
-* Preserve existing API behavior unless modification is required.
-* Avoid unnecessary refactoring.
-* Avoid unnecessary dependencies.
-* Avoid unnecessary file creation.
-* Avoid changing unrelated files.
-* Avoid replacing working implementations without a reason.
+1. Start Apache and MySQL in XAMPP.
+2. Run `npm run dev` from the repository root.
+3. Open the Vite URL recorded in `PROJECT_PROFILE.md`.
+4. Vite proxies `/api/*` to this project's XAMPP path.
+5. PHP accesses local MariaDB/MySQL through `includes/database.php` and the untracked `.env`.
 
-If an existing implementation works and does not conflict with the requested change or security requirements, do not unnecessarily replace it.
+Do not browse the raw `index.html` through the XAMPP project URL for React development. Use the Vite development URL so modules and hot reload work correctly.
 
----
+### Production build
 
-# 7. Unrequested Features
+Run:
 
-Do not implement features merely because they may be useful.
+```powershell
+npm ci
+npm run build
+```
 
-Examples include:
+The deployable frontend is the contents of `dist/`. Z.com does not need Node.js, npm, Vite, `src/`, or `node_modules/`.
 
-* New authentication methods
-* New dashboards
-* New notifications
-* New APIs
-* New database tables
-* New frameworks
-* New libraries
-* New UI components
-* New caching systems
-* New background processes
-* Additional analytics
-* Additional automation
-* Offline functionality
+### Client preview
 
-If an unrequested feature would be useful, mention it separately rather than implementing it automatically.
+`start-client-preview.cmd` must:
 
----
+1. Build the frontend.
+2. Serve only `dist/` and allowed PHP API endpoints.
+3. Perform a local health check.
+4. Start a temporary Cloudflare URL.
+5. Stop the local preview process when the tunnel ends.
 
-# 8. Environment Configuration
+The preview must not expose `.env`, phpMyAdmin, `.git`, Markdown rules, `src/`, database backups, or the full XAMPP document root.
 
-Environment-specific and sensitive configuration must be stored outside tracked source code using `.env`. Never commit `.env` or hard-code credentials. 
+## 5. React and Vite rules
 
-For full environment and secret management rules, strictly adhere to **Section 3: Secret Management** and **Section 4: Git Security** in `SECURITY_RULES.md`.
+- Keep application code in `src/` and divide it into focused components as it grows.
+- Use ES modules and normal imports; do not reintroduce browser-side Babel or CDN React builds.
+- Keep `package-lock.json` tracked and use `npm ci` for clean/release installations.
+- Use `npm install` only when intentionally changing dependencies.
+- Treat every `VITE_*` value as public because it is embedded in browser JavaScript.
+- Keep API requests same-origin using paths such as `/api/...` unless a documented deployment requires otherwise.
+- Keep `vite.config.js` aligned with the local XAMPP folder and intended Z.com deployment path.
+- If deploying below a subdirectory rather than the domain root, update both Vite's `base` and the API base path, then test the built output at that exact path.
+- Do not manually edit generated files in `dist/`; change source and rebuild.
 
----
+## 6. PHP API rules
 
-# 9. Git and GitHub
+Each endpoint must:
 
-Git and GitHub are used for version control throughout development.
+- Accept only intended HTTP methods.
+- Return an appropriate status code and consistent JSON shape.
+- Validate content type and decode JSON safely when JSON is expected.
+- Validate all user-controlled values server-side.
+- Authenticate and authorize protected operations server-side.
+- Apply CSRF protection to cookie-authenticated state-changing requests.
+- Use shared database/configuration helpers rather than duplicate connections.
+- Use prepared statements for all variable SQL values.
+- Avoid returning stack traces, SQL, filesystem paths, or credentials.
 
-The normal development workflow is:
+Frontend validation is for user experience; it never replaces PHP validation.
+
+## 7. Database rules
+
+- Use a dedicated application database and least-privilege application user.
+- Keep local, preview, and production credentials distinct. The Cloudflare preview intentionally uses the local development database.
+- Never connect browser-side JavaScript directly to MariaDB/MySQL.
+- Use migrations or versioned SQL for schema changes once schema development begins.
+- Back up before destructive or difficult-to-reverse operations.
+- Verify row counts, constraints, and affected behavior after migrations.
+- Do not use the MariaDB/MySQL root account from application code.
+- phpMyAdmin may be used to administer/import/export databases, but it must not be publicly tunneled.
+
+Production changes must be prepared and tested locally first. Never point local or Cloudflare-preview code at the production database unless the user explicitly requests a controlled production operation and its risk is understood.
+
+## 8. Environment configuration
+
+- `.env` contains local secrets and is never committed.
+- `.env.example` contains every required variable with safe placeholders and no live values.
+- Production uses separate Z.com credentials.
+- Prefer environment configuration outside `public_html` when Z.com supports it. If a protected file must exist under the web root, deny direct web access and verify the denial after deployment.
+- Environment values already supplied by the server take precedence over `.env` values.
+- Update `.env.example`, documentation, and validation whenever a required variable changes.
+
+## 9. Dependencies
+
+- Add only dependencies required by the current feature.
+- Use maintained packages compatible with the installed Node and PHP versions.
+- Review lockfile changes and run the build after dependency updates.
+- Run `npm audit` where network access permits and evaluate findings rather than blindly applying breaking upgrades.
+- Do not replace the stack or introduce another build system without a concrete requirement.
+
+## 10. Git workflow
+
+- Inspect `git status` before and after work.
+- Preserve unrelated user changes.
+- Never track `.env`, `node_modules/`, `dist/`, database dumps containing data, logs, or credentials.
+- Do not commit, push, create branches, or modify remotes unless explicitly requested.
+- Keep commits focused when the user authorizes them.
+- A successful local build is required before a release commit.
+
+## 11. Z.com deployment
+
+Z.com receives compiled frontend files and PHP backend files, not the development toolchain.
+
+Deployable content normally includes:
 
 ```text
-XAMPP
-  ↓
-Develop
-  ↓
-Test Locally
-  ↓
-Review Changes
-  ↓
-Git Commit
-  ↓
-Git Push
-  ↓
-GitHub
+contents of dist/
+api/
+includes/
+.htaccess
+production-safe public assets/uploads as applicable
 ```
 
-Use meaningful commit messages.
+Do not upload `src/`, `node_modules/`, local `.env`, development scripts, Git metadata, local database backups, or internal rule files into `public_html`.
 
-Do not commit:
+The initial deployment and every later release must follow `DEPLOYMENT_WORKFLOW.md`. Deployment is not complete until HTTPS, frontend assets, PHP APIs, database access, access controls, protected files, and critical user flows are verified on the live domain.
 
-* `.env`
-* Passwords
-* API keys
-* SMTP credentials
-* Database credentials
-* Private secrets
-* Sensitive production configuration
+## 12. Post-deployment changes
 
-Normally tracked:
+For each production update:
 
-```text
-PROJECT_RULES.md
-SECURITY_RULES.md
-AGENTS.md
-.env.example
-Source Code
-```
+1. Back up affected production data when appropriate.
+2. Implement and test locally.
+3. Run PHP syntax checks, frontend build, and relevant functional/security tests.
+4. Review the final diff and lockfile.
+5. Commit/push only when authorized.
+6. Build from the intended commit.
+7. Deploy the minimum required files.
+8. Apply backward-compatible database migrations in a safe order.
+9. Smoke-test production over HTTPS.
+10. Roll back application files if critical verification fails; restore data only through a deliberate recovery plan.
 
-Normally not tracked:
+Do not edit generated production JavaScript directly. Fix `src/`, rebuild, and redeploy.
 
-```text
-.env
-```
+## 13. Offline functionality
 
-Codex must not automatically create commits or push to GitHub unless explicitly requested.
+Offline support is opt-in. Service Workers, Cache API, IndexedDB queues, background synchronization, and reconnect synchronization require explicit user approval before implementation.
 
----
+If offline behavior is relevant:
 
-# 10. Deployment and Production Workflow
+1. Explain the intended cached/queued data and affected files.
+2. Explain authentication, privacy, replay, duplicate, and stale-data risks.
+3. Stop and obtain explicit approval.
+4. Revalidate queued data and authorization on the server when implemented.
 
-The system should be developed locally first.
+Never cache authenticated HTML, private API responses, secrets, or sensitive customer data indiscriminately.
 
-Do not deploy an unfinished system merely to establish a live website.
+## 14. UI and responsive changes
 
-The intended production workflow is:
+- Preserve application behavior while changing presentation.
+- Prefer CSS for responsive fixes.
+- Do not change PHP, API behavior, database operations, permissions, validation, event handling, or application state solely to make a layout fit.
+- Preserve DOM IDs, names, classes, data attributes, and selectors used by JavaScript or tests.
+- Test relevant mobile, tablet, and desktop widths.
+- Avoid global overflow masking that hides layout bugs.
+- Honor reduced-motion and accessibility requirements.
 
-```text
-Local Development
-      ↓
-XAMPP Testing
-      ↓
-Git Commit
-      ↓
-GitHub
-      ↓
-System Completion
-      ↓
-Final Local Testing
-      ↓
-Configure Z.com Git Deployment
-      ↓
-Configure Production Environment
-      ↓
-Deploy from GitHub to Z.com
-      ↓
-Production Testing
-      ↓
-Live Website
-```
+## 15. Testing baseline
 
-Git deployment does not need to be configured during early development.
+Use the checks applicable to the change:
 
-Git/GitHub version control should be used during development.
+### Frontend
 
-Z.com Git deployment should be configured when the project is approaching production deployment.
+- `npm run build`
+- Relevant interaction and browser-console checks
+- Responsive and accessibility checks for UI changes
 
----
+### PHP/API
 
-# 11. Z.com Production Environment
+- `C:\xampp\php\php.exe -l <file>` for every changed PHP file
+- Expected method, valid input, invalid input, authentication, authorization, and safe-error cases
 
-When preparing for production deployment, configure the Z.com environment separately from the local XAMPP environment.
+### Database
 
-Where applicable, production configuration should include:
+- Connection through the application user
+- Expected reads/writes and prepared statements
+- Migration verification and backup/recovery considerations
 
-* Production `.env`
-* Production MySQL database
-* Dedicated production database user
-* Production PHPMailer/SMTP configuration
-* HTTPS/SSL
-* Production PHP configuration
-* Secure file permissions
-* Secure upload directories
-* Production error handling
-* Security headers
-* Production session/cookie settings
-* Database backups
+### Preview
 
-The production `.env` must never be copied into GitHub.
+- Built homepage and hashed assets return success
+- `/api` reaches PHP and the intended local database
+- `.env`, phpMyAdmin, source, and repository files are inaccessible
+- Test tunnel is stopped after verification
 
----
+### Release
 
-# 12. Local and Production Environments
+- `git diff --check`
+- Review every changed hunk
+- Verify no secret or generated directory became tracked
+- Production smoke test after deployment
 
-Local and production environments may use different configuration values.
+## 16. Duplication rule
 
-## Local
+This repository is designed to be copied as a starter. A copied project is not ready until `TEMPLATE_CHECKLIST.md` is complete.
 
-```text
-XAMPP
-localhost
-Local MySQL
-Local database credentials
-Development email configuration
-Development settings
-```
+Never copy:
 
-## Production
+- `.git/`
+- `.env`
+- `node_modules/`
+- `dist/`
+- logs, uploaded private data, or database dumps
+- database users/passwords or tunnel credentials
 
-```text
-Z.com
-HTTPS
-Production MySQL
-Production database credentials
-Production email configuration
-Production settings
-```
+Create a new database, new least-privilege user, new `.env`, new Git repository/remote, and updated project identity for every copied project.
 
-Application code should use environment configuration instead of hard-coded environment-specific values.
+## 17. Completion standard
 
----
-
-# 13. Offline Functionality — Explicit Confirmation Required
-
-Offline functionality is opt-in for individual features.
-
-The project may support:
-
-* Service Workers
-* Cache API
-* IndexedDB
-* JavaScript
-* PHP API endpoints
-* MySQL
-* Background synchronization
-* Network reconnection synchronization
-
-## CRITICAL RULE
-
-Never automatically add offline functionality to a new or modified feature.
-
-For every future prompt:
-
-1. Determine whether offline functionality is relevant.
-2. If offline functionality is not relevant, implement the request normally.
-3. If offline functionality is relevant, identify the required offline changes.
-4. Explain which files/components would be modified.
-5. Explain any relevant security considerations.
-6. **STOP.**
-7. Wait for the user's explicit confirmation.
-8. Only implement the offline portion after explicit confirmation.
-
-Do not assume approval.
-
-A request to implement or modify a feature does not automatically authorize offline functionality.
-
-Do not silently:
-
-* Add IndexedDB.
-* Modify `sw.js`.
-* Add Cache API logic.
-* Queue requests.
-* Modify submission logic for offline use.
-* Add background synchronization.
-* Add reconnection synchronization.
-* Cache additional resources.
-
-This rule exists to prevent unnecessary changes and conserve usage limits.
-
----
-
-# 14. Offline Feature Architecture
-
-Only use the following architecture after explicit approval for the relevant feature.
-
-General architecture:
-
-```text
-USER SUBMITS DATA
-        ↓
-Connectivity Check
-        ↓
-Attempt Normal API Request
-        ↓
-Server Request Successful?
-      /       \
-    YES        NO
-     ↓          ↓
-   MySQL    Determine Whether
-             Failure Is Network-Related
-                    ↓
-             Store in IndexedDB
-                    ↓
-             Network Restored
-                    ↓
-             Synchronization
-                    ↓
-                PHP API
-                    ↓
-               Server Validation
-                    ↓
-                 MySQL
-                    ↓
-              Successful Response
-                    ↓
-             Remove Local Record
-```
-
-`navigator.onLine` may be used as an initial connectivity indicator, but it must not be treated as definitive proof that the application's server/API is reachable.
-
-The actual network request and server response should determine whether communication succeeded.
-
----
-
-# 15. IndexedDB
-
-When offline functionality has been explicitly approved for a feature, IndexedDB may be used to store pending records locally.
-
-Frontend logic may use:
-
-```javascript
-navigator.onLine
-```
-
-as an initial connectivity hint.
-
-## When Online
-
-The application should:
-
-1. Validate the data.
-2. Send the request to the PHP API.
-3. Process the server response.
-4. Update the interface.
-
-## When Offline
-
-The application should:
-
-1. Validate the data locally where appropriate.
-2. Store the pending payload in IndexedDB.
-3. Inform the user that the data was saved locally.
-4. Keep the record until synchronization succeeds.
-
-Offline records should persist through page refreshes and navigation where appropriate.
-
-Do not store sensitive information in IndexedDB unless there is a documented security justification and appropriate protection.
-
----
-
-# 16. Service Worker
-
-When offline functionality has been explicitly approved, create or modify:
-
-```text
-/sw.js
-```
-
-The Service Worker should use the Cache API for safe static resources required for offline operation.
-
-Potential resources include:
-
-* Core HTML
-* CSS
-* JavaScript
-* Logos
-* Icons
-* Other safe static assets
-
-Do not blindly cache:
-
-* Authentication responses
-* Private user data
-* Sensitive API responses
-* Database responses
-* Personalized dynamic content
-* Other sensitive information
-
-The Service Worker must clearly distinguish static resources from dynamic application requests.
-
----
-
-# 17. Service Worker Registration
-
-When approved, the Service Worker should be registered through frontend JavaScript.
-
-Prefer centralized registration instead of unnecessarily duplicating registration logic across multiple pages.
-
-The Service Worker should use the appropriate scope for the application.
-
-Do not register or modify Service Worker behavior merely because a new feature was added.
-
----
-
-# 18. HTTPS Requirement for Offline Features
-
-Production Service Worker functionality requires a secure context.
-
-The Z.com production environment must use HTTPS.
-
-Verify:
-
-* Valid SSL/TLS certificate
-* HTTP → HTTPS redirection
-* HTTPS API requests
-* HTTPS authentication
-* Secure cookies
-* HTTPS transmission of sensitive data
-* Service Worker served through HTTPS
-
-Local development may use:
-
-```text
-http://localhost
-```
-
-because localhost is generally treated as a secure development context by modern browsers.
-
----
-
-# 19. PHP API Receiver for Offline Synchronization
-
-When offline synchronization has been explicitly approved, use a dedicated PHP API endpoint where appropriate.
-
-Example:
-
-```text
-/api/receiver.php
-```
-
-The endpoint must:
-
-* Accept the intended HTTP method only.
-* Accept raw JSON where specified.
-* Validate `Content-Type`.
-* Decode JSON safely.
-* Validate required fields.
-* Validate data types.
-* Validate allowed values.
-* Perform server-side validation.
-* Authenticate protected requests.
-* Authorize protected operations.
-* Apply CSRF protection where applicable.
-* Apply rate limiting where appropriate.
-* Use prepared SQL statements.
-* Perform the required database operation.
-* Return JSON.
-* Use appropriate HTTP status codes.
-* Never render HTML.
-
-Offline synchronization must not bypass the application's authentication, authorization, CSRF protection, or other security controls.
-
-The authentication mechanism for background synchronization must be compatible with the application's existing security architecture.
-
-Do not weaken security merely to make background synchronization easier.
-
----
-
-# 20. Offline Synchronization
-
-When explicitly approved, synchronization may occur after network connectivity is restored.
-
-General process:
-
-```text
-Network Restored
-       ↓
-Open IndexedDB
-       ↓
-Retrieve Pending Records
-       ↓
-Send to PHP API
-       ↓
-Server Validation
-       ↓
-Database Operation
-       ↓
-Successful Response?
-     /       \
-   YES        NO
-    ↓          ↓
-Delete      Keep Record
-Record      for Retry
-```
-
-Never delete a local record merely because a request was attempted.
-
-A local record should only be removed after the server confirms successful processing.
-
-Failed records should remain available for retry.
-
-Synchronization should account for duplicate submissions and should use an appropriate idempotency or duplicate-prevention strategy where necessary.
-
----
-
-# 21. Visibility-Aware Polling
-
-All pages that perform periodic data refreshing should use visibility-aware polling.
-
-Pages that do not require periodic data refreshing should not receive polling merely to satisfy this rule.
-
-Use separate intervals for visible and hidden pages.
-
-## Fast Polling
-
-When the page is visible, use a faster refresh interval.
-
-Example:
-
-```javascript
-const FAST_INTERVAL = 10000;
-```
-
-The exact value should remain configurable.
-
-## Slow Polling
-
-When the page is hidden, use a slower refresh interval.
-
-Example:
-
-```javascript
-const SLOW_INTERVAL = 60000;
-```
-
-The exact value should remain configurable.
-
----
-
-# 22. Page Visibility API
-
-Use the Page Visibility API:
-
-```javascript
-document.visibilityState
-```
-
-and:
-
-```javascript
-document.addEventListener('visibilitychange', ...)
-```
-
-## When Visible
-
-The polling system should:
-
-1. Stop the slow polling timer.
-2. Switch to the fast interval.
-3. Optionally perform an immediate refresh.
-4. Start the fast polling timer.
-
-## When Hidden
-
-The polling system should:
-
-1. Stop the fast polling timer.
-2. Switch to the slow interval.
-3. Start the slow polling timer.
-
-Never allow multiple polling timers to run simultaneously.
-
-Avoid unnecessary polling when the browser is offline.
-
----
-
-# 23. Centralized Polling
-
-Where practical, use a reusable polling utility rather than duplicating polling logic across pages.
-
-A possible location is:
-
-```text
-/assets/js/polling.js
-```
-
-Individual pages should provide their own data-refresh function while the shared utility handles:
-
-* Visibility detection
-* Fast polling
-* Slow polling
-* Timer management
-* Duplicate timer prevention
-* Visibility changes
-* Optional immediate refresh
-
-Do not add polling to pages that do not require periodic data updates.
-
----
-
-# 24. API Development Rules
-
-Every API endpoint must strictly adhere to the requirements in **Section 13: API Security** and **Section 14: JSON API Security** in `SECURITY_RULES.md`. Do not bypass these security checks for any API endpoint.
-
----
-
-# 25. Database Development Rules
-
-Database changes must be deliberate.
-
-1. Determine whether the requested feature actually requires a database change.
-2. Modify only the necessary tables, columns, constraints, or indexes.
-3. Preserve existing data where possible.
-4. Avoid destructive changes unless explicitly requested.
-5. Test database operations locally.
-
-For all database interactions, you must rigidly follow **Section 5: Database Security** in `SECURITY_RULES.md` (e.g., using prepared statements).
-
----
-
-# 26. Authentication and Authorization
-
-Authentication and authorization checks must be performed server-side.
-
-For full authentication and authorization rules, strictly adhere to **Section 8: Authentication** and **Section 9: Authorization** in `SECURITY_RULES.md`.
-
----
-
-# 27. Error Handling
-
-Do not expose database errors, stack traces, paths, or credentials in production.
-
-For full error handling requirements, strictly adhere to **Section 18: Error Handling** in `SECURITY_RULES.md`.
-
----
-
-# 28. Dependency Management
-
-Do not add libraries, packages, or frameworks unless they are necessary for the requested functionality.
-
-Before adding a dependency:
-
-1. Determine whether the existing stack can accomplish the task.
-2. Determine whether the dependency is necessary.
-3. Consider its security and maintenance status.
-4. Avoid duplicate functionality.
-5. Keep dependencies appropriately maintained.
-
-Do not replace an existing dependency without a technical reason.
-
----
-
-# 29. File Upload Development
-
-Features involving file uploads must strictly adhere to all guidelines in **Section 16: File Upload Security** found within `SECURITY_RULES.md`. Ensure you review that section before implementing any upload functionality.
-
----
-
-# 30. Testing Requirements
-
-Every significant change should be tested locally before deployment.
-
-## Functional Testing
-
-Verify:
-
-* Normal user flow
-* Valid inputs
-* Invalid inputs
-* Expected database operations
-* Expected UI behavior
-* Expected API responses
-
-## Security Testing
-
-Where applicable, test:
-
-* Invalid input
-* Unauthorized requests
-* Invalid permissions
-* SQL injection attempts
-* XSS attempts
-* CSRF attempts
-* Rate-limit behavior
-* Authentication bypass attempts
-* Direct API access
-* File upload abuse
-* Information disclosure
-
-## Offline Testing
-
-Only when offline functionality has been explicitly approved for the feature, test:
-
-* Offline submission
-* IndexedDB storage
-* Page refresh while offline
-* Browser restart where applicable
-* Network reconnection
-* Synchronization
-* Failed synchronization
-* Successful synchronization
-* Duplicate prevention
-* Local record removal after successful synchronization
-
----
-
-# 31. Production Deployment Testing
-
-Before making the system live on Z.com:
-
-```text
-Complete Features
-      ↓
-Local Functional Testing
-      ↓
-Security Testing
-      ↓
-Database Verification
-      ↓
-Email Testing
-      ↓
-Production Configuration
-      ↓
-Deploy to Z.com
-      ↓
-Production Testing
-      ↓
-Security Verification
-      ↓
-Go Live
-```
-
-Verify that the production environment does not expose development debugging information.
-
----
-
-# 32. Final Security Review
-
-Before production deployment, perform a final security review using:
-
-```text
-SECURITY_RULES.md
-```
-
-Verify that security controls were not accidentally bypassed or weakened.
-
----
-
-# 33. Handling Conflicting Requests
-
-If a user request conflicts with a security requirement, you must follow the conflict resolution steps outlined in **Section 37: Security Conflict Rule** in `SECURITY_RULES.md`.
-
-If the requested change requires offline functionality, follow the explicit offline confirmation rule.
-
----
-
-# 34. Changes That Must Not Happen Automatically
-
-Unless explicitly requested or approved, do not automatically:
-
-* Add offline support.
-* Modify `sw.js`.
-* Add IndexedDB logic.
-* Change API submission behavior to support offline queues.
-* Cache new resources.
-* Add new libraries.
-* Add new frameworks.
-* Redesign unrelated UI.
-* Refactor unrelated code.
-* Change unrelated database structures.
-* Change unrelated APIs.
-* Change authentication behavior.
-* Change authorization behavior.
-* Change existing functionality.
-* Deploy to Z.com.
-* Change production configuration.
-* Commit to Git.
-* Push to GitHub.
-
----
-
-# 35. Global Development Workflow
-
-For every feature:
-
-```text
-1. Understand the requested feature
-        ↓
-2. Inspect existing implementation
-        ↓
-3. Check PROJECT_RULES.md
-        ↓
-4. Check SECURITY_RULES.md
-        ↓
-5. Identify security requirements
-        ↓
-6. Identify affected components
-        ↓
-7. Determine whether offline support is relevant
-        ↓
-8. If offline is relevant → ASK FOR CONFIRMATION
-        ↓
-9. Implement requested functionality
-        ↓
-10. Implement applicable security controls
-        ↓
-11. Test functionality
-        ↓
-12. Test security
-        ↓
-13. Review for unintended changes
-        ↓
-14. Report changes and testing results
-```
-
-Git commits and deployment remain user-controlled unless explicitly requested.
-
----
-
-# 36. Core Principle
-
-The project must follow:
-
-```text
-SECURE BY DEFAULT
-        +
-MINIMAL CHANGES
-        +
-SECURITY WITH FUNCTIONALITY
-        +
-OFFLINE ONLY WITH EXPLICIT APPROVAL
-        +
-LOCAL DEVELOPMENT FIRST
-        +
-GIT/GITHUB VERSION CONTROL
-        +
-GIT DEPLOYMENT FOR PRODUCTION
-        +
-TEST BEFORE DEPLOYMENT
-```
-
-> Build securely by default. Make only the changes requested. Preserve existing functionality. Follow both project and security rules. Never automatically apply offline functionality without explicit approval.
-
----
-
-# 37. Mobile Responsiveness Implementation Rules
-
-These constraints override all other implementation guidance when addressing responsive or mobile styling issues.
-
-### 1. Treat Existing Behavior as Read-Only
-
-All application behavior is frozen.
-
-Do not change, refactor, simplify, optimize, reorganize, or "fix" any existing:
-
-* PHP business logic
-* JavaScript logic
-* event handlers
-* AJAX/fetch requests
-* API calls
-* form submission behavior
-* validation
-* authentication/session handling
-* permissions
-* redirects
-* routing
-* database queries
-* calculations
-* filtering/sorting logic
-* table data generation
-* chart data
-* scanner/barcode logic
-* attendance logic
-* PDF generation logic
-* offline synchronization/queue logic
-* iframe communication
-* timers
-* callbacks
-* conditional business logic
-
-Even if existing logic appears incorrect, leave it unchanged.
-
----
-
-### 2. CSS First
-
-For every responsive issue, attempt to solve it in this order:
-
-1. Existing stylesheet
-2. Component/page stylesheet
-3. Responsive media query
-4. Existing markup class adjustment
-5. Minimal presentation-only inline style adjustment
-
-JavaScript or PHP logic must NOT be used to calculate responsive layouts when CSS can solve the problem.
-
-Prefer CSS-only fixes wherever possible.
-
----
-
-### 3. JavaScript Modification Restrictions
-
-Do not modify JavaScript unless a responsive presentation issue genuinely cannot be fixed through CSS or markup classes.
-
-If JavaScript must be modified, permitted changes are limited to presentation-only operations such as:
-
-* adding/removing a CSS class solely for presentation;
-* changing a presentation-only class string;
-* changing embedded CSS/style values;
-* adding presentation-only wrapper markup generated by JavaScript.
-
-Do NOT alter:
-
-* conditions
-* loops
-* function behavior
-* function arguments
-* return values
-* event listeners
-* handler execution
-* asynchronous behavior
-* API calls
-* data transformations
-* state mutations
-* DOM IDs used as hooks
-* selectors relied upon by existing functionality
-
-If a JavaScript change would require touching behavioral logic, leave the responsive issue unresolved and report it instead.
-
----
-
-### 4. PHP Modification Restrictions
-
-PHP files may be edited only where they contain frontend templates/markup.
-
-Within PHP templates, responsive changes must be limited to:
-
-* CSS classes
-* presentation wrappers
-* responsive markup attributes
-* stylesheet references/cache-busting values when necessary
-
-Do NOT modify PHP expressions, conditions, loops, queries, variables, sessions, includes, request processing, authentication, authorization, validation, or backend behavior.
-
-If PHP and HTML are mixed on the same line, avoid rewriting the PHP expression solely for formatting purposes.
-
----
-
-### 5. Preserve DOM Hooks
-
-Do not rename, remove, duplicate, or repurpose existing:
-
-* `id` attributes
-* `name` attributes
-* `data-*` attributes
-* form field names
-* element values
-* JavaScript selectors
-* classes that are known/suspected to be used by JavaScript
-* iframe identifiers
-* modal identifiers
-* Bootstrap JS hooks
-* ARIA relationships
-
-New presentation-only classes may be added.
-
----
-
-### 6. Do Not Change Content to Make It Fit
-
-Do not solve responsive problems by:
-
-* removing content
-* shortening labels
-* renaming buttons
-* hiding features
-* hiding table columns
-* removing actions
-* removing form fields
-* removing navigation items
-* truncating important information
-* changing displayed values
-
-Fix the layout instead.
-
-Text wrapping, ellipsis for already-noncritical decorative text, and scoped scrolling are acceptable when appropriate.
-
----
-
-### 7. No Global Overflow Masking
-
-Do not add global rules such as:
-
-```css
-html,
-body {
-    overflow-x: hidden;
-}
-```
-
-as a substitute for fixing overflowing components.
-
-Find the element producing the overflow and correct that element.
-
----
-
-### 8. No Unrelated Refactoring
-
-Do not:
-
-* rename variables
-* rename functions
-* reorganize components
-* restructure PHP
-* rewrite JavaScript
-* convert coding styles
-* reorganize CSS unrelated to responsiveness
-* change architecture
-* upgrade dependencies
-* modify vendor files
-* run repository-wide auto-formatting
-* remove "unused" code
-* fix unrelated warnings
-* fix unrelated functional bugs
-
-Keep every diff focused on responsive presentation.
-
----
-
-### 9. Desktop Regression Protection
-
-Existing desktop layouts at 1024px and above should remain as visually close to the current implementation as possible.
-
-Do not redesign working desktop interfaces just to make responsive CSS easier.
-
-Prefer breakpoint-specific overrides for mobile/tablet.
-
----
-
-### 10. Data Safety During Testing
-
-Testing must be non-destructive.
-
-Do not:
-
-* create test users unless explicitly authorized;
-* modify real account data;
-* delete records;
-* submit destructive actions;
-* alter attendance records;
-* change inventory/rental records;
-* change permissions;
-* reset passwords;
-* modify production-like application data solely for responsive testing.
-
-Use existing safe/read-only states where available.
-
-If a UI state cannot safely be reached, report it as unverified instead of modifying application data.
-
----
-
-### 11. Cache Busting
-
-Only change stylesheet cache-busting query strings for stylesheets that were actually modified and only when the repository already uses this mechanism.
-
-Do not introduce a new cache-busting system.
-
-Do not change JavaScript cache versions unless the corresponding JavaScript file actually required an approved presentation-only modification.
-
----
-
-### 12. Final Diff Gate
-
-Before completing the task, inspect every modified file and every changed hunk.
-
-For each changed hunk, ask:
-
-> Is this exact change required for responsive/mobile presentation?
-
-If not, revert it.
-
-Additionally verify that the final diff contains no intentional modifications to:
-
-* business logic
-* backend processing
-* queries
-* APIs
-* validation
-* routing
-* permissions
-* application state
-* event handling
-* data transformations
-* feature behavior
-
-If uncertain whether a change could affect functionality, revert it and report the responsive issue instead of taking the risk.
-
-### Final Principle
-
-When choosing between:
-
-A. leaving a minor responsive issue unresolved, or
-B. modifying existing functionality to solve it,
-
-always choose **A**.
-
-Preserving application behavior has higher priority than achieving perfect responsive coverage.
+A task is complete only when the requested behavior works, applicable security controls are present, relevant checks pass, no unrelated behavior was changed, documentation remains accurate, and unverified limitations are reported plainly.

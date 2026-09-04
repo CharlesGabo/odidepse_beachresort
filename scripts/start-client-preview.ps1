@@ -2,14 +2,20 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $phpExecutable = 'C:\xampp\php\php.exe'
+$npmExecutable = 'C:\Program Files\nodejs\npm.cmd'
 $cloudflaredExecutable = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
 $router = Join-Path $PSScriptRoot 'preview-router.php'
+$distRoot = Join-Path $projectRoot 'dist'
 $previewAddress = '127.0.0.1'
 $previewPort = 8765
 $previewUrl = "http://${previewAddress}:${previewPort}"
 
 if (-not (Test-Path -LiteralPath $phpExecutable -PathType Leaf)) {
     throw "XAMPP PHP was not found at $phpExecutable."
+}
+
+if (-not (Test-Path -LiteralPath $npmExecutable -PathType Leaf)) {
+    throw "npm was not found at $npmExecutable. Install Node.js before starting the preview."
 }
 
 if (-not (Test-Path -LiteralPath $cloudflaredExecutable -PathType Leaf)) {
@@ -24,9 +30,25 @@ if ($portInUse) {
 $phpProcess = $null
 
 try {
+    Write-Host 'Building the React frontend...' -ForegroundColor Cyan
+    Push-Location $projectRoot
+    try {
+        & $npmExecutable run build
+        if ($LASTEXITCODE -ne 0) {
+            throw 'The Vite production build failed.'
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $distRoot 'index.html') -PathType Leaf)) {
+        throw 'The Vite build did not create dist\index.html.'
+    }
+
     $phpProcess = Start-Process `
         -FilePath $phpExecutable `
-        -ArgumentList @('-S', "${previewAddress}:${previewPort}", '-t', $projectRoot, $router) `
+        -ArgumentList @('-S', "${previewAddress}:${previewPort}", '-t', $distRoot, $router) `
         -WindowStyle Hidden `
         -PassThru
 
