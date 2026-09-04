@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZammerBreeze Beach Resort</title>
+    <title>Odidepse Beach Resort</title>
     <!-- Load React. -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -42,7 +42,7 @@
 
             return (
                 <div>
-                    <h1>Welcome to ZammerBreeze Beach Resort</h1>
+                    <h1>Welcome to Odidepse Beach Resort</h1>
                     <p>React is loading directly in XAMPP! No Node.js or Vite needed.</p>
                     <button onClick={testBackend}>Test PHP Backend</button>
                 </div>
