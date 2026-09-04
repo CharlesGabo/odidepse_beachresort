@@ -3,3 +3,15 @@ Options -Indexes
 <FilesMatch "^\.env(?:\..*)?$">
     Require all denied
 </FilesMatch>
+
+<FilesMatch "^(?:AGENTS|PROJECT_RULES|SECURITY_RULES|PROJECT_PROFILE|DEPLOYMENT_WORKFLOW|TEMPLATE_CHECKLIST|SKILL|README)\.md$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?:includes|database|scripts|src)(?:/|$) - [F,L,NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>

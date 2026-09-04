@@ -11,6 +11,22 @@ Reusable Vite/React + PHP/MySQL project starter for XAMPP development, Cloudflar
 
 The React frontend is served by Vite. Requests to `/api` are proxied to PHP on XAMPP. PHP connects to the local `odidepse_db` database using the ignored `.env` file.
 
+## Booking management setup
+
+The public website accepts booking requests and saves them to MySQL. The private dashboard is intentionally not linked from the public website and is available directly at `http://127.0.0.1:5173/admin`. Access is enforced by PHP authentication, not by URL obscurity.
+
+1. Import `database/migrations/001_booking_management.sql` into `odidepse_db` using phpMyAdmin or the MySQL client.
+2. Create the first administrator from the project root:
+
+```powershell
+C:\xampp\php\php.exe scripts\create-admin.php admin@example.com "Resort Manager"
+```
+
+3. Save the generated password in a password manager. It is printed only once.
+4. Start Apache, MySQL, and Vite, then open `/admin` and sign in.
+
+Booking requests are inquiries only. The website does not take payment or promise availability; an administrator confirms each stay from the dashboard.
+
 ## Share a client preview
 
 Double-click `start-client-preview.cmd`. It builds the React frontend, exposes only the compiled site and approved PHP APIs, checks the database connection, and prints a temporary Cloudflare URL.
