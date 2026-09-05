@@ -141,3 +141,70 @@ em { color: var(--coral); font-weight: 400; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior:auto; } *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } [data-reveal] { opacity:1; transform:none; }.hero > img { transform:none; }
 }
+
+/* Readable type scale shared by the public site and the admin dashboard. */
+body { font-size: 16px; line-height: 1.5; }
+.logo small,
+.hero__aside,
+.scroll-cue,
+.section-label span,
+.stay-card__image > span,
+.stay-card__meta,
+.location__map-label small,
+.location__tag,
+.footer__bottom { font-size: 12px; }
+.eyebrow,
+.section-label,
+.text-link,
+.experience__number,
+.stay-card__footer,
+.location dl div,
+.footer__social a { font-size: 13px; }
+.button,
+.desktop-nav a { font-size: 14px; }
+.manifesto__copy,
+.section-heading > p,
+.stay-card p,
+.experience p,
+.location__content > p,
+.closing > p { font-size: 16px; }
+
+.booking-form label,
+.admin-login__form label,
+.admin-sidebar nav > span,
+.admin-stats span,
+.admin-stats small,
+.booking-row--head,
+.admin-stay-card__top > span,
+.admin-stay-card__top i,
+.guest-row--head { font-size: 12px; }
+.admin-login__form > p,
+.admin-login__form > a,
+.admin-error,
+.admin-sidebar nav button,
+.admin-sidebar > button,
+.admin-mock-button,
+.booking-board__head p,
+.admin-search input,
+.filter-row button,
+.booking-row strong,
+.booking-row small,
+.booking-row select,
+.empty-state p,
+.admin-notice,
+.admin-view__heading > p,
+.admin-section-loading,
+.admin-stay-card dl div,
+.admin-stay-card footer,
+.guest-row,
+.guest-row strong,
+.guest-row small,
+.guest-row > b { font-size: 13px; }
+.booking-form input,
+.booking-form textarea,
+.admin-login__form input,
+.admin-login__form form button { font-size: 16px; }
+
+@media (max-width: 900px) {
+  .admin-mobile-nav button { font-size: 13px; }
+}

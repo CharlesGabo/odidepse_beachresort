@@ -100,3 +100,35 @@
   .weather-selection { align-items: flex-start; flex-direction: column; }.weather-selection .button { width: 100%; }.guest-intro { margin-top: 25px; }.guest-photo-strip button { flex-basis: 230px; height: 280px; }.guest-album-note { flex-direction: column; }.review-grid { grid-template-columns: 1fr; margin-top: 35px; }.review-card { padding: 28px; }.review-card blockquote { font-size: 23px; }
 }
 @media (prefers-reduced-motion: reduce) { .floating-photo { transform: none; }.weather-day:hover { transform: none; } }
+
+/* Keep supporting guest content comfortably readable across screen sizes. */
+.floating-photo small,
+.sample-badge,
+.review-card__top small,
+.review-card footer small { font-size: 12px; }
+.gallery-hint,
+.weather-compact small,
+.weather-compact__hint,
+.weather-kicker,
+.weather-now p,
+.weather-now dt,
+.weather-day small,
+.weather-day__condition,
+.weather-selection p,
+.weather-note,
+.weather-credit,
+.guest-album-note,
+.review-card footer strong { font-size: 13px; }
+.photo-viewer__footer p,
+.weather-toolbar > span,
+.weather-toolbar small,
+.weather-refresh,
+.weather-day > strong,
+.weather-selection strong,
+.guest-intro p { font-size: 14px; }
+
+@media (max-width: 650px) {
+  .floating-photo small { font-size: 12px; }
+  .weather-toolbar > span,
+  .weather-toolbar small { font-size: 14px; }
+}
