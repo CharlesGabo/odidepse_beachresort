@@ -27,6 +27,18 @@ C:\xampp\php\php.exe scripts\create-admin.php admin@example.com "Resort Manager"
 
 Booking requests are inquiries only. The website does not take payment or promise availability; an administrator confirms each stay from the dashboard.
 
+## Resort photos, guest stories, and weather
+
+Original room/pool photos belong in `src/assets/photos/rooms/`; guest moments belong in `src/assets/photos/customers/`. `src/resortPhotos.js` curates which originals appear, their order, and descriptive captions. Add an entry there after adding a photo, then rebuild. Some originals are duplicated across folders; the gallery deliberately selects room/pool images separately without moving or deleting originals. The gallery supports pointer tilt, a reduced-motion layout, and a keyboard-accessible photo viewer (Escape to close, arrow keys to navigate).
+
+`src/ResortGallery.jsx` also contains the sample feedback. Names, ratings, and text are fictional and visibly labeled; guest photos are shown separately and are not attributed to these fictional reviewers. There is no public review submission or database storage yet.
+
+`GET /api/weather.php` retrieves MET Norway's Locationforecast for the approximate location already used by the resort map (15.0578, 120.0567). No API key is required. PHP needs cURL with working TLS certificates and a writable system temporary directory. A single application-specific file in that directory caches the upstream response and coordinates concurrent requests; provider expiry and Last-Modified headers are respected, with a minimum ten-minute refresh interval and a one-minute failure backoff. This is server-side request caching, not browser offline support. The browser refreshes while active, shows unavailable states on failure, and never substitutes mock weather.
+
+The seven days use Asia/Manila dates. Temperatures are min/max of available forecast samples, rainfall sums non-overlapping forecast intervals assigned to their starting local day, wind is the maximum sampled speed, and the daily icon represents the interval nearest local noon. These are approximate daily summaries; today can cover only part of the day. Current conditions are the nearest model forecast, not a weather station observation. Selecting a future day pre-fills the existing booking inquiry's check-in date; normal server validation still applies.
+
+Data attribution and the CC BY 4.0 license are linked in the weather section. Before launch, include the final public resort domain/contact in the identifying User-Agent in `includes/weather.php`; the current identifier is `OdidepseBeachResort/1.0`. See [MET Norway API terms](https://api.met.no/doc/TermsOfService) and [data license](https://api.met.no/doc/License).
+
 ## Share a client preview
 
 Double-click `start-client-preview.cmd`. It builds the React frontend, exposes only the compiled site and approved PHP APIs, checks the database connection, and prints a temporary Cloudflare URL.

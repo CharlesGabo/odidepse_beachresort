@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import AdminApp from './AdminApp.jsx';
-import heroImage from './assets/odidepse-hero.png';
-import casitaImage from './assets/casita.png';
-import sunsetImage from './assets/sunset-table.png';
-import surfImage from './assets/surf-morning.png';
+import ResortGallery, { GuestStories } from './ResortGallery.jsx';
+import WeatherSection from './WeatherSection.jsx';
+import './guest-features.css';
+import heroImage from './assets/photos/odidepse-hero.png';
+import casitaImage from './assets/photos/casita.png';
+import sunsetImage from './assets/photos/sunset-table.png';
+import surfImage from './assets/photos/surf-morning.png';
 
 const stays = [
   {
@@ -44,10 +47,10 @@ function Logo({ light = false }) {
   return <a className={`logo ${light ? 'logo--light' : ''}`} href="#top" aria-label="Odidepse Beach Resort home"><span className="logo__mark"><i /><i /><i /></span><span>Odidepse<small>Beach Resort · Zambales</small></span></a>;
 }
 
-function BookingModal({ open, onClose, initialStay = '' }) {
+function BookingModal({ open, onClose, initialStay = '', initialDate = '' }) {
   const dialogRef = useRef(null);
   const [status, setStatus] = useState({ type: 'idle', message: '' });
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 86400000));
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -82,7 +85,7 @@ function BookingModal({ open, onClose, initialStay = '' }) {
         <div className="field field--wide"><label htmlFor="guest-name">Full name</label><input id="guest-name" name="guest_name" autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
         <div className="field"><label htmlFor="email">Email address</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required placeholder="you@example.com" /></div>
         <div className="field"><label htmlFor="phone">Mobile number</label><input id="phone" name="phone" autoComplete="tel" maxLength="30" required placeholder="+63 9XX XXX XXXX" /></div>
-        <div className="field"><label htmlFor="check-in">Check in</label><input id="check-in" type="date" name="check_in" min={tomorrow} required /></div>
+        <div className="field"><label htmlFor="check-in">Check in</label><input id="check-in" type="date" name="check_in" min={tomorrow} key={initialDate} defaultValue={initialDate} required /></div>
         <div className="field"><label htmlFor="check-out">Check out</label><input id="check-out" type="date" name="check_out" min={tomorrow} required /></div>
         <div className="field"><label htmlFor="stay-type">Your stay</label><select id="stay-type" name="stay_type" key={initialStay} defaultValue={initialStay}><option value="">Help me choose</option><option>Dagat Casita</option><option>Puno Villa</option><option>Exclusive resort buyout</option></select></div>
         <div className="field"><label htmlFor="guests">Guests</label><select id="guests" name="guests" defaultValue="2">{[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n} {n === 1 ? 'guest' : 'guests'}</option>)}</select></div>
@@ -98,6 +101,7 @@ function PublicSite() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [selectedStay, setSelectedStay] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -115,17 +119,20 @@ function PublicSite() {
     return () => removeEventListener('pointermove', move);
   }, []);
 
-  const openBooking = (stay = '') => { setSelectedStay(stay); setBookingOpen(true); setMenuOpen(false); };
+  const openBooking = (stay = '', date = '') => { setSelectedStay(stay); setSelectedDate(date); setBookingOpen(true); setMenuOpen(false); };
 
   return <div className="site-shell" id="top">
-    <header className="site-header"><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">Our story</a><a href="#stays">Stay</a><a href="#experiences">Experience</a><a href="#location">Find us</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>Plan your stay <Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
-    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>Our story</a><a href="#stays" onClick={() => setMenuOpen(false)}>Stay</a><a href="#experiences" onClick={() => setMenuOpen(false)}>Experience</a><a href="#location" onClick={() => setMenuOpen(false)}>Find us</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>Plan your stay <Icon name="arrow" /></button></div>
+    <header className="site-header"><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">Our story</a><a href="#stays">Stay</a><a href="#experiences">Experience</a><a href="#weather">Weather</a><a href="#location">Find us</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>Plan your stay <Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
+    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>Our story</a><a href="#stays" onClick={() => setMenuOpen(false)}>Stay</a><a href="#experiences" onClick={() => setMenuOpen(false)}>Experience</a><a href="#gallery" onClick={() => setMenuOpen(false)}>Gallery</a><a href="#weather" onClick={() => setMenuOpen(false)}>Weather</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>Guest stories</a><a href="#location" onClick={() => setMenuOpen(false)}>Find us</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>Plan your stay <Icon name="arrow" /></button></div>
     <main>
       <section className="hero" ref={heroRef}><img src={heroImage} alt="A serene tropical shoreline and pavilion at the foot of the Zambales mountains" fetchPriority="high" /><div className="hero__wash" /><div className="hero__orb hero__orb--one" /><div className="hero__orb hero__orb--two" /><div className="hero__content"><span className="eyebrow eyebrow--light hero__eyebrow">San Felipe · Zambales · Philippines</span><h1>Come back<br />to <em>yourself.</em></h1><p>A barefoot hideaway where the mountains meet the sea—and time finally slows down.</p><button className="button button--coral" type="button" onClick={() => openBooking()}>Find your way here <Icon name="arrow" /></button></div><div className="hero__aside"><span>Plus code</span><span>3355+4P</span></div><a className="scroll-cue" href="#story"><span>Scroll to wander</span><i /></a></section>
       <section className="manifesto section" id="story" data-reveal><div className="section-label"><span>01</span> Our philosophy</div><div className="manifesto__grid"><h2>Less resort.<br />More <em>feeling.</em></h2><div className="manifesto__copy"><p className="lead">We made Odidepse for the kind of days you never want to rush.</p><p>Here, mornings begin with salt air and mountain light. Food comes from nearby waters and farms. Spaces are made by local hands, with a gentle footprint and an open view of the horizon.</p><p>This is Zambales at its most honest: wild, warm, and wonderfully unhurried.</p><a className="text-link" href="#experiences">Discover our world <Icon name="arrow" size={17} /></a></div></div><div className="manifesto__seal" aria-hidden="true"><span>STAY<br />SLOW</span><svg viewBox="0 0 100 100"><path id="seal-path" d="M50,8 a42,42 0 1,1 0,84 a42,42 0 1,1 0,-84" fill="none"/><text><textPath href="#seal-path">ODIDEPSE · SAN FELIPE · ZAMBALES · </textPath></text></svg></div></section>
       <section className="stays section" id="stays"><div className="section-heading" data-reveal><div><div className="section-label"><span>02</span> Rest by the sea</div><h2>Room to <em>breathe.</em></h2></div><p>Thoughtful spaces, natural textures, and the ocean never more than a few quiet steps away.</p></div><div className="stay-grid">{stays.map((stay,index) => <article className="stay-card" key={stay.name} data-reveal style={{'--delay':`${index*90}ms`}}><div className="stay-card__image"><img src={stay.image} alt={`${stay.name} accommodation at Odidepse`} loading="lazy" /><span>{index === 0 ? 'Most loved' : 'For togetherness'}</span></div><div className="stay-card__body"><div><span className="stay-card__meta">{stay.meta}</span><h3>{stay.name}</h3><p>{stay.description}</p></div><div className="stay-card__footer"><span>{stay.price}</span><button className="circle-button" onClick={() => openBooking(stay.name)} aria-label={`Request ${stay.name}`}><Icon name="arrow" /></button></div></div></article>)}</div></section>
+      <ResortGallery />
       <section className="interlude" aria-label="Resort promise"><div className="interlude__inner" data-reveal><span className="eyebrow eyebrow--light">A gentler kind of luxury</span><blockquote>“The real indulgence<br />is having nowhere else<br />you need to be.”</blockquote><span className="interlude__mark"><Icon name="wave" size={40} /></span></div></section>
-      <section className="experiences section" id="experiences"><div className="section-heading" data-reveal><div><div className="section-label"><span>03</span> Your day, your rhythm</div><h2>Follow your <em>curiosity.</em></h2></div><p>Go far, stay close, or do absolutely nothing. Every day here belongs entirely to you.</p></div><div className="experience-list">{experiences.map((item,index) => <article className="experience" key={item.title} data-reveal style={{'--delay':`${index*70}ms`}}><span className="experience__number">{item.number}</span><div className="experience__image"><img src={item.image} alt="" loading="lazy" /></div><h3>{item.title}</h3><p>{item.copy}</p><Icon name="arrow" /></article>)}</div></section>
+      <section className="experiences section" id="experiences"><div className="section-heading" data-reveal><div><div className="section-label"><span>04</span> Your day, your rhythm</div><h2>Follow your <em>curiosity.</em></h2></div><p>Go far, stay close, or do absolutely nothing. Every day here belongs entirely to you.</p></div><div className="experience-list">{experiences.map((item,index) => <article className="experience" key={item.title} data-reveal style={{'--delay':`${index*70}ms`}}><span className="experience__number">{item.number}</span><div className="experience__image"><img src={item.image} alt="" loading="lazy" /></div><h3>{item.title}</h3><p>{item.copy}</p><Icon name="arrow" /></article>)}</div></section>
+      <WeatherSection onBook={date => openBooking('', date)} />
+      <GuestStories />
       <section className="location" id="location">
         <div className="location__visual location__map" data-reveal>
           <iframe
@@ -138,7 +145,7 @@ function PublicSite() {
           <a className="location__map-label" href="https://www.google.com/maps/search/?api=1&query=Odidepse%20Beach%20Resort%2C%20San%20Felipe%2C%20Zambales" target="_blank" rel="noreferrer"><Icon name="pin" size={18} /><span><strong>Odidepse Beach Resort</strong><small>3355+4P · San Felipe, Zambales</small></span></a>
         </div>
         <div className="location__content" data-reveal>
-          <div className="section-label section-label--light"><span>04</span> The way here</div>
+          <div className="section-label section-label--light"><span>07</span> The way here</div>
           <h2>Far enough<br />to feel <em>away.</em></h2>
           <p>Find us along Purok 8 Coastal Road in Brgy. Sto. Niño, where San Felipe meets the West Philippine Sea.</p>
           <dl><div><dt>Plus Code</dt><dd>3355+4P San Felipe, Zambales</dd></div><div><dt>From Manila</dt><dd>Approx. 4 hours</dd></div><div><dt>Transfers</dt><dd>Available on request</dd></div></dl>
@@ -148,7 +155,7 @@ function PublicSite() {
       <section className="closing section" data-reveal><span className="eyebrow">The sea is waiting</span><h2>Stay a little<br /><em>longer.</em></h2><p>Tell us when you’d like to arrive. We’ll take care of the rest.</p><button className="button button--dark" onClick={() => openBooking()}>Plan your escape <Icon name="arrow" /></button></section>
     </main>
     <footer className="footer"><div className="footer__top"><Logo light /><p>Wild coast. Warm welcome.<br />San Felipe, Zambales.</p><div className="footer__social"><a href="mailto:hello@odidepse.com">Email us</a><a href="https://instagram.com" aria-label="Instagram"><Icon name="instagram" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} Odidepse Beach Resort</span><span>Made with care by the coast</span></div></footer>
-    <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} initialStay={selectedStay} />
+    <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} initialStay={selectedStay} initialDate={selectedDate} />
   </div>;
 }
 
