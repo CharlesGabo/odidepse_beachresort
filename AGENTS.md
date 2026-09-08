@@ -81,6 +81,20 @@ For every task:
 
 Do not add offline functionality, commit/push changes, deploy, modify production, or perform destructive database operations without explicit authorization.
 
+## SEO workflow
+
+Complete and stabilize the public system, content, routes, business details, and production domain before performing the final SEO optimization pass. SEO must nevertheless be completed and verified before the production launch.
+
+While developing:
+
+- Preserve semantic HTML, a logical heading hierarchy, descriptive image alternative text, and clean stable public URLs.
+- Compress and appropriately size new images before adding them.
+- Keep indexable public content accessible without authentication.
+- Keep administrative and other private routes separate from public pages and mark them `noindex`.
+- Maintain consistent placeholders for the final business name, address, phone number, official social profiles, and production domain until verified values are available.
+
+When the public system is stable, perform a dedicated SEO pass covering crawlable or pre-rendered public content, unique page titles and descriptions, canonical URLs, social-sharing metadata, structured data, `robots.txt`, XML sitemap, genuine 404 responses, image optimization, mobile performance, and Core Web Vitals. Verify production-domain behavior before considering SEO complete.
+
 ## Required verification
 
 Run applicable checks after changes:
