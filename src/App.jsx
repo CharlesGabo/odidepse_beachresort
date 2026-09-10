@@ -157,6 +157,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const formData = new FormData(form);
     const body = Object.fromEntries(formData);
     delete body.stay_choice;
+    body.phone = `+63 ${String(body.phone ?? '').trim()}`;
     if (!checkInDate || !checkOutDate) {
       setStatus({ type: 'error', message: 'Please select both your check-in and check-out dates on the calendar.' });
       return;
@@ -189,7 +190,13 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   return <dialog ref={dialogRef} className="booking-modal" onClose={onClose} onCancel={onClose} aria-labelledby="booking-title">
     <button className="icon-button modal-close" type="button" onClick={onClose} aria-label="Close booking form"><Icon name="close" /></button>
     <div className="modal-intro"><span className="eyebrow">{copy.inquiry["your_escape_starts_here"]}</span><h2 id="booking-title">{copy.inquiry["request_your_stay"]}</h2><p>{copy.inquiry["share_your_dates_and_group_size_our_team_will_confirm_availabilit"]}</p></div>
-    {status.type === 'success' ? <div className="booking-success" role="status"><span className="success-orbit"><Icon name="wave" size={30} /></span><h3>{copy.inquiry["see_you_by_the_sea"]}</h3><p>{status.message}</p><button className="text-link" type="button" onClick={onClose}>{copy.inquiry["close"]}<Icon name="arrow" size={16} /></button></div> :
+    {status.type === 'success' ? <div className="booking-success" role="status">
+      <span className="success-orbit"><Icon name="wave" size={30} /></span>
+      <h3>{copy.inquiry["see_you_by_the_sea"]}</h3>
+      <p>{status.message}</p>
+      <a className="booking-success__facebook" href="https://www.facebook.com/profile.php?id=61576647053739" target="_blank" rel="noreferrer">Message us on Facebook <Icon name="arrow" size={17} /></a>
+      <button className="text-link" type="button" onClick={onClose}>{copy.inquiry["close"]}<Icon name="arrow" size={16} /></button>
+    </div> :
       <form key={open ? 'open' : 'closed'} className="booking-form booking-experience" onSubmit={submit}>
         <section className="booking-step field--wide" aria-labelledby="choose-stay-title">
           <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">Choose your space</h3><p>Browse every stay option. Photos are representative while room assignments are confirmed by our team.</p></div></div>
@@ -256,7 +263,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-details-grid">
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
             <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required placeholder="you@example.com" /></div>
-            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}</label><input id="phone" name="phone" autoComplete="tel" maxLength="30" required placeholder="+63 9XX XXX XXXX" /></div>
+            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">Enter the 10 digits after +63.</small></div>
             <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={selectedStayDetails?.guests ?? 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>
@@ -340,7 +347,7 @@ function PublicSite() {
       </section>
       <section className="amenities section" id="amenities" aria-labelledby="amenities-title">
         <div className="section-heading" data-reveal><div><span className="eyebrow">{copy.amenities["the_little_extras_included"]}</span><h2 id="amenities-title">{copy.amenities["settle_in"]}<br /><em>{copy.amenities["we_ve_got_you"]}</em></h2></div><p>{copy.amenities["pack_for_the_beach_enjoy_free_wi_fi_entertainment_and_the_shared_"]}</p></div>
-        <div className="amenity-grid">{amenityGroups.map(group => <article className="amenity-card" key={group.title} data-reveal><Icon name={group.icon} size={28} /><h3>{group.title}</h3><p>{group.intro}</p><ul>{group.items.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
+        <div className="amenity-grid">{amenityGroups.map(group => <article className="amenity-card" key={group.title} data-reveal><h3>{group.title}</h3><p>{group.intro}</p><ul>{group.items.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
       </section>
       <section className="stays section" id="stays" aria-labelledby="stays-title">
         <div className="section-heading" data-reveal><div><div className="section-label"><span>02</span>{copy.stays["rooms_group_stays"]}</div><h2 id="stays-title">{copy.stays["room_for"]}<br /><em>{copy.stays["your_crew"]}</em></h2></div><p>{copy.stays["from_5_guest_rooms_to_an_exclusive_building_for_88_100_guests_tel"]}</p></div>
