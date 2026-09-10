@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ResortManager from './ResortManager.jsx';
 
 const statusLabels = {
   pending: 'New request',
@@ -12,12 +13,8 @@ const navItems = [
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'stays', label: 'Stays', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
-];
-
-const stayCatalog = [
-  { name: 'Dagat Casita', capacity: 2, rate: '₱8,900', note: 'King bed · plunge pool' },
-  { name: 'Puno Villa', capacity: 4, rate: '₱13,800', note: 'Two bedrooms · garden deck' },
-  { name: 'Exclusive resort buyout', capacity: 8, rate: 'On request', note: 'Private use · tailored stay' },
+  { id: 'services', label: 'Services', icon: 'home' },
+  { id: 'content', label: 'Website Content', icon: 'home' },
 ];
 
 const mockGuestProfiles = [
@@ -133,12 +130,44 @@ function StatCards({ stats }) {
   </section>;
 }
 
+function BookingRequestModal({ booking, onClose, updateStatus }) {
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (booking && dialog && !dialog.open) dialog.showModal();
+  }, [booking]);
+
+  if (!booking) return null;
+  return <dialog ref={dialogRef} className="admin-request-modal" aria-labelledby="request-modal-title" onClose={onClose} onCancel={onClose}>
+    <div className="admin-request-modal__head">
+      <div><span className="admin-kicker">{booking.reference_code}</span><h2 id="request-modal-title">Booking request</h2></div>
+      <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
+    </div>
+    <dl className="admin-request-modal__details">
+      <div><dt>Guest</dt><dd>{booking.guest_name}</dd></div>
+      <div><dt>Guests</dt><dd>{booking.guests}</dd></div>
+      <div><dt>Email</dt><dd><a href={`mailto:${booking.email}`}>{booking.email}</a></dd></div>
+      <div><dt>Phone</dt><dd><a href={`tel:${booking.phone}`}>{booking.phone}</a></dd></div>
+      <div><dt>Stay</dt><dd>{booking.stay_type || 'Flexible stay'}</dd></div>
+      <div><dt>Requested service</dt><dd>{booking.service_name || 'None selected'}</dd></div>
+      <div><dt>Check-in</dt><dd>{booking.check_in}</dd></div>
+      <div><dt>Check-out</dt><dd>{booking.check_out}</dd></div>
+      <div className="admin-request-modal__message"><dt>Guest request</dt><dd>{booking.message || 'No additional request provided.'}</dd></div>
+    </dl>
+    <label className="admin-request-modal__status">Manage status
+      <select value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+    </label>
+  </dialog>;
+}
+
 function BookingsView({ bookings, notice, setNotice, updateStatus }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
   const visible = useMemo(() => bookings.filter(item => (
     (filter === 'all' || item.status === filter)
-    && `${item.guest_name} ${item.reference_code} ${item.email}`.toLowerCase().includes(query.toLowerCase())
+    && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
   )), [bookings, filter, query]);
 
   return <section className="booking-board admin-view" aria-labelledby="bookings-heading">
@@ -152,32 +181,14 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
       <div className="booking-row booking-row--head"><span>Guest</span><span>Stay</span><span>Dates</span><span>Status</span></div>
       {visible.map(booking => <article className="booking-row" key={booking.id}>
         <div><strong>{booking.guest_name}</strong><small>{booking.reference_code} · {booking.guests} guests</small></div>
-        <div><strong>{booking.stay_type || 'Flexible'}</strong><small>{booking.email}</small></div>
+        <div><strong>{booking.stay_type || booking.service_name || 'Flexible'}</strong><small>{booking.email}</small></div>
         <div><strong>{booking.check_in}</strong><small>to {booking.check_out}</small></div>
         <select aria-label={`Status for ${booking.guest_name}`} value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        <button className="booking-manage-button" type="button" onClick={() => setSelectedBookingId(booking.id)}>View &amp; manage</button>
       </article>)}
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
-  </section>;
-}
-
-function StaysView({ bookings }) {
-  const today = new Date().toISOString().slice(0, 10);
-
-  return <section className="admin-view" aria-labelledby="stays-heading">
-    <div className="admin-view__heading"><div><span className="admin-kicker">Accommodation overview</span><h2 id="stays-heading">Your stays</h2></div><p>Live booking activity for each accommodation.</p></div>
-    <div className="admin-stay-grid">
-      {stayCatalog.map(stay => {
-        const activeBookings = bookings.filter(booking => booking.stay_type === stay.name && ['confirmed', 'checked_in'].includes(booking.status) && booking.check_out >= today);
-        const nextArrival = [...activeBookings].sort((a, b) => a.check_in.localeCompare(b.check_in))[0];
-        return <article className="admin-stay-card" key={stay.name}>
-          <div className="admin-stay-card__top"><span>{stay.note}</span><i className={activeBookings.length ? 'is-busy' : ''}>{activeBookings.length ? 'Active' : 'Available'}</i></div>
-          <h3>{stay.name}</h3>
-          <dl><div><dt>Nightly rate</dt><dd>{stay.rate}</dd></div><div><dt>Capacity</dt><dd>Up to {stay.capacity}</dd></div><div><dt>Upcoming stays</dt><dd>{activeBookings.length}</dd></div></dl>
-          <footer><span>{nextArrival ? `Next arrival · ${nextArrival.check_in}` : 'No upcoming arrival'}</span><AdminIcon name="arrow" /></footer>
-        </article>;
-      })}
-    </div>
+    <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
   </section>;
 }
 
@@ -299,12 +310,12 @@ function Dashboard({ user, csrfToken, onLogout }) {
       <button type="button" onClick={logout}><AdminIcon name="logout" />Sign out</button>
     </aside>
     <main className="admin-main">
-      <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : activeView === 'stays' ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-header-actions"><button type="button" className={mockBookings ? 'admin-mock-button is-active' : 'admin-mock-button'} aria-pressed={Boolean(mockBookings)} disabled={loading} onClick={toggleMockData}>{mockBookings ? 'Show live data' : 'Generate mock data'}</button><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></div></header>
+      <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : ['stays','services','content'].includes(activeView) ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-header-actions"><button type="button" className={mockBookings ? 'admin-mock-button is-active' : 'admin-mock-button'} aria-pressed={Boolean(mockBookings)} disabled={loading} onClick={toggleMockData}>{mockBookings ? 'Show live data' : 'Generate mock data'}</button><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></div></header>
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} />{item.label}</button>)}</nav>
       <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'bookings' && <BookingsView bookings={displayedBookings} notice={notice} setNotice={setNotice} updateStatus={updateStatus} />}
-        {activeView === 'stays' && <StaysView bookings={displayedBookings} />}
+        {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={displayedBookings} />}
       </>}
     </main>

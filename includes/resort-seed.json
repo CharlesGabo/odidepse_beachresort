@@ -1,0 +1,353 @@
+{
+  "copy": {
+    "identity": {
+      "odidepse": "Odidepse",
+      "beach_resort_zambales": "Beach Resort · Zambales"
+    },
+    "inquiry": {
+      "your_escape_starts_here": "Your escape starts here",
+      "request_your_stay": "Request your stay.",
+      "share_your_dates_and_group_size_our_team_will_confirm_availabilit": "Share your dates and group size. Our team will confirm availability, arrangements, and final pricing.",
+      "see_you_by_the_sea": "See you by the sea.",
+      "close": "Close ",
+      "full_name": "Full name",
+      "email_address": "Email address",
+      "mobile_number": "Mobile number",
+      "check_in": "Check in",
+      "check_out": "Check out",
+      "your_stay": "Your stay",
+      "help_me_choose": "Help me choose",
+      "guests": "Guests",
+      "anything_we_should_know": "Anything we should know? ",
+      "optional": "Optional",
+      "no_payment_is_taken_today_your_stay_is_confirmed_only_after_our_t": "No payment is taken today. Your stay is confirmed only after our team contacts you.",
+      "submit": "Send booking request",
+      "sending": "Sending…"
+    },
+    "navigation": {
+      "our_story": "Our story",
+      "stay": "Stay",
+      "experience": "Experience",
+      "weather": "Weather",
+      "find_us": "Find us",
+      "plan_your_stay": "Plan your stay ",
+      "gallery": "Gallery",
+      "guest_stories": "Guest stories"
+    },
+    "hero": {
+      "san_felipe_zambales_philippines": "San Felipe · Zambales · Philippines",
+      "your_beach_escape": "Your beach escape.",
+      "25_seconds": "25 seconds",
+      "from_the_shore": "from the shore.",
+      "stay_stream_sing_and_grill_with_your_favorite_people_from_a_small": "Stay, stream, sing, and grill with your favorite people. From a small getaway to a whole-building celebration, there’s room for your crew.",
+      "plan_your_stay": "Plan your stay ",
+      "explore_rooms": "Explore rooms ",
+      "discover_more": "Discover more"
+    },
+    "story": {
+      "better_together": " Better together",
+      "beach_days": "Beach days.",
+      "your_people": "Your people.",
+      "a_little_sea_air_a_lot_of_time_together": "A little sea air. A lot of time together.",
+      "odidepse_puts_you_a_25_second_walk_from_the_beach_with_air_condit": "Odidepse puts you a 25-second walk from the beach, with air-conditioned rooms and shared spaces for cooking, singing, and catching up.",
+      "bring_the_family_gather_the_barkada_or_plan_something_bigger_make": "Bring the family, gather the barkada, or plan something bigger. Make the trip your own.",
+      "see_what_s_included": "See what’s included "
+    },
+    "amenities": {
+      "the_little_extras_included": "The little extras, included",
+      "settle_in": "Settle in.",
+      "we_ve_got_you": "We’ve got you.",
+      "pack_for_the_beach_enjoy_free_wi_fi_entertainment_and_the_shared_": "Pack for the beach. Enjoy free Wi-Fi, entertainment, and the shared essentials that make group trips easier."
+    },
+    "stays": {
+      "rooms_group_stays": " Rooms & group stays",
+      "room_for": "Room for",
+      "your_crew": "your crew.",
+      "from_5_guest_rooms_to_an_exclusive_building_for_88_100_guests_tel": "From 5-guest rooms to an exclusive building for 88–100 guests. Tell us your dates and we’ll confirm the right arrangement.",
+      "guests": "guests",
+      "room_counts_describe_accommodation_options_not_live_availability_": "Room counts describe accommodation options, not live availability. Please inquire for your dates, group arrangement, and rates.",
+      "room_cta": "Ask about this room",
+      "group_cta": "Group inquiry"
+    },
+    "group_highlight": {
+      "big_plans_beach_setting": "Big plans. Beach setting.",
+      "bringing_the": "Bringing the",
+      "whole_crew": "whole crew?",
+      "plan_a_reunion_company_outing_or_celebration_with_flexible_room_a": "Plan a reunion, company outing, or celebration with flexible room arrangements. Ask about a private pool for large groups or exclusive use of the entire building for 88–100 guests.",
+      "inquire_for_group_rates": "Inquire for group rates ",
+      "perfect_for": "Perfect for"
+    },
+    "experiences": {
+      "a_little_more_adventure": " A little more adventure",
+      "make_some": "Make some",
+      "waves": "waves.",
+      "take_your_beach_day_up_a_notch_ask_us_about_rental_availability_w": "Take your beach day up a notch. Ask us about rental availability when planning your stay.",
+      "meet_you_on_the_water": "Meet you on the water",
+      "available_upon_inquiry": "Available upon inquiry.",
+      "ask_about_this_activity": "Ask about this activity "
+    },
+    "location": {
+      "odidepse_beach_resort": "Odidepse Beach Resort",
+      "3355_4p_san_felipe_zambales": "3355+4P · San Felipe, Zambales",
+      "the_way_here": " The way here",
+      "far_enough": "Far enough",
+      "to_feel": "to feel ",
+      "away": "away.",
+      "find_us_along_purok_8_coastal_road_in_brgy_sto_ni_o_where_san_fel": "Find us along Purok 8 Coastal Road in Brgy. Sto. Niño, where San Felipe meets the West Philippine Sea.",
+      "plus_code": "Plus Code",
+      "3355_4p_san_felipe_zambales_1": "3355+4P San Felipe, Zambales",
+      "from_manila": "From Manila",
+      "approx_4_hours": "Approx. 4 hours",
+      "transfers": "Transfers",
+      "available_on_request": "Available on request",
+      "open_in_google_maps": "Open in Google Maps "
+    },
+    "closing": {
+      "the_sea_is_waiting": "The sea is waiting",
+      "effortless_fun": "Effortless. Fun.",
+      "a_little_extra": "A little extra.",
+      "because_your_beach_trip_should_be_all_three_from_beach_days_and_j": "Because your beach trip should be all three. From beach days and jet ski rides to karaoke nights and late-night grilling, make room for memories with your favorite people.",
+      "plan_your_stay": "Plan your stay "
+    },
+    "footer": {
+      "wild_coast_warm_welcome": "Wild coast. Warm welcome.",
+      "san_felipe_zambales": "San Felipe, Zambales.",
+      "email_us": "Email us",
+      "made_with_care_by_the_coast": "Made with care by the coast",
+      "copyright_name": "Odidepse Beach Resort"
+    },
+    "gallery": {
+      "a_closer_look": " A closer look",
+      "your_place": "Your place",
+      "in_the": "in the ",
+      "sun": "sun.",
+      "a_few_little_windows_into_odidepse_explore_our_rooms_the_pool_and": "A few little windows into Odidepse. Explore our rooms, the pool, and the spaces between.",
+      "tap_any_photo_to_wander_closer": "Tap any photo to wander closer ↗"
+    },
+    "guest_stories": {
+      "the_good_days_shared": " The good days, shared",
+      "you_make": "You make",
+      "the": "the ",
+      "memories": "memories.",
+      "little_moments_lasting_memories": "Little moments. Lasting memories.",
+      "swipe_or_scroll_to_explore": "Swipe or scroll to explore →"
+    },
+    "weather": {
+      "a_little_outlook": " A little outlook",
+      "meet_the": "Meet the ",
+      "forecast": "forecast.",
+      "sun_on_your_mind_get_a_feel_for_the_next_seven_days_before_choosi": "Sun on your mind? Get a feel for the next seven days before choosing your coastal escape.",
+      "san_felipe_zambales": "San Felipe, Zambales",
+      "near_odidepse_philippine_time": "Near Odidepse · Philippine time",
+      "san_felipe_zambales_1": "San Felipe, Zambales "
+    },
+    "links": {
+      "email": "mailto:hello@odidepse.com",
+      "instagram": "https://instagram.com",
+      "maps": "https://www.google.com/maps/search/?api=1&query=Odidepse%20Beach%20Resort%2C%20San%20Felipe%2C%20Zambales",
+      "map_embed": "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4770.879904334295!2d120.05674797590211!3d15.057833465717291!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3395d3b36a3db191%3A0x17fc754b019d8bac!2sOdidepse%20Beach%20Resort!5e1!3m2!1sen!2sph!4v1788537994313!5m2!1sen!2sph"
+    }
+  },
+  "highlights": [
+    {
+      "icon": "wave",
+      "title": "25 seconds",
+      "detail": "Walk to the beach"
+    },
+    {
+      "icon": "wifi",
+      "title": "Up to 800 Mbps",
+      "detail": "Free high-speed Wi-Fi"
+    },
+    {
+      "icon": "snow",
+      "title": "Air-conditioned",
+      "detail": "Rooms to cool down in"
+    },
+    {
+      "icon": "paw",
+      "title": "Pet friendly",
+      "detail": "Bring your furry companions"
+    },
+    {
+      "icon": "tv",
+      "title": "Free streaming",
+      "detail": "Netflix, HBO Max & Prime Video on the common TV"
+    },
+    {
+      "icon": "mic",
+      "title": "Karaoke ready",
+      "detail": "Free LG XBOOM + microphone"
+    }
+  ],
+  "amenities": [
+    {
+      "icon": "snow",
+      "title": "Comfort",
+      "intro": "Settle in, cool down, feel at home.",
+      "items": [
+        "Air-conditioned rooms",
+        "Pet-friendly stays"
+      ]
+    },
+    {
+      "icon": "tv",
+      "title": "Connectivity & entertainment",
+      "intro": "Your downtime is covered, free of charge.",
+      "items": [
+        "High-speed Wi-Fi, up to 800 Mbps",
+        "Netflix, HBO Max & Prime Video on the common TV",
+        "LG XBOOM speaker with microphone",
+        "Karaoke-friendly common area"
+      ]
+    },
+    {
+      "icon": "kitchen",
+      "title": "Shared kitchen & facilities",
+      "intro": "Free to use, from meal prep to the last plate.",
+      "items": [
+        "Common kitchen, utensils & rice cooker",
+        "Common refrigerator",
+        "Hot, cold & warm water dispenser",
+        "Griller",
+        "Tables & chairs"
+      ]
+    }
+  ],
+  "occasions": [
+    "Birthdays",
+    "Family reunions",
+    "Team building",
+    "Company outings",
+    "Barkada trips",
+    "Weekend escapes",
+    "Large group celebrations"
+  ],
+  "photos": [
+    {
+      "id": "room_0",
+      "title": "Poolside, sea side",
+      "alt": "The resort pool overlooking the sea"
+    },
+    {
+      "id": "room_1",
+      "title": "Room for everyone",
+      "alt": "Bunk beds and a window in a resort room"
+    },
+    {
+      "id": "room_2",
+      "title": "Under an open sky",
+      "alt": "The resort pool and open upper terrace"
+    },
+    {
+      "id": "room_3",
+      "title": "Settle right in",
+      "alt": "A resort bunk room seen through its doorway"
+    },
+    {
+      "id": "room_4",
+      "title": "Stay together",
+      "alt": "A shared room with multiple bunk beds"
+    },
+    {
+      "id": "room_5",
+      "title": "A different perspective",
+      "alt": "An elevated view of the resort and pool"
+    },
+    {
+      "id": "room_6",
+      "title": "Easy mornings",
+      "alt": "Bunk beds reflected in a room mirror"
+    },
+    {
+      "id": "room_7",
+      "title": "A quiet corner",
+      "alt": "A resort room with bunk beds and an open doorway"
+    },
+    {
+      "id": "room_8",
+      "title": "Behind the door",
+      "alt": "A wooden guest room door along the corridor"
+    },
+    {
+      "id": "room_9",
+      "title": "Up and away",
+      "alt": "The indoor staircase and guest room doors"
+    },
+    {
+      "id": "guest_0",
+      "title": "Guests standing together by the sea",
+      "alt": "Guests standing together by the sea"
+    },
+    {
+      "id": "guest_1",
+      "title": "Guests on a banana boat",
+      "alt": "Guests on a banana boat"
+    },
+    {
+      "id": "guest_2",
+      "title": "Guests sharing a meal outdoors",
+      "alt": "Guests sharing a meal outdoors"
+    },
+    {
+      "id": "guest_3",
+      "title": "A group gathered by the beach",
+      "alt": "A group gathered by the beach"
+    },
+    {
+      "id": "guest_4",
+      "title": "Guests posing on off-road vehicles",
+      "alt": "Guests posing on off-road vehicles"
+    },
+    {
+      "id": "guest_5",
+      "title": "A group sitting together at the resort",
+      "alt": "A group sitting together at the resort"
+    },
+    {
+      "id": "guest_6",
+      "title": "Guests gathered around a dining table",
+      "alt": "Guests gathered around a dining table"
+    },
+    {
+      "id": "guest_7",
+      "title": "A group posing near the shore",
+      "alt": "A group posing near the shore"
+    },
+    {
+      "id": "guest_8",
+      "title": "Guests gathered beneath the trees",
+      "alt": "Guests gathered beneath the trees"
+    },
+    {
+      "id": "guest_9",
+      "title": "A group posing by the beach at sunset",
+      "alt": "A group posing by the beach at sunset"
+    },
+    {
+      "id": "guest_10",
+      "title": "Guests on off-road vehicles near the beach",
+      "alt": "Guests on off-road vehicles near the beach"
+    }
+  ],
+  "reviews": [
+    {
+      "name": "The weekend crew",
+      "type": "Friends’ getaway",
+      "quote": "The kind of weekend we needed. Slow mornings, a dip in the pool, and so much time just catching up.",
+      "rating": 5
+    },
+    {
+      "name": "A family by the sea",
+      "type": "Family escape",
+      "quote": "Our favorite part was being together. Plenty of photos, long conversations, and a sunset we wished would last a little longer.",
+      "rating": 5
+    },
+    {
+      "name": "The sunset seekers",
+      "type": "Coastal break",
+      "quote": "We came for a change of scenery and left with a camera full of memories. Already dreaming of our next beach day.",
+      "rating": 4
+    }
+  ]
+}

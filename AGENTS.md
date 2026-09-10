@@ -97,6 +97,18 @@ When the public system is stable, perform a dedicated SEO pass covering crawlabl
 
 ## Required verification
 
+### Usage-conscious verification
+
+Keep verification deliberately lean to conserve the user's Codex usage:
+
+- Run only the smallest checks needed for the files changed, normally once near the end of the task.
+- Do not repeat successful builds, syntax checks, API calls, or repository inspections unless a later change can affect their result.
+- Do not perform exhaustive acceptance testing, responsive screenshot matrices, prolonged browser automation, temporary database/server setup, or broad security test suites unless the user explicitly requests them.
+- Prefer one targeted reproduction and one targeted confirmation when diagnosing a bug.
+- For documentation-only or similarly low-risk edits, use only a focused diff/status check when appropriate.
+- Let the user perform exploratory and full functional testing by default. Clearly report what remains untested.
+- If additional testing is genuinely necessary to prevent a security or data-loss risk, explain why briefly and perform the narrowest applicable check.
+
 Run applicable checks after changes:
 
 ```powershell

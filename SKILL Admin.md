@@ -66,10 +66,6 @@ The scale is compact — base UI text is 15px, not 16:
 
 Section headers follow a numbered, em-dashed convention set in the display font at small size and gray 400: "01 — blog", "02 — projects". Page titles and most standalone labels are lowercase; only mono micro-labels are uppercase. Links are underlined with the underline drawn at 25% opacity of the text color, offset ~2px below baseline, rising to full opacity on hover. External links get a trailing "↗".
 
-## Odidepse admin application
-
-For the admin interface rendered by `src/AdminApp.jsx`, including nested admin subcomponents, use **Inter** with `sans-serif` fallback for every text element: headings, statistics, labels, body copy, form controls, buttons, navigation, tables, empty states, and dialogs. This project-specific rule takes precedence over the general typography roles above for that interface. Keep the existing sizing, weight, casing, and spacing unless the task explicitly asks to change them.
-
 ## Layout & spacing
 
 - Content column: narrow — 42rem (672px) max for reading pages; up to 56rem (896px) only when a page genuinely needs multi-column grids.

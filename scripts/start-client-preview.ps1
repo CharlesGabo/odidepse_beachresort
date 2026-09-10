@@ -9,6 +9,9 @@ $distRoot = Join-Path $projectRoot 'dist'
 $previewAddress = '127.0.0.1'
 $previewPort = 8765
 $previewUrl = "http://${previewAddress}:${previewPort}"
+$cloudflaredProcess = $null
+$cloudflaredStdout = $null
+$cloudflaredStderr = $null
 
 if (-not (Test-Path -LiteralPath $phpExecutable -PathType Leaf)) {
     throw "XAMPP PHP was not found at $phpExecutable."
@@ -58,17 +61,91 @@ try {
         throw 'The local PHP health check did not return a successful response.'
     }
 
+    $cloudflaredStdout = [System.IO.Path]::GetTempFileName()
+    $cloudflaredStderr = [System.IO.Path]::GetTempFileName()
+
+    Write-Host 'Starting the Cloudflare tunnel...' -ForegroundColor Cyan
+    $cloudflaredProcess = Start-Process `
+        -FilePath $cloudflaredExecutable `
+        -ArgumentList @('tunnel', '--protocol', 'http2', '--url', $previewUrl) `
+        -RedirectStandardOutput $cloudflaredStdout `
+        -RedirectStandardError $cloudflaredStderr `
+        -WindowStyle Hidden `
+        -PassThru
+
+    $startupDeadline = (Get-Date).AddSeconds(45)
+    $publicUrl = $null
+
+    do {
+        if ($cloudflaredProcess.HasExited) {
+            throw 'Cloudflare stopped before creating a Quick Tunnel. Run the launcher again in a few minutes.'
+        }
+
+        $cloudflaredOutput = @(
+            Get-Content -LiteralPath $cloudflaredStdout -Raw -ErrorAction SilentlyContinue
+            Get-Content -LiteralPath $cloudflaredStderr -Raw -ErrorAction SilentlyContinue
+        ) -join [Environment]::NewLine
+
+        if ($cloudflaredOutput -match 'https://[a-z0-9-]+\.trycloudflare\.com') {
+            $publicUrl = $Matches[0]
+            break
+        }
+
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $startupDeadline)
+
+    if (-not $publicUrl) {
+        throw 'Cloudflare did not create a Quick Tunnel URL within 45 seconds.'
+    }
+
+    Write-Host 'Waiting for Cloudflare to publish and verify the public address...' -ForegroundColor Cyan
+    Start-Sleep -Seconds 10
+
+    $publicHost = ([Uri]$publicUrl).DnsSafeHost
+    $encodedPublicHost = [Uri]::EscapeDataString($publicHost)
+    $dnsCheckUrl = "https://cloudflare-dns.com/dns-query?name=${encodedPublicHost}&type=A"
+    $dnsResult = Invoke-RestMethod `
+        -Uri $dnsCheckUrl `
+        -Headers @{ Accept = 'application/dns-json' } `
+        -TimeoutSec 15
+
+    if ($dnsResult.Status -ne 0 -or -not $dnsResult.Answer) {
+        throw 'Cloudflare created a Quick Tunnel but did not publish its DNS record. This is a temporary TryCloudflare service problem; wait a few minutes, then run the launcher again.'
+    }
+
+    $publicHealth = Invoke-RestMethod -Uri "$publicUrl/api/hello.php" -TimeoutSec 20
+    if ($publicHealth.status -ne 'success') {
+        throw 'The public Cloudflare URL did not pass the PHP health check.'
+    }
+
     Write-Host ''
-    Write-Host 'Odidepse local preview is ready.' -ForegroundColor Green
-    Write-Host 'Cloudflare will print the public trycloudflare.com URL below.'
-    Write-Host 'Keep this window open while your client is reviewing the site.'
+    Write-Host 'Odidepse client preview is publicly reachable.' -ForegroundColor Green
+    Write-Host $publicUrl -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'Send only the URL shown above to the client.'
+    Write-Host 'Keep this window, computer, internet connection, and XAMPP MySQL running.'
     Write-Host 'Press Ctrl+C to stop sharing.'
     Write-Host ''
 
-    & $cloudflaredExecutable tunnel --url $previewUrl
+    Wait-Process -Id $cloudflaredProcess.Id
+
+    $cloudflaredProcess.Refresh()
+    if ($cloudflaredProcess.ExitCode -ne 0) {
+        throw "Cloudflare stopped unexpectedly with exit code $($cloudflaredProcess.ExitCode)."
+    }
 }
 finally {
+    if ($cloudflaredProcess -and -not $cloudflaredProcess.HasExited) {
+        Stop-Process -Id $cloudflaredProcess.Id -Force
+    }
+
     if ($phpProcess -and -not $phpProcess.HasExited) {
         Stop-Process -Id $phpProcess.Id -Force
+    }
+
+    foreach ($temporaryLog in @($cloudflaredStdout, $cloudflaredStderr)) {
+        if ($temporaryLog -and (Test-Path -LiteralPath $temporaryLog -PathType Leaf)) {
+            Remove-Item -LiteralPath $temporaryLog -Force -ErrorAction SilentlyContinue
+        }
     }
 }

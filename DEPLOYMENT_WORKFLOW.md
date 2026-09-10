@@ -54,10 +54,13 @@ The launcher:
 3. Routes `/api/*.php` to the project's PHP endpoints.
 4. Confirms PHP and the database respond.
 5. Creates a temporary `trycloudflare.com` URL.
+6. Waits for Cloudflare DNS publication and verifies the public PHP health endpoint before displaying the URL.
 
 Send the displayed HTTPS URL to the client and keep the window, computer, internet connection, and XAMPP MySQL running. Press `Ctrl+C` to stop sharing.
 
 Quick Tunnel URLs are random and change after restart. Use preview/test data only. Do not expose production data or treat this tunnel as production hosting.
+
+Do not copy a URL from Cloudflare startup output or open it before the launcher reports that the client preview is publicly reachable. An early lookup can cache a temporary `NXDOMAIN` response. If Cloudflare creates a URL but does not publish its DNS record, the launcher stops with a service-error message; wait a few minutes and run it again.
 
 After preview-script changes, verify publicly that:
 

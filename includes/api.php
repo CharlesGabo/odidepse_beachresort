@@ -23,15 +23,15 @@ function requireMethod(string ...$methods): string
     return $method;
 }
 
-function readJsonBody(): array
+function readJsonBody(int $maximumBytes = 16384): array
 {
     $contentType = strtolower(trim(explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''))[0]));
     if ($contentType !== 'application/json') {
         jsonResponse(['status' => 'error', 'message' => 'Content-Type must be application/json.'], 415);
     }
 
-    $raw = file_get_contents('php://input');
-    if ($raw === false || strlen($raw) > 16384) {
+    $raw = file_get_contents('php://input', false, null, 0, $maximumBytes + 1);
+    if ($raw === false || strlen($raw) > $maximumBytes) {
         jsonResponse(['status' => 'error', 'message' => 'The request body is too large.'], 413);
     }
 

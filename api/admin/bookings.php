@@ -11,7 +11,7 @@ requireAdmin();
 try {
     $db = database();
     if ($method === 'GET') {
-        $statement = $db->query('SELECT id, reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, created_at FROM bookings ORDER BY created_at DESC LIMIT 250');
+        $statement = $db->query('SELECT id, reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, stay_id, service_id, service_name, message, status, created_at FROM bookings ORDER BY created_at DESC LIMIT 250');
         jsonResponse(['status' => 'success', 'bookings' => $statement->fetchAll()]);
     }
 
