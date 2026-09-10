@@ -9,6 +9,45 @@ const statusLabels = {
   cancelled: 'Cancelled',
 };
 
+function formatBookingDate(value, compact = false) {
+  if (!value) return 'Not set';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-PH', compact
+    ? { month: 'short', day: 'numeric' }
+    : { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }
+  ).format(date);
+}
+
+function getBookingNights(booking) {
+  const checkIn = new Date(`${booking.check_in}T12:00:00`);
+  const checkOut = new Date(`${booking.check_out}T12:00:00`);
+  const nights = Math.round((checkOut - checkIn) / 86400000);
+  return Number.isFinite(nights) && nights > 0 ? nights : null;
+}
+
+function formatBookingTime(value) {
+  if (!value) return null;
+  const [hour, minute] = value.split(':').map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
+  return new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' })
+    .format(new Date(2000, 0, 1, hour, minute));
+}
+
+function getBookingNotes(message = '') {
+  const arrival = message.match(/Preferred arrival:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
+  const departure = message.match(/Preferred departure:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
+  const activities = message.match(/Requested rental activities:\s*([^\n]+)/i)?.[1]?.trim() || null;
+  const note = message
+    .replace(/Preferred arrival:\s*\d{1,2}:\d{2}/gi, '')
+    .replace(/Preferred departure:\s*\d{1,2}:\d{2}/gi, '')
+    .replace(/Requested rental activities:\s*[^\n]+/gi, '')
+    .replace(/^[\s|·,-]+|[\s|·,-]+$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { arrival, departure, activities, note };
+}
+
 const navItems = [
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'stays', label: 'Stays', icon: 'home' },
@@ -73,6 +112,9 @@ function AdminIcon({ name }) {
     logout: <><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6" /></>,
     search: <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></>,
     arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92Z" /></>,
   };
 
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -139,25 +181,54 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   }, [booking]);
 
   if (!booking) return null;
+  const nights = getBookingNights(booking);
+  const request = getBookingNotes(booking.message);
+  const guestInitials = booking.guest_name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   return <dialog ref={dialogRef} className="admin-request-modal" aria-labelledby="request-modal-title" onClose={onClose} onCancel={onClose}>
     <div className="admin-request-modal__head">
-      <div><span className="admin-kicker">{booking.reference_code}</span><h2 id="request-modal-title">Booking request</h2></div>
+      <div><span className="admin-kicker">Reservation · {booking.reference_code}</span><h2 id="request-modal-title">View &amp; manage</h2></div>
       <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
     </div>
-    <dl className="admin-request-modal__details">
-      <div><dt>Guest</dt><dd>{booking.guest_name}</dd></div>
-      <div><dt>Guests</dt><dd>{booking.guests}</dd></div>
-      <div><dt>Email</dt><dd><a href={`mailto:${booking.email}`}>{booking.email}</a></dd></div>
-      <div><dt>Phone</dt><dd><a href={`tel:${booking.phone}`}>{booking.phone}</a></dd></div>
-      <div><dt>Stay</dt><dd>{booking.stay_type || 'Flexible stay'}</dd></div>
-      <div><dt>Requested service</dt><dd>{booking.service_name || 'None selected'}</dd></div>
-      <div><dt>Check-in</dt><dd>{booking.check_in}</dd></div>
-      <div><dt>Check-out</dt><dd>{booking.check_out}</dd></div>
-      <div className="admin-request-modal__message"><dt>Guest request</dt><dd>{booking.message || 'No additional request provided.'}</dd></div>
-    </dl>
-    <label className="admin-request-modal__status">Manage status
-      <select value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-    </label>
+    <div className="admin-request-modal__guest">
+      <span className="booking-guest-avatar" aria-hidden="true">{guestInitials}</span>
+      <div><span>Guest</span><strong>{booking.guest_name}</strong><small>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</small></div>
+      <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+    </div>
+    <div className="admin-request-modal__layout">
+      <div className="admin-request-modal__main">
+        <section className="request-panel request-panel--stay" aria-labelledby="stay-summary-title">
+          <div className="request-panel__heading"><span>Stay summary</span><strong id="stay-summary-title">{booking.stay_type || 'Flexible stay'}</strong></div>
+          <div className="request-date-route">
+            <div><span>Check-in</span><strong>{formatBookingDate(booking.check_in)}</strong></div>
+            <div className="request-date-route__line"><span>{nights ? `${nights + 1} ${nights + 1 === 1 ? 'day' : 'days'} · ${nights} ${nights === 1 ? 'night' : 'nights'}` : 'Stay'}</span></div>
+            <div><span>Check-out</span><strong>{formatBookingDate(booking.check_out)}</strong></div>
+          </div>
+          {(request.arrival || request.departure) && <div className="request-times">
+            <AdminIcon name="clock" />
+            <span>Arrival <strong>{formatBookingTime(request.arrival) || 'Not set'}</strong></span>
+            <span>Departure <strong>{formatBookingTime(request.departure) || 'Not set'}</strong></span>
+          </div>}
+        </section>
+        <section className="request-panel">
+          <div className="request-panel__heading"><span>Request details</span><strong>Guest preferences</strong></div>
+          <dl className="request-facts">
+            <div><dt>Requested service</dt><dd>{booking.service_name || 'None selected'}</dd></div>
+            <div><dt>Activities</dt><dd>{request.activities || 'None selected'}</dd></div>
+          </dl>
+          <div className="request-note"><span>Message from guest</span><p>{request.note || 'No additional message provided.'}</p></div>
+        </section>
+      </div>
+      <aside className="admin-request-modal__aside">
+        <section className="request-panel request-contact">
+          <div className="request-panel__heading"><span>Contact</span><strong>Reach the guest</strong></div>
+          <a href={`mailto:${booking.email}`}><AdminIcon name="mail" /><span><small>Email</small>{booking.email}</span></a>
+          <a href={`tel:${booking.phone}`}><AdminIcon name="phone" /><span><small>Mobile</small>{booking.phone}</span></a>
+        </section>
+        <label className="admin-request-modal__status"><span>Manage status</span><small>Keep the team updated on this reservation.</small>
+          <select value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        </label>
+      </aside>
+    </div>
   </dialog>;
 }
 
@@ -177,15 +248,36 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
     </div>
     <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}</div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
-    <div className="booking-table">
-      <div className="booking-row booking-row--head"><span>Guest</span><span>Stay</span><span>Dates</span><span>Status</span></div>
-      {visible.map(booking => <article className="booking-row" key={booking.id}>
-        <div><strong>{booking.guest_name}</strong><small>{booking.reference_code} · {booking.guests} guests</small></div>
-        <div><strong>{booking.stay_type || booking.service_name || 'Flexible'}</strong><small>{booking.email}</small></div>
-        <div><strong>{booking.check_in}</strong><small>to {booking.check_out}</small></div>
-        <select aria-label={`Status for ${booking.guest_name}`} value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        <button className="booking-manage-button" type="button" onClick={() => setSelectedBookingId(booking.id)}>View &amp; manage</button>
-      </article>)}
+    <div className="booking-table booking-card-grid">
+      {visible.map(booking => {
+        const nights = getBookingNights(booking);
+        const initials = booking.guest_name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+        return <article className="booking-card" key={booking.id}>
+          <div className="booking-card__top">
+            <span>{booking.reference_code}</span>
+            <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+          </div>
+          <div className="booking-card__guest">
+            <span className="booking-guest-avatar" aria-hidden="true">{initials}</span>
+            <div><strong>{booking.guest_name}</strong><small>{booking.email}</small></div>
+          </div>
+          <div className="booking-card__stay">
+            <div><span>Stay</span><strong>{booking.stay_type || booking.service_name || 'Flexible stay'}</strong></div>
+            <div><span>Party</span><strong>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</strong></div>
+          </div>
+          <div className="booking-card__footer">
+            <div className="booking-card__dates">
+              <div><span>Check-in</span><strong>{formatBookingDate(booking.check_in, true)}</strong></div>
+              <div className="booking-card__route"><span>{nights ? `${nights + 1}D · ${nights}N` : '→'}</span></div>
+              <div><span>Check-out</span><strong>{formatBookingDate(booking.check_out, true)}</strong></div>
+            </div>
+            <div className="booking-card__actions">
+              <label><select aria-label={`Status for ${booking.guest_name}`} value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <button className="booking-manage-button" type="button" onClick={() => setSelectedBookingId(booking.id)}>View &amp; manage <AdminIcon name="arrow" /></button>
+            </div>
+          </div>
+        </article>;
+      })}
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
     <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
