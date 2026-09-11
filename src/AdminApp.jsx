@@ -34,6 +34,83 @@ function formatBookingTime(value) {
     .format(new Date(2000, 0, 1, hour, minute));
 }
 
+function parseCalendarDate(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function calendarDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addCalendarDays(date, amount) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
+}
+
+function calendarDayDifference(start, end) {
+  return Math.round((end - start) / 86400000);
+}
+
+function calendarMonthWeeks(monthDate) {
+  const firstOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1, 12);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  const calendarStart = addCalendarDays(firstOfMonth, -mondayOffset);
+  const lastOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 12);
+  const totalDays = calendarDayDifference(calendarStart, lastOfMonth) + 1;
+  const weekCount = Math.max(5, Math.ceil(totalDays / 7));
+
+  return Array.from({ length: weekCount }, (_, weekIndex) => (
+    Array.from({ length: 7 }, (__, dayIndex) => addCalendarDays(calendarStart, weekIndex * 7 + dayIndex))
+  ));
+}
+
+function layoutCalendarWeek(weekDays, bookings, maximumLanes = 3) {
+  const weekStart = weekDays[0];
+  const weekEnd = weekDays[6];
+  const segments = bookings.flatMap(booking => {
+    const checkIn = parseCalendarDate(booking.check_in);
+    const checkOut = parseCalendarDate(booking.check_out);
+    if (!checkIn || !checkOut || checkOut < weekStart || checkIn > weekEnd) return [];
+
+    return [{
+      booking,
+      start: Math.max(0, calendarDayDifference(weekStart, checkIn)),
+      end: Math.min(6, calendarDayDifference(weekStart, checkOut)),
+      startsHere: checkIn >= weekStart,
+      endsHere: checkOut <= weekEnd,
+    }];
+  }).sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const laneEnds = Array(maximumLanes).fill(-1);
+  const visible = [];
+  const hidden = [];
+
+  segments.forEach(segment => {
+    const lane = laneEnds.findIndex(end => end < segment.start);
+    if (lane === -1) {
+      hidden.push(segment);
+      return;
+    }
+    laneEnds[lane] = segment.end;
+    visible.push({ ...segment, lane });
+  });
+
+  const overflow = weekDays.map((date, dayIndex) => ({
+    date,
+    bookings: hidden
+      .filter(segment => segment.start <= dayIndex && segment.end >= dayIndex)
+      .map(segment => segment.booking),
+  })).filter(item => item.bookings.length > 0);
+
+  return { visible, overflow };
+}
+
 function getBookingNotes(message = '') {
   const arrival = message.match(/Preferred arrival:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
   const departure = message.match(/Preferred departure:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
@@ -115,6 +192,7 @@ function AdminIcon({ name }) {
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
     phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92Z" /></>,
+    landscape: <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /><rect x="7" y="8" width="10" height="8" rx="1" /></>,
   };
 
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -172,6 +250,145 @@ function StatCards({ stats }) {
   </section>;
 }
 
+function BookingCalendar({ bookings, onViewBooking }) {
+  const today = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  }, []);
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1, 12));
+  const [dialogContent, setDialogContent] = useState(null);
+  const dialogRef = useRef(null);
+  const landscapeDialogRef = useRef(null);
+  const weeks = useMemo(() => calendarMonthWeeks(visibleMonth), [visibleMonth]);
+  const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialogContent && dialog && !dialog.open) dialog.showModal();
+  }, [dialogContent]);
+
+  const closeDialog = () => {
+    if (dialogRef.current?.open) dialogRef.current.close();
+    else setDialogContent(null);
+  };
+
+  const closeLandscape = () => {
+    if (landscapeDialogRef.current?.open) landscapeDialogRef.current.close();
+  };
+
+  const moveMonth = amount => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + amount, 1, 12));
+  const selectBooking = booking => {
+    closeLandscape();
+    setDialogContent({ type: 'booking', booking });
+  };
+  const showOverflow = (date, hiddenBookings) => {
+    closeLandscape();
+    setDialogContent({ type: 'more', date, bookings: hiddenBookings });
+  };
+
+  const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => <div className="booking-calendar__scroll" tabIndex="0" aria-label={`${monthLabel} calendar${labelSuffix}${isLandscape ? '' : '; scroll horizontally when needed'}`}>
+    <div className="booking-calendar__grid" style={{ '--calendar-week-count': weeks.length }}>
+      <div className="booking-calendar__weekdays" aria-hidden="true">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <span key={day}>{day}</span>)}
+      </div>
+      {weeks.map((weekDays, weekIndex) => {
+        const { visible, overflow } = layoutCalendarWeek(weekDays, bookings, isLandscape ? 2 : 3);
+        return <div className="booking-calendar__week" key={calendarDateKey(weekDays[0])}>
+          {weekDays.map(date => {
+            const key = calendarDateKey(date);
+            const outsideMonth = date.getMonth() !== visibleMonth.getMonth();
+            return <div className={`booking-calendar__day${outsideMonth ? ' is-outside' : ''}${key === calendarDateKey(today) ? ' is-today' : ''}`} key={key}>
+              <time dateTime={key}>{date.getDate()}</time>
+            </div>;
+          })}
+          <div className="booking-calendar__bookings">
+            {visible.map(({ booking, start, end, startsHere, endsHere, lane }) => <button
+              type="button"
+              className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
+              style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
+              key={`${booking.id}-${weekIndex}`}
+              title={`${booking.guest_name}: ${formatBookingDate(booking.check_in)} to ${formatBookingDate(booking.check_out)}`}
+              onClick={() => selectBooking(booking)}
+            ><span>{booking.guest_name}</span></button>)}
+            {overflow.map(({ date, bookings: hiddenBookings }) => <button
+              type="button"
+              className="booking-calendar__more"
+              style={{ gridColumn: `${calendarDayDifference(weekDays[0], date) + 1}`, gridRow: isLandscape ? 3 : 4 }}
+              key={`more-${calendarDateKey(date)}`}
+              onClick={() => showOverflow(date, hiddenBookings)}
+            >+{hiddenBookings.length} more</button>)}
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+
+  return <>
+    <section className="booking-calendar admin-view" aria-labelledby="booking-calendar-heading">
+      <div className="booking-calendar__header">
+        <div>
+          <span className="admin-kicker">Reservation schedule</span>
+          <h2 id="booking-calendar-heading">Booking Calendar</h2>
+        </div>
+        <div className="booking-calendar__legend" aria-label="Booking status legend">
+          {Object.entries(statusLabels).map(([status, label]) => <span key={status}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</span>)}
+        </div>
+      </div>
+      <div className="booking-calendar__toolbar">
+        <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">‹</button>
+        <strong aria-live="polite">{monthLabel}</strong>
+        <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
+        <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={() => landscapeDialogRef.current?.showModal()}><AdminIcon name="landscape" /></button>
+      </div>
+      {renderCalendarGrid()}
+    </section>
+
+    <dialog ref={landscapeDialogRef} className="booking-calendar-landscape" aria-labelledby="booking-calendar-landscape-title">
+      <div className="booking-calendar-landscape__header">
+        <div><span className="admin-kicker">Landscape calendar</span><h2 id="booking-calendar-landscape-title">{monthLabel}</h2></div>
+        <div className="booking-calendar__toolbar booking-calendar-landscape__toolbar">
+          <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">‹</button>
+          <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
+        </div>
+        <button type="button" onClick={closeLandscape} aria-label="Close landscape calendar">×</button>
+      </div>
+      {renderCalendarGrid(' in landscape view', true)}
+    </dialog>
+
+    <dialog ref={dialogRef} className="booking-calendar-dialog" aria-labelledby="booking-calendar-dialog-title" onClose={() => setDialogContent(null)} onCancel={() => setDialogContent(null)}>
+      {dialogContent?.type === 'booking' && (() => {
+        const { booking } = dialogContent;
+        return <>
+          <div className="booking-calendar-dialog__header">
+            <div><span className="admin-kicker">{booking.reference_code}</span><h3 id="booking-calendar-dialog-title">{booking.guest_name}</h3></div>
+            <button type="button" onClick={closeDialog} aria-label="Close calendar booking details">×</button>
+          </div>
+          <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+          <dl className="booking-calendar-dialog__facts">
+            <div><dt>Stay</dt><dd>{booking.stay_type || booking.service_name || 'Flexible stay'}</dd></div>
+            <div><dt>Check-in</dt><dd>{formatBookingDate(booking.check_in)}</dd></div>
+            <div><dt>Check-out</dt><dd>{formatBookingDate(booking.check_out)}</dd></div>
+            <div><dt>Guests</dt><dd>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</dd></div>
+          </dl>
+          <button type="button" className="booking-calendar-dialog__view" onClick={() => { closeDialog(); onViewBooking(booking.id); }}>View Booking <AdminIcon name="arrow" /></button>
+        </>;
+      })()}
+      {dialogContent?.type === 'more' && <>
+        <div className="booking-calendar-dialog__header">
+          <div><span className="admin-kicker">Additional reservations</span><h3 id="booking-calendar-dialog-title">{formatBookingDate(calendarDateKey(dialogContent.date))}</h3></div>
+          <button type="button" onClick={closeDialog} aria-label="Close additional bookings">×</button>
+        </div>
+        <div className="booking-calendar-dialog__list">
+          {dialogContent.bookings.map(booking => <button type="button" key={booking.id} onClick={() => selectBooking(booking)}>
+            <span><strong>{booking.guest_name}</strong><small>{booking.reference_code}</small></span>
+            <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+          </button>)}
+        </div>
+      </>}
+    </dialog>
+  </>;
+}
+
 function BookingRequestModal({ booking, onClose, updateStatus }) {
   const dialogRef = useRef(null);
 
@@ -188,7 +405,7 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
       <div><span className="admin-kicker">Reservation · {booking.reference_code}</span><h2 id="request-modal-title">View &amp; manage</h2></div>
       <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
     </div>
-    <div className="admin-request-modal__guest">
+    <div className={`admin-request-modal__guest admin-request-modal__guest--${booking.status}`}>
       <div><span>Guest</span><strong>{booking.guest_name}</strong><small>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</small></div>
       <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
     </div>
@@ -234,12 +451,29 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [highlightedBookingId, setHighlightedBookingId] = useState(null);
+  const highlightTimerRef = useRef(null);
   const visible = useMemo(() => bookings.filter(item => (
     (filter === 'all' || item.status === filter)
     && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
   )), [bookings, filter, query]);
 
-  return <section className="booking-board admin-view" aria-labelledby="bookings-heading">
+  useEffect(() => () => window.clearTimeout(highlightTimerRef.current), []);
+
+  const viewBookingFromCalendar = bookingId => {
+    setFilter('all');
+    setQuery('');
+    setHighlightedBookingId(String(bookingId));
+    window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      document.getElementById(`booking-${bookingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+  };
+
+  return <>
+    <BookingCalendar bookings={bookings} onViewBooking={viewBookingFromCalendar} />
+    <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div>
       <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -249,7 +483,7 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {
         const nights = getBookingNights(booking);
-        return <article className="booking-card" key={booking.id}>
+        return <article className={`booking-card${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}>
           <div className="booking-card__top">
             <span>{booking.reference_code}</span>
             <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
@@ -277,7 +511,8 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
     <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
-  </section>;
+    </section>
+  </>;
 }
 
 function GuestsView({ bookings }) {
