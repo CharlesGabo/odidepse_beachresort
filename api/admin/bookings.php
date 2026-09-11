@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'auth.php';
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'resort.php';
 
 $method = requireMethod('GET', 'PATCH');
 requireAdmin();
@@ -12,7 +13,18 @@ try {
     $db = database();
     if ($method === 'GET') {
         $statement = $db->query('SELECT id, reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, stay_id, service_id, service_name, message, status, created_at FROM bookings ORDER BY created_at DESC LIMIT 250');
-        jsonResponse(['status' => 'success', 'bookings' => $statement->fetchAll()]);
+        $accommodations = array_map(
+            static fn(array $stay): array => [
+                'id' => $stay['id'],
+                'name' => $stay['name'],
+                'room_count' => $stay['room_count'],
+                'style' => $stay['style'],
+                'enabled' => $stay['enabled'],
+                'archived' => $stay['archived'],
+            ],
+            resortEntities($db, 'stays', true)
+        );
+        jsonResponse(['status' => 'success', 'bookings' => $statement->fetchAll(), 'accommodations' => $accommodations]);
     }
 
     requireCsrfToken();

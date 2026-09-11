@@ -114,6 +114,15 @@
 .booking-choice-card__body em { margin-top: 11px; padding: 5px 8px; border-radius: 100px; color: var(--deep); background: var(--pale-coral); font: normal 700 8px/1 sans-serif; letter-spacing: .07em; text-transform: uppercase; }
 .booking-choice-card--activity .booking-choice-card__body small { margin-top: auto; padding-top: 12px; }
 .booking-calendar-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(270px, .9fr); gap: 22px; align-items: stretch; }
+.booking-availability { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; color: #53655c; background: rgba(255,255,255,.62); }
+.booking-availability strong { display: block; color: var(--deep); font-size: 14px; }
+.booking-availability p { margin: 0; font-size: 11px; line-height: 1.55; }
+.booking-availability strong + p { margin-top: 5px; }
+.booking-availability--loading { border-color: #b9ccc5; background: #f1f7f4; }
+.booking-availability--success { border-color: #82ad9f; background: #eaf5f0; }
+.booking-availability--success.is-full { border-color: #d2a363; background: #fff4de; }
+.booking-availability--success.is-full strong { color: #76500f; }
+.booking-availability--error { border-color: #d7aaa3; color: #7e4038; background: #f9ece9; }
 .booking-calendar { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.66); }
 .booking-calendar__toolbar { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; margin-bottom: 18px; }
 .booking-calendar__toolbar strong { font: 400 20px/1.2 Georgia, serif; text-align: center; }

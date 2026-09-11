@@ -50,6 +50,13 @@ function mockStayRate(stay) {
   return Number(stay.guests) * 900;
 }
 
+function stayInventoryCount(stay) {
+  if (!stay) return 0;
+  if (stay.style === 'exclusive') return 1;
+  const count = Number(stay.room_count);
+  return Number.isInteger(count) && count > 0 ? count : 1;
+}
+
 function mockActivityRate(activity) {
   if (/banana/i.test(activity.title)) return 3500;
   if (/jet/i.test(activity.title)) return 2500;
@@ -89,6 +96,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const [selectedActivities, setSelectedActivities] = useState(initialService ? [String(initialService)] : []);
   const [checkInDate, setCheckInDate] = useState(initialDate);
   const [checkOutDate, setCheckOutDate] = useState('');
+  const [availability, setAvailability] = useState({ type: 'idle' });
   const [arrivalTime, setArrivalTime] = useState('14:00');
   const [departureTime, setDepartureTime] = useState('12:00');
   const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 86400000));
@@ -122,6 +130,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       setSelectedActivities(initialService ? [String(initialService)] : []);
       setCheckInDate(initialDate);
       setCheckOutDate('');
+      setAvailability({ type: 'idle' });
       setArrivalTime('14:00');
       setDepartureTime('12:00');
       setCalendarMonth((initialDate || tomorrow).slice(0, 7));
@@ -132,6 +141,27 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !selectedStay || !checkInDate || !checkOutDate) {
+      setAvailability({ type: 'idle' });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const parameters = new URLSearchParams({ stay_id: selectedStay, check_in: checkInDate, check_out: checkOutDate });
+    setAvailability({ type: 'loading' });
+    fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Availability could not be checked.');
+        setAvailability({ type: 'success', ...data });
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') setAvailability({ type: 'error', message: error.message });
+      });
+    return () => controller.abort();
+  }, [open, selectedStay, checkInDate, checkOutDate]);
 
   const chooseCalendarDate = value => {
     if (value < tomorrow) return;
@@ -204,10 +234,11 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
             {stays.map((stay, index) => {
               const inputId = `booking-stay-${stay.id}`;
               const photo = roomPhotos[index % roomPhotos.length];
+              const unitCount = stayInventoryCount(stay);
               return <label className={`booking-choice-card ${selectedStay === String(stay.id) ? 'is-selected' : ''}`} htmlFor={inputId} key={stay.id}>
                 <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => setSelectedStay(String(stay.id))} required />
                 <span className="booking-choice-card__image"><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><i>{selectedStay === String(stay.id) ? 'Selected' : 'Select room'}</i></span>
-                <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {stay.detail}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span>
+                <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {unitCount} {unitCount === 1 ? 'unit' : 'units'}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span>
               </label>;
             })}
           </div>
@@ -241,6 +272,12 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
                 {checkInDate && checkOutDate ? <><strong>{readableDate(checkInDate)} at {readableTime(arrivalTime)}</strong><i>to</i><strong>{readableDate(checkOutDate)} at {readableTime(departureTime)}</strong><p>{nightCount} {nightCount === 1 ? 'night' : 'nights'}</p></> : <p>Select your check-in and check-out dates to see a summary here.</p>}
               </div>
             </div>
+          </div>
+          <div className={`booking-availability booking-availability--${availability.type}${availability.type === 'success' && availability.available === 0 ? ' is-full' : ''}`} aria-live="polite">
+            {availability.type === 'idle' && <p>Select an accommodation and complete date range to check availability.</p>}
+            {availability.type === 'loading' && <p>Checking room availability…</p>}
+            {availability.type === 'success' && <><strong>{availability.available > 0 ? `${availability.available} of ${availability.capacity} ${availability.capacity === 1 ? 'unit is' : 'units are'} available` : 'No units are currently available'}</strong><p>For your selected dates. Peak confirmed occupancy: {availability.occupied}; pending requests: {availability.pending}. Availability is finalized by the resort team.</p></>}
+            {availability.type === 'error' && <p>{availability.message} You can still submit an inquiry.</p>}
           </div>
         </section>
         <section className="booking-step field--wide" aria-labelledby="activities-title-modal">

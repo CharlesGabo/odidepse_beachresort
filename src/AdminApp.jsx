@@ -111,6 +111,50 @@ function layoutCalendarWeek(weekDays, bookings, maximumLanes = 3) {
   return { visible, overflow };
 }
 
+function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
+  const units = Array.from({ length: unitCount }, (_, index) => ({
+    key: `${accommodationName.toLowerCase()}-unit-${index + 1}`,
+    name: unitCount === 1 ? accommodationName : `${accommodationName.replace(/s?$/i, '')} #${index + 1}`,
+    bookings: [],
+    lastCheckout: null,
+  }));
+  const overflowBookings = [];
+
+  [...bookings].sort((a, b) => a.check_in.localeCompare(b.check_in) || a.check_out.localeCompare(b.check_out) || String(a.id).localeCompare(String(b.id))).forEach(booking => {
+    const unit = units.find(candidate => !candidate.lastCheckout || candidate.lastCheckout < booking.check_in);
+    if (!unit) {
+      overflowBookings.push(booking);
+      return;
+    }
+    unit.bookings.push({ ...booking, calendar_unit: unit.name });
+    unit.lastCheckout = booking.check_out;
+  });
+
+  return { units: units.map(({ lastCheckout, ...unit }) => unit), overflowBookings };
+}
+
+function buildOccupancySegments(days, bookings) {
+  const statusOrder = ['checked_in', 'confirmed', 'pending', 'completed', 'cancelled'];
+  const segments = [];
+
+  days.forEach((date, dayIndex) => {
+    const dateValue = calendarDateKey(date);
+    const activeBookings = bookings.filter(booking => booking.check_in <= dateValue && booking.check_out >= dateValue);
+    if (activeBookings.length === 0) return;
+    const status = statusOrder.find(value => activeBookings.some(booking => booking.status === value)) || activeBookings[0].status;
+    const bookingKey = activeBookings.map(booking => String(booking.id)).sort().join('|');
+    const previous = segments.at(-1);
+
+    if (previous && previous.end === dayIndex - 1 && previous.status === status && previous.bookingKey === bookingKey) {
+      previous.end = dayIndex;
+      return;
+    }
+    segments.push({ start: dayIndex, end: dayIndex, status, bookings: activeBookings, bookingKey });
+  });
+
+  return segments;
+}
+
 function getBookingNotes(message = '') {
   const arrival = message.match(/Preferred arrival:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
   const departure = message.match(/Preferred departure:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
@@ -151,14 +195,14 @@ function dateFromToday(days) {
 
 function createMockBookings() {
   const scenarios = [
-    [0, 'Dagat Casita', 5, 8, 2, 'pending'],
-    [1, 'Puno Villa', 2, 6, 4, 'confirmed'],
-    [2, 'Dagat Casita', -1, 3, 2, 'checked_in'],
-    [3, 'Exclusive resort buyout', 14, 18, 8, 'confirmed'],
-    [4, 'Puno Villa', 22, 25, 3, 'pending'],
-    [5, 'Dagat Casita', -12, -9, 2, 'completed'],
-    [0, 'Puno Villa', 31, 35, 4, 'pending'],
-    [2, 'Exclusive resort buyout', -20, -16, 6, 'cancelled'],
+    [0, '5-guest room', 5, 8, 2, 'pending'],
+    [1, '8-guest room', 2, 6, 4, 'confirmed'],
+    [2, '5-guest room', -1, 3, 2, 'checked_in'],
+    [3, 'Entire building exclusive', 14, 18, 8, 'confirmed'],
+    [4, '10-guest room', 22, 25, 3, 'pending'],
+    [5, '9-guest room', -12, -9, 2, 'completed'],
+    [0, 'Large-group accommodation', 31, 35, 4, 'pending'],
+    [2, 'Entire building exclusive', -20, -16, 6, 'cancelled'],
   ];
 
   return scenarios.map(([profileIndex, stayType, checkIn, checkOut, guests, status], index) => {
@@ -250,7 +294,7 @@ function StatCards({ stats }) {
   </section>;
 }
 
-function BookingCalendar({ bookings, onViewBooking }) {
+function BookingCalendar({ bookings, accommodations, onViewBooking }) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
@@ -258,38 +302,36 @@ function BookingCalendar({ bookings, onViewBooking }) {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1, 12));
   const [dialogContent, setDialogContent] = useState(null);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
-  const [resourcePage, setResourcePage] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set(['5-guest room']));
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const resources = useMemo(() => {
-    const grouped = new Map();
     const accommodationOrder = [
-      '5-guest room',
-      '8-guest room',
-      '9-guest room',
-      '10-guest room',
-      'Entire building exclusive',
-      'Large-group accommodation',
+      ['5-guest room', 1],
+      ['8-guest room', 3],
+      ['9-guest room', 1],
+      ['10-guest room', 5],
+      ['Entire building exclusive', 1],
+      ['Large-group accommodation', 6],
     ];
-    const normalizedAccommodationOrder = accommodationOrder.map(name => name.toLowerCase());
-    accommodationOrder.forEach(name => grouped.set(name.toLowerCase(), {
-      key: `accommodation-${name.toLowerCase()}`,
-      name,
-      bookings: [],
-    }));
-    bookings.forEach(booking => {
-      const name = booking.stay_type || booking.service_name || 'Unassigned accommodation';
-      grouped.get(name.toLowerCase())?.bookings.push(booking);
+    const catalogByName = new Map(accommodations.map(stay => [stay.name.toLowerCase(), stay]));
+
+    return accommodationOrder.map(([name, fallbackCount]) => {
+      const key = name.toLowerCase();
+      const catalogStay = catalogByName.get(key);
+      const configuredCount = Number(catalogStay?.room_count);
+      const unitCount = catalogStay?.style === 'exclusive'
+        ? 1
+        : Number.isInteger(configuredCount) && configuredCount > 0 ? configuredCount : fallbackCount;
+      const matchingBookings = bookings.filter(booking => {
+        if (catalogStay && Number(booking.stay_id) === Number(catalogStay.id)) return true;
+        return (booking.stay_type || '').toLowerCase() === key;
+      });
+      const allocation = allocateBookingsToUnits(matchingBookings, unitCount, name);
+      return { key, name, unitCount, bookings: matchingBookings, ...allocation };
     });
-    return [...grouped.values()].sort((a, b) => {
-      const aIndex = normalizedAccommodationOrder.indexOf(a.name.toLowerCase());
-      const bIndex = normalizedAccommodationOrder.indexOf(b.name.toLowerCase());
-      return (aIndex === -1 ? normalizedAccommodationOrder.length : aIndex)
-        - (bIndex === -1 ? normalizedAccommodationOrder.length : bIndex)
-        || a.name.localeCompare(b.name);
-    });
-  }, [bookings]);
+  }, [bookings, accommodations]);
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
 
   useEffect(() => {
@@ -321,11 +363,13 @@ function BookingCalendar({ bookings, onViewBooking }) {
   };
 
   const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => {
-    // The landscape dialog deliberately keeps the full month available for touch scrolling.
     const displayedDays = days;
-    const displayedResources = resources.slice(resourcePage * 6, resourcePage * 6 + 6);
+    const renderedRowCount = resources.reduce((count, resource) => count + 1 + (expandedGroups.has(resource.key) ? resource.units.length : 0), 0);
+    const monthStart = calendarDateKey(days[0]);
+    const monthEnd = calendarDateKey(days.at(-1));
+    const dateCells = () => <div className="reservation-timeline__cells" aria-hidden="true">{displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''} />)}</div>;
     return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`}>
-    <div className="reservation-timeline" style={{ '--timeline-days': displayedDays.length, '--resource-count': Math.max(1, displayedResources.length) }}>
+    <div className="reservation-timeline" style={{ '--timeline-days': displayedDays.length, '--resource-count': Math.max(1, renderedRowCount) }}>
       <div className="reservation-timeline__header">
         <strong className="reservation-timeline__resource">Accommodation</strong>
         {displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''}>
@@ -333,37 +377,77 @@ function BookingCalendar({ bookings, onViewBooking }) {
           <time dateTime={calendarDateKey(date)}>{date.getDate()}</time>
         </div>)}
       </div>
-      {displayedResources.map(resource => {
-        const { visible, overflow } = layoutCalendarWeek(displayedDays, resource.bookings, 1);
-        return <div className="reservation-timeline__row" key={resource.key}>
-          <div className="reservation-timeline__resource"><strong>{resource.name}</strong><small>{resource.bookings.filter(booking => booking.check_in <= calendarDateKey(days.at(-1)) && booking.check_out >= calendarDateKey(days[0])).length} reservations this month</small></div>
-          <div className="reservation-timeline__track">
-            <div className="reservation-timeline__cells" aria-hidden="true">{displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''} />)}</div>
-            <div className="reservation-timeline__bars">
-              {visible.map(({ booking, start, end, startsHere, endsHere, lane }) => <button type="button"
-                key={booking.id}
-                className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
-                style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
-                aria-label={`${booking.guest_name}, ${resource.name}, check-in ${formatBookingDate(booking.check_in)}, check-out ${formatBookingDate(booking.check_out)}, ${statusLabels[booking.status]}`}
-                title={`Check-in: ${booking.check_in} • Check-out: ${booking.check_out}`}
-                onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span></button>)}
-              {overflow.map(({ date, bookings: hidden }) => <button type="button" className="booking-calendar__more" key={calendarDateKey(date)}
-                style={{ gridColumn: calendarDayDifference(displayedDays[0], date) + 1, gridRow: 2 }}
-                aria-label={`${hidden.length} more bookings for ${resource.name} on ${formatBookingDate(calendarDateKey(date))}`}
-                onClick={() => showOverflow(date, hidden)}>+{hidden.length} more</button>)}
+      {resources.map(resource => {
+        const isExpanded = expandedGroups.has(resource.key);
+        const occupiedUnits = resource.units.filter(unit => unit.bookings.some(booking => booking.status !== 'cancelled' && booking.check_in <= monthEnd && booking.check_out > monthStart)).length;
+        const groupName = resource.name.toLowerCase().endsWith('room') ? `${resource.name}s` : resource.name;
+        const occupiedUnitSummaries = resource.units.map((unit, unitIndex) => ({
+          unit,
+          unitIndex,
+          segments: buildOccupancySegments(displayedDays, unit.bookings),
+        })).filter(summary => summary.segments.length > 0);
+        const conflictSummaries = resource.overflowBookings.map(booking => ({
+          booking,
+          segments: buildOccupancySegments(displayedDays, [booking]),
+        })).filter(summary => summary.segments.length > 0);
+        const summaryLaneCount = occupiedUnitSummaries.length + conflictSummaries.length;
+        return <div className="reservation-timeline__group-wrap" key={resource.key}>
+          <div className="reservation-timeline__group" style={{ '--group-unit-count': Math.max(1, summaryLaneCount), minHeight: `${Math.max(74, summaryLaneCount * 30 + 6)}px` }}>
+            <button type="button" className="reservation-timeline__resource reservation-timeline__group-toggle" aria-expanded={isExpanded} onClick={() => setExpandedGroups(current => {
+              const next = new Set(current);
+              if (next.has(resource.key)) next.delete(resource.key);
+              else next.add(resource.key);
+              return next;
+            })}>
+              <span><i aria-hidden="true">{isExpanded ? '⌄' : '›'}</i><strong>{groupName} ({resource.unitCount} {resource.unitCount === 1 ? 'unit' : 'units'})</strong></span>
+              <small>{occupiedUnits} / {resource.unitCount} occupied</small>
+            </button>
+            <div className="reservation-timeline__track">
+              {dateCells()}
+              <div className="reservation-timeline__bars reservation-timeline__group-statuses">
+                {occupiedUnitSummaries.flatMap(({ unit, unitIndex, segments }, laneIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
+                  const segmentDate = displayedDays[start];
+                  const unitLabel = `Room ${unitIndex + 1}`;
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}`} key={`${unit.key}-${start}-${end}-${status}`}
+                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: laneIndex + 1 }}
+                    aria-label={`${unitLabel}: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
+                    onClick={() => activeBookings.length === 1 ? selectBooking(activeBookings[0]) : showOverflow(segmentDate, activeBookings)}><i aria-hidden="true" /><span>{unitLabel} · {statusLabels[status]}</span></button>;
+                }))}
+                {conflictSummaries.flatMap(({ booking, segments }, conflictIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
+                  const segmentDate = displayedDays[start];
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status} is-conflict`} key={`conflict-${booking.id}-${start}-${end}`}
+                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictIndex + 1 }}
+                    aria-label={`Unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
+                    onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>Conflict · {statusLabels[status]}</span></button>;
+                }))}
+              </div>
             </div>
           </div>
+          {isExpanded && resource.units.map(unit => {
+            const { visible } = layoutCalendarWeek(displayedDays, unit.bookings, 1);
+            const occupied = unit.bookings.some(booking => booking.status !== 'cancelled' && booking.check_in <= monthEnd && booking.check_out > monthStart);
+            return <div className="reservation-timeline__row reservation-timeline__unit" key={unit.key}>
+              <div className="reservation-timeline__resource"><strong>{unit.name}</strong><small className={occupied ? 'is-occupied' : ''}><i />{occupied ? 'Occupied' : 'Available'}</small></div>
+              <div className="reservation-timeline__track">
+                {dateCells()}
+                <div className="reservation-timeline__bars">
+                  {visible.map(({ booking, start, end, startsHere, endsHere }) => <button type="button" key={booking.id}
+                    className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
+                    style={{ gridColumn: `${start + 1} / ${end + 2}` }}
+                    aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)}, check-out ${formatBookingDate(booking.check_out)}, ${statusLabels[booking.status]}`}
+                    title={`Check-in: ${booking.check_in} • Check-out: ${booking.check_out}`}
+                    onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} – {formatBookingDate(booking.check_out, true)}</small></button>)}
+                </div>
+              </div>
+            </div>;
+          })}
         </div>;
       })}
-      {resources.length === 0 && <p className="reservation-timeline__empty">No accommodation reservations yet.</p>}
     </div>
   </div>;
   };
 
-  const resourceControls = <div className="timeline-resource-controls">
-    <span>{resources.length ? `Accommodations ${resourcePage * 6 + 1}–${Math.min(resourcePage * 6 + 6, resources.length)} of ${resources.length}` : 'Loading accommodations'}</span>
-    {resources.length > 6 && <><button type="button" disabled={resourcePage === 0} onClick={() => setResourcePage(page => page - 1)}>Previous six</button><button type="button" disabled={(resourcePage + 1) * 6 >= resources.length} onClick={() => setResourcePage(page => page + 1)}>Next six</button></>}
-  </div>;
+  const resourceSummary = <p className="timeline-resource-summary">6 accommodation types · {resources.reduce((total, resource) => total + resource.unitCount, 0)} physical units</p>;
   return <>
     <section className="booking-calendar admin-view" aria-labelledby="booking-calendar-heading">
       <div className="booking-calendar__header">
@@ -382,7 +466,7 @@ function BookingCalendar({ bookings, onViewBooking }) {
         <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
         <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={openLandscape}><AdminIcon name="landscape" /></button>
       </div>
-      {resourceControls}
+      {resourceSummary}
       {renderCalendarGrid()}
     </section>
 
@@ -396,15 +480,14 @@ function BookingCalendar({ bookings, onViewBooking }) {
         </div>
         <button type="button" onClick={closeLandscape} aria-label="Close landscape calendar">×</button>
       </div>
-      <div className="timeline-resource-controls">
-        {resourceControls}
-      </div>
+      {resourceSummary}
       {renderCalendarGrid(' in landscape view', true)}
     </dialog>
 
     <dialog ref={dialogRef} className={`booking-calendar-dialog${landscapeOpen ? ' is-landscape' : ''}`} aria-labelledby="booking-calendar-dialog-title" onClose={() => setDialogContent(null)} onCancel={() => setDialogContent(null)}>
       {dialogContent?.type === 'booking' && (() => {
         const { booking } = dialogContent;
+        const schedule = getBookingNotes(booking.message);
         return <>
           <div className="booking-calendar-dialog__header">
             <div><span className="admin-kicker">{booking.reference_code}</span><h3 id="booking-calendar-dialog-title">{booking.guest_name}</h3></div>
@@ -413,8 +496,11 @@ function BookingCalendar({ bookings, onViewBooking }) {
           <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
           <dl className="booking-calendar-dialog__facts">
             <div><dt>Stay</dt><dd>{booking.stay_type || booking.service_name || 'Flexible stay'}</dd></div>
+            <div><dt>Unit</dt><dd>{booking.calendar_unit || 'Specific unit not assigned'}</dd></div>
             <div><dt>Check-in</dt><dd>{formatBookingDate(booking.check_in)}</dd></div>
             <div><dt>Check-out</dt><dd>{formatBookingDate(booking.check_out)}</dd></div>
+            <div><dt>Arrival</dt><dd>{formatBookingTime(schedule.arrival) || 'Not set'}</dd></div>
+            <div><dt>Departure</dt><dd>{formatBookingTime(schedule.departure) || 'Not set'}</dd></div>
             <div><dt>Guests</dt><dd>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</dd></div>
           </dl>
           <button type="button" className="booking-calendar-dialog__view" onClick={() => { closeDialog(); closeLandscape(); onViewBooking(booking.id); }}>View Booking <AdminIcon name="arrow" /></button>
@@ -422,7 +508,7 @@ function BookingCalendar({ bookings, onViewBooking }) {
       })()}
       {dialogContent?.type === 'more' && <>
         <div className="booking-calendar-dialog__header">
-          <div><span className="admin-kicker">Additional reservations</span><h3 id="booking-calendar-dialog-title">{formatBookingDate(calendarDateKey(dialogContent.date))}</h3></div>
+          <div><span className="admin-kicker">Reservations by status</span><h3 id="booking-calendar-dialog-title">{formatBookingDate(calendarDateKey(dialogContent.date))}</h3></div>
           <button type="button" onClick={closeDialog} aria-label="Close additional bookings">×</button>
         </div>
         <div className="booking-calendar-dialog__list">
@@ -494,7 +580,7 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   </dialog>;
 }
 
-function BookingsView({ bookings, notice, setNotice, updateStatus }) {
+function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
@@ -519,7 +605,7 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
   };
 
   return <>
-    <BookingCalendar bookings={bookings} onViewBooking={viewBookingFromCalendar} />
+    <BookingCalendar bookings={bookings} accommodations={accommodations} onViewBooking={viewBookingFromCalendar} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div>
@@ -600,6 +686,7 @@ function GuestsView({ bookings }) {
 
 function Dashboard({ user, csrfToken, onLogout }) {
   const [bookings, setBookings] = useState([]);
+  const [accommodations, setAccommodations] = useState([]);
   const [mockBookings, setMockBookings] = useState(null);
   const [activeView, setActiveView] = useState('bookings');
   const [notice, setNotice] = useState('');
@@ -612,6 +699,7 @@ function Dashboard({ user, csrfToken, onLogout }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load bookings.');
       setBookings(data.bookings);
+      setAccommodations(data.accommodations || []);
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -684,7 +772,7 @@ function Dashboard({ user, csrfToken, onLogout }) {
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'bookings' && <BookingsView bookings={displayedBookings} notice={notice} setNotice={setNotice} updateStatus={updateStatus} />}
+        {activeView === 'bookings' && <BookingsView bookings={displayedBookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={displayedBookings} />}
       </>}
