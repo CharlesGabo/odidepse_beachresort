@@ -176,7 +176,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const changeCalendarMonth = offset => {
     const next = new Date(calendarYear, calendarMonthNumber - 1 + offset, 1);
     const earliest = new Date(`${tomorrow.slice(0, 7)}-01T12:00:00`);
-    if (next < earliest) return;
+    if (!manual && next < earliest) return;
     setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
   };
 
@@ -249,7 +249,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-calendar-layout">
             <div className="booking-calendar" aria-label="Choose check-in and check-out dates">
               <div className="booking-calendar__toolbar">
-                <button type="button" onClick={() => changeCalendarMonth(-1)} disabled={calendarMonth <= tomorrow.slice(0, 7)} aria-label="Show previous month">‹</button>
+                <button type="button" onClick={() => changeCalendarMonth(-1)} disabled={!manual && calendarMonth <= tomorrow.slice(0, 7)} aria-label="Show previous month">‹</button>
                 <strong>{calendarLabel}</strong>
                 <button type="button" onClick={() => changeCalendarMonth(1)} aria-label="Show next month">›</button>
               </div>

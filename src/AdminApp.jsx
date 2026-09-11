@@ -335,6 +335,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
   const [expandedGroups, setExpandedGroups] = useState(() => new Set());
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
+  const handledCalendarFocusRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -365,9 +366,17 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
 
   useEffect(() => {
-    if (!highlightedBookingId) return;
+    if (!highlightedBookingId) {
+      handledCalendarFocusRef.current = null;
+      return;
+    }
+    const focusId = String(highlightedBookingId);
+    if (handledCalendarFocusRef.current === focusId) return;
     const booking = bookings.find(item => String(item.id) === String(highlightedBookingId));
-    if (!booking) return;
+    if (!booking) {
+      handledCalendarFocusRef.current = focusId;
+      return;
+    }
 
     const bookingMonth = new Date(`${booking.check_in}T12:00:00`);
     if (visibleMonth.getFullYear() !== bookingMonth.getFullYear() || visibleMonth.getMonth() !== bookingMonth.getMonth()) {
@@ -381,6 +390,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
       return;
     }
 
+    handledCalendarFocusRef.current = focusId;
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       const selector = `[data-calendar-booking-id="${String(booking.id)}"]`;
       const target = document.querySelector(`.booking-calendar .reservation-timeline__unit ${selector}`)
