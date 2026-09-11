@@ -9,6 +9,35 @@ const statusLabels = {
   cancelled: 'Cancelled',
 };
 
+const statusActions = {
+  pending: [
+    { status: 'confirmed', label: 'Confirm', tone: 'primary' },
+    { status: 'cancelled', label: 'Cancel', tone: 'danger' },
+  ],
+  confirmed: [{ status: 'checked_in', label: 'Check in', tone: 'primary' }],
+  checked_in: [{ status: 'completed', label: 'Check out', tone: 'checked-in' }],
+};
+
+function BookingStatusActions({ booking, updateStatus }) {
+  const [updating, setUpdating] = useState(false);
+  const actions = statusActions[booking.status] || [];
+  if (actions.length === 0) return null;
+
+  const applyStatus = async status => {
+    setUpdating(true);
+    try {
+      await updateStatus(booking.id, status);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return <div className="booking-status-actions" aria-label={`Actions for ${booking.guest_name}`}>
+    {actions.map(action => <button type="button" className={`booking-status-action booking-status-action--${action.tone}`} key={action.status}
+      disabled={updating} onClick={() => applyStatus(action.status)}>{updating ? 'Updating…' : action.label}</button>)}
+  </div>;
+}
+
 function formatBookingDate(value, compact = false) {
   if (!value) return 'Not set';
   const date = new Date(`${value}T12:00:00`);
@@ -119,8 +148,9 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
     lastCheckout: null,
   }));
   const overflowBookings = [];
+  const cancelledBookings = bookings.filter(booking => booking.status === 'cancelled');
 
-  [...bookings].sort((a, b) => a.check_in.localeCompare(b.check_in) || a.check_out.localeCompare(b.check_out) || String(a.id).localeCompare(String(b.id))).forEach(booking => {
+  bookings.filter(booking => booking.status !== 'cancelled').sort((a, b) => a.check_in.localeCompare(b.check_in) || a.check_out.localeCompare(b.check_out) || String(a.id).localeCompare(String(b.id))).forEach(booking => {
     const unit = units.find(candidate => !candidate.lastCheckout || candidate.lastCheckout < booking.check_in);
     if (!unit) {
       overflowBookings.push(booking);
@@ -130,7 +160,7 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
     unit.lastCheckout = booking.check_out;
   });
 
-  return { units: units.map(({ lastCheckout, ...unit }) => unit), overflowBookings };
+  return { units: units.map(({ lastCheckout, ...unit }) => unit), overflowBookings, cancelledBookings };
 }
 
 function buildOccupancySegments(days, bookings) {
@@ -416,7 +446,11 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
           booking,
           segments: buildOccupancySegments(displayedDays, [booking]),
         })).filter(summary => summary.segments.length > 0);
-        const summaryLaneCount = occupiedUnitSummaries.length + conflictSummaries.length;
+        const cancelledSummaries = resource.cancelledBookings.map(booking => ({
+          booking,
+          segments: buildOccupancySegments(displayedDays, [booking]),
+        })).filter(summary => summary.segments.length > 0);
+        const summaryLaneCount = occupiedUnitSummaries.length + conflictSummaries.length + cancelledSummaries.length;
         return <div className="reservation-timeline__group-wrap" key={resource.key}>
           <div className="reservation-timeline__group" style={{ '--group-unit-count': Math.max(1, summaryLaneCount), minHeight: `${Math.max(74, summaryLaneCount * 30 + 6)}px` }}>
             <button type="button" className="reservation-timeline__resource reservation-timeline__group-toggle" aria-expanded={isExpanded} onClick={() => setExpandedGroups(current => {
@@ -447,6 +481,14 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
                     data-calendar-booking-id={booking.id}
                     aria-label={`Unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
                     onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>Conflict · {statusLabels[status]}</span></button>;
+                }))}
+                {cancelledSummaries.flatMap(({ booking, segments }, cancelledIndex) => segments.map(({ start, end, status, bookings: cancelled }) => {
+                  const segmentDate = displayedDays[start];
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`cancelled-${booking.id}-${start}-${end}`}
+                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictSummaries.length + cancelledIndex + 1 }}
+                    data-calendar-booking-id={booking.id}
+                    aria-label={`Cancelled booking from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
+                    onClick={() => selectBooking(cancelled[0])}><i aria-hidden="true" /><span>Cancelled</span></button>;
                 }))}
               </div>
             </div>
@@ -606,9 +648,10 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
           <a href={`mailto:${booking.email}`}><AdminIcon name="mail" /><span><small>Email</small>{booking.email}</span></a>
           <a href={`tel:${booking.phone}`}><AdminIcon name="phone" /><span><small>Mobile</small>{booking.phone}</span></a>
         </section>
-        <label className="admin-request-modal__status"><span>Manage status</span><small>Keep the team updated on this reservation.</small>
-          <select value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        </label>
+        <section className="admin-request-modal__status"><span>Manage status</span><small>Continue this reservation through its next available step.</small>
+          <BookingStatusActions booking={booking} updateStatus={updateStatus} />
+          {!statusActions[booking.status] && <strong className="booking-status-workflow-complete">{statusLabels[booking.status]}</strong>}
+        </section>
       </aside>
     </div>
   </dialog>;
@@ -694,7 +737,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
               <div><span>Check-out</span><strong>{formatBookingDate(booking.check_out, true)}</strong></div>
             </div>
             <div className="booking-card__actions">
-              <label><select aria-label={`Status for ${booking.guest_name}`} value={booking.status} onChange={event => updateStatus(booking.id, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <BookingStatusActions booking={booking} updateStatus={updateStatus} />
               <button className="booking-manage-button" type="button" onClick={() => setSelectedBookingId(booking.id)}>View &amp; manage <AdminIcon name="arrow" /></button>
             </div>
           </div>

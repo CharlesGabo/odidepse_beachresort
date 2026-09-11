@@ -35,9 +35,19 @@
 .booking-card__dates strong { font-size: 13px; }
 .booking-card__route { flex: 1; justify-content: center; height: 1px; background: var(--line); }
 .booking-card__route span { margin: 0; padding: 4px 7px; border-radius: 99px; color: var(--deep); background: #eef1ed; font-size: 9px; font-weight: 700; }
-.booking-card__actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 8px; }
+.booking-card__actions { display: flex; flex: 0 0 auto; flex-wrap:wrap; justify-content: flex-end; gap: 8px; }
 .booking-card__actions label { display: block; flex: 0 0 132px; min-width: 0; }
 .booking-card__actions select { width: 100%; height: 39px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: white; font-size: 11px; }
+.booking-status-actions { display:flex; flex-wrap:wrap; gap:7px; }
+.booking-status-action { min-width:72px; min-height:39px; padding:0 12px; border:1px solid transparent; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer; }
+.booking-status-action--primary { color:white; background:#17614f; border-color:#0d493a; }
+.booking-status-action--primary:hover { background:#0d493a; }
+.booking-status-action--checked-in { color:white; background:#245f85; border-color:#184865; }
+.booking-status-action--checked-in:hover { background:#184865; }
+.booking-status-action--danger { color:white; background:#a9473f; border-color:#82362f; }
+.booking-status-action--danger:hover { background:#82362f; }
+.booking-status-action:disabled { opacity:.58; cursor:wait; }
+.booking-status-workflow-complete { margin-top:5px; padding:11px 12px; border-radius:5px; color:var(--ink); background:white; font-size:12px; }
 .booking-manage-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 132px; min-height: 39px; padding: 0 10px; border: 1px solid var(--deep); border-radius: 6px; color: white; background: var(--deep); font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .booking-manage-button svg { width: 14px; height: 14px; }
 .booking-manage-button:hover { background: #184f47; }
@@ -88,6 +98,8 @@
 .admin-request-modal__status > span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .admin-request-modal__status > small { color: rgba(255,255,255,.58); font-size: 10px; font-weight: 400; line-height: 1.45; }
 .admin-request-modal__status select { min-height: 42px; margin-top: 5px; padding: 0 10px; border: 0; border-radius: 5px; color: var(--ink); background: white; font-size: 12px; font-weight: 700; }
+.admin-request-modal__status .booking-status-actions { margin-top:5px; }
+.admin-request-modal__status .booking-status-action { flex:1 1 100px; }
 .booking-calendar { margin-bottom: 24px; padding: 28px; border: 1px solid var(--line); background: white; }
 .booking-calendar__header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .booking-calendar__header h2 { margin: 6px 0 0; font-size: 25px; font-weight: 500; letter-spacing: -.025em; }
