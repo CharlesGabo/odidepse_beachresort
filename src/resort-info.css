@@ -124,6 +124,9 @@
 .booking-availability--success.is-full strong { color: #76500f; }
 .booking-availability--error { border-color: #d7aaa3; color: #7e4038; background: #f9ece9; }
 .booking-calendar { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.66); }
+.booking-modal .booking-calendar__days button.is-unavailable { color:#8b342e; background:#f5dedb; text-decoration:line-through; opacity:1; }
+.booking-modal .booking-calendar__days button.is-unavailable:disabled { cursor:not-allowed; }
+.booking-calendar__availability-note { margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5; }
 .booking-calendar__toolbar { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; margin-bottom: 18px; }
 .booking-calendar__toolbar strong { font: 400 20px/1.2 Georgia, serif; text-align: center; }
 .booking-calendar__toolbar button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: white; font-size: 24px; cursor: pointer; }

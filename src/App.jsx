@@ -97,6 +97,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const [checkInDate, setCheckInDate] = useState(initialDate);
   const [checkOutDate, setCheckOutDate] = useState('');
   const [availability, setAvailability] = useState({ type: 'idle' });
+  const [calendarAvailability, setCalendarAvailability] = useState({ type: 'idle', days: {} });
   const [arrivalTime, setArrivalTime] = useState('14:00');
   const [departureTime, setDepartureTime] = useState('12:00');
   const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + (manual ? 0 : 86400000)));
@@ -163,8 +164,37 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     return () => controller.abort();
   }, [open, selectedStay, checkInDate, checkOutDate]);
 
+  useEffect(() => {
+    if (!open || !selectedStay) return;
+    const controller = new AbortController();
+    const monthStart = `${calendarMonth}-01`;
+    const from = checkInDate && checkInDate < monthStart && (new Date(`${monthStart}T12:00:00`) - new Date(`${checkInDate}T12:00:00`)) / 86400000 <= 31 ? checkInDate : monthStart;
+    const end = new Date(`${from}T12:00:00`);
+    end.setDate(end.getDate() + 62);
+    setCalendarAvailability({ type: 'loading', days: {} });
+    const parameters = new URLSearchParams({ stay_id: selectedStay, check_in: from, check_out: dateKey(end) });
+    fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Availability could not be loaded.');
+        setCalendarAvailability({ type: 'success', days: data.days, stay: selectedStay, month: calendarMonth });
+      })
+      .catch(error => { if (error.name !== 'AbortError') setCalendarAvailability({ type: 'error', days: {} }); });
+    return () => controller.abort();
+  }, [open, selectedStay, calendarMonth, checkInDate]);
+
+  const calendarReady = calendarAvailability.type === 'success' && calendarAvailability.stay === selectedStay && calendarAvailability.month === calendarMonth;
+  const isBlockedDate = value => {
+    if (!calendarReady) return true;
+    if (selectingCheckOut && value > checkInDate) {
+      return Object.entries(calendarAvailability.days).some(([date, available]) => date >= checkInDate && date < value && available === 0);
+    }
+    return calendarAvailability.days[value] === 0;
+  };
+
   const chooseCalendarDate = value => {
     if (value < tomorrow) return;
+    if (isBlockedDate(value)) return;
     if (!checkInDate || checkOutDate || value <= checkInDate) {
       setCheckInDate(value);
       setCheckOutDate('');
@@ -186,6 +216,10 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const form = event.currentTarget;
     const formData = new FormData(form);
     const body = Object.fromEntries(formData);
+    if (availability.type !== 'success' || availability.available === 0) {
+      setStatus({ type: 'error', message: 'Choose available dates and wait for the availability check before saving.' });
+      return;
+    }
     delete body.stay_choice;
     body.phone = `+63 ${String(body.phone ?? '').trim()}`;
     if (!checkInDate || !checkOutDate) {
@@ -237,7 +271,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
               const photo = roomPhotos[index % roomPhotos.length];
               const unitCount = stayInventoryCount(stay);
               return <label className={`booking-choice-card ${selectedStay === String(stay.id) ? 'is-selected' : ''}`} htmlFor={inputId} key={stay.id}>
-                <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => setSelectedStay(String(stay.id))} required />
+                <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => { setSelectedStay(String(stay.id)); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
                 <span className="booking-choice-card__image"><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><i>{selectedStay === String(stay.id) ? 'Selected' : 'Select room'}</i></span>
                 <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {unitCount} {unitCount === 1 ? 'unit' : 'units'}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span>
               </label>;
@@ -259,11 +293,13 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
                   const isCheckIn = day.key === checkInDate;
                   const isCheckOut = day.key === checkOutDate;
                   const inRange = checkInDate && checkOutDate && day.key > checkInDate && day.key < checkOutDate;
-                  const unavailable = !day.inMonth || day.key < tomorrow || (selectingCheckOut && day.key > latestCheckOut);
-                  return <button type="button" key={day.key} disabled={unavailable} className={`${isCheckIn ? 'is-endpoint is-check-in' : ''} ${isCheckOut ? 'is-endpoint is-check-out' : ''} ${inRange ? 'is-in-range' : ''}`} aria-pressed={isCheckIn || isCheckOut} aria-label={`${readableDate(day.key)}${isCheckIn ? ', check-in' : ''}${isCheckOut ? ', check-out' : ''}`} onClick={() => chooseCalendarDate(day.key)}>{day.inMonth ? day.day : ''}</button>;
+                  const fullyBooked = calendarReady && calendarAvailability.days[day.key] === 0;
+                  const unavailable = !day.inMonth || day.key < tomorrow || isBlockedDate(day.key) || (selectingCheckOut && day.key > latestCheckOut);
+                  return <button type="button" key={day.key} disabled={unavailable} className={`${fullyBooked ? 'is-unavailable' : ''} ${isCheckIn ? 'is-endpoint is-check-in' : ''} ${isCheckOut ? 'is-endpoint is-check-out' : ''} ${inRange ? 'is-in-range' : ''}`} aria-pressed={isCheckIn || isCheckOut} aria-label={`${readableDate(day.key)}${fullyBooked ? ', fully booked for overnight stay' : ''}${isCheckIn ? ', check-in' : ''}${isCheckOut ? ', check-out' : ''}`} onClick={() => chooseCalendarDate(day.key)}>{day.inMonth ? day.day : ''}</button>;
                 })}
               </div>
               <p className="booking-calendar__hint"><span /> Check-in <span /> Check-out <i /> Your stay</p>
+              <p className="booking-calendar__availability-note" role="status">{!selectedStay ? 'Select an accommodation to see available dates.' : !calendarReady ? (calendarAvailability.type === 'error' ? 'Availability could not be loaded. Select the accommodation again or change month to retry.' : 'Loading available dates…') : 'Crossed-out dates are fully booked. Checkout is allowed on a fully booked date when the preceding nights are available.'}</p>
             </div>
             <div className="booking-schedule-controls">
               <CompactTimePicker label="Arrival time" value={arrivalTime} onChange={setArrivalTime} />

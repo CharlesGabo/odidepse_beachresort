@@ -20,7 +20,7 @@ try {
         || $checkIn->format('Y-m-d') !== $checkInValue
         || $checkOut->format('Y-m-d') !== $checkOutValue
         || $checkOut <= $checkIn
-        || $checkIn->diff($checkOut)->days > 30
+        || $checkIn->diff($checkOut)->days > 62
     ) {
         throw new InvalidArgumentException();
     }
@@ -44,17 +44,18 @@ try {
     $bookingQuery = $db->prepare(
         "SELECT check_in, check_out, status
          FROM bookings
-         WHERE stay_id = ?
+         WHERE (stay_id = ? OR (stay_id IS NULL AND stay_type = ?))
            AND status IN ('pending', 'confirmed', 'checked_in')
            AND check_in < ?
            AND check_out > ?"
     );
-    $bookingQuery->execute([$stayId, $checkOutValue, $checkInValue]);
+    $bookingQuery->execute([$stayId, $stay['name'], $checkOutValue, $checkInValue]);
     $bookings = $bookingQuery->fetchAll();
 
     $minimumAvailable = $capacity;
     $peakOccupied = 0;
     $peakPending = 0;
+    $days = [];
     for ($date = $checkIn; $date < $checkOut; $date = $date->modify('+1 day')) {
         $key = $date->format('Y-m-d');
         $occupied = 0;
@@ -68,6 +69,7 @@ try {
         $peakOccupied = max($peakOccupied, $occupied);
         $peakPending = max($peakPending, $pending);
         $minimumAvailable = min($minimumAvailable, max(0, $capacity - $occupied - $pending));
+        $days[$key] = max(0, $capacity - $occupied - $pending);
     }
 
     jsonResponse([
@@ -78,6 +80,7 @@ try {
         'occupied' => $peakOccupied,
         'pending' => $peakPending,
         'available' => $minimumAvailable,
+        'days' => $days,
         'check_in' => $checkInValue,
         'check_out' => $checkOutValue,
     ]);
