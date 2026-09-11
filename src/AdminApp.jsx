@@ -257,6 +257,7 @@ function BookingCalendar({ bookings, onViewBooking }) {
   }, []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1, 12));
   const [dialogContent, setDialogContent] = useState(null);
+  const [landscapeOpen, setLandscapeOpen] = useState(false);
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
   const weeks = useMemo(() => calendarMonthWeeks(visibleMonth), [visibleMonth]);
@@ -274,15 +275,19 @@ function BookingCalendar({ bookings, onViewBooking }) {
 
   const closeLandscape = () => {
     if (landscapeDialogRef.current?.open) landscapeDialogRef.current.close();
+    setLandscapeOpen(false);
+  };
+
+  const openLandscape = () => {
+    setLandscapeOpen(true);
+    landscapeDialogRef.current?.showModal();
   };
 
   const moveMonth = amount => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + amount, 1, 12));
   const selectBooking = booking => {
-    closeLandscape();
     setDialogContent({ type: 'booking', booking });
   };
   const showOverflow = (date, hiddenBookings) => {
-    closeLandscape();
     setDialogContent({ type: 'more', date, bookings: hiddenBookings });
   };
 
@@ -338,12 +343,12 @@ function BookingCalendar({ bookings, onViewBooking }) {
         <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">‹</button>
         <strong aria-live="polite">{monthLabel}</strong>
         <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
-        <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={() => landscapeDialogRef.current?.showModal()}><AdminIcon name="landscape" /></button>
+        <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={openLandscape}><AdminIcon name="landscape" /></button>
       </div>
       {renderCalendarGrid()}
     </section>
 
-    <dialog ref={landscapeDialogRef} className="booking-calendar-landscape" aria-labelledby="booking-calendar-landscape-title">
+    <dialog ref={landscapeDialogRef} className="booking-calendar-landscape" aria-labelledby="booking-calendar-landscape-title" onClose={() => setLandscapeOpen(false)}>
       <div className="booking-calendar-landscape__header">
         <div><span className="admin-kicker">Landscape calendar</span><h2 id="booking-calendar-landscape-title">{monthLabel}</h2></div>
         <div className="booking-calendar__toolbar booking-calendar-landscape__toolbar">
@@ -355,7 +360,7 @@ function BookingCalendar({ bookings, onViewBooking }) {
       {renderCalendarGrid(' in landscape view', true)}
     </dialog>
 
-    <dialog ref={dialogRef} className="booking-calendar-dialog" aria-labelledby="booking-calendar-dialog-title" onClose={() => setDialogContent(null)} onCancel={() => setDialogContent(null)}>
+    <dialog ref={dialogRef} className={`booking-calendar-dialog${landscapeOpen ? ' is-landscape' : ''}`} aria-labelledby="booking-calendar-dialog-title" onClose={() => setDialogContent(null)} onCancel={() => setDialogContent(null)}>
       {dialogContent?.type === 'booking' && (() => {
         const { booking } = dialogContent;
         return <>
@@ -370,7 +375,7 @@ function BookingCalendar({ bookings, onViewBooking }) {
             <div><dt>Check-out</dt><dd>{formatBookingDate(booking.check_out)}</dd></div>
             <div><dt>Guests</dt><dd>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</dd></div>
           </dl>
-          <button type="button" className="booking-calendar-dialog__view" onClick={() => { closeDialog(); onViewBooking(booking.id); }}>View Booking <AdminIcon name="arrow" /></button>
+          <button type="button" className="booking-calendar-dialog__view" onClick={() => { closeDialog(); closeLandscape(); onViewBooking(booking.id); }}>View Booking <AdminIcon name="arrow" /></button>
         </>;
       })()}
       {dialogContent?.type === 'more' && <>
