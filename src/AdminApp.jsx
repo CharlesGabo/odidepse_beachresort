@@ -207,54 +207,6 @@ const navItems = [
   { id: 'content', label: 'Website Content', icon: 'home' },
 ];
 
-const mockGuestProfiles = [
-  ['Maya Santos', 'maya.santos@example.com', '+63 917 555 0101'],
-  ['Liam Reyes', 'liam.reyes@example.com', '+63 918 555 0102'],
-  ['Sofia Cruz', 'sofia.cruz@example.com', '+63 919 555 0103'],
-  ['Noah Garcia', 'noah.garcia@example.com', '+63 920 555 0104'],
-  ['Amara Lim', 'amara.lim@example.com', '+63 921 555 0105'],
-  ['Ethan Flores', 'ethan.flores@example.com', '+63 922 555 0106'],
-];
-
-function dateFromToday(days) {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function createMockBookings() {
-  const scenarios = [
-    [0, '5-guest room', 5, 8, 2, 'pending'],
-    [1, '8-guest room', 2, 6, 4, 'confirmed'],
-    [2, '5-guest room', -1, 3, 2, 'checked_in'],
-    [3, 'Entire building exclusive', 14, 18, 8, 'confirmed'],
-    [4, '10-guest room', 22, 25, 3, 'pending'],
-    [5, '9-guest room', -12, -9, 2, 'completed'],
-    [0, 'Large-group accommodation', 31, 35, 4, 'pending'],
-    [2, 'Entire building exclusive', -20, -16, 6, 'cancelled'],
-  ];
-
-  return scenarios.map(([profileIndex, stayType, checkIn, checkOut, guests, status], index) => {
-    const [guestName, email, phone] = mockGuestProfiles[profileIndex];
-    return {
-      id: `mock-${index + 1}`,
-      reference_code: `DEMO-${String(index + 1).padStart(3, '0')}`,
-      guest_name: guestName,
-      email,
-      phone,
-      check_in: dateFromToday(checkIn),
-      check_out: dateFromToday(checkOut),
-      guests,
-      stay_type: stayType,
-      message: 'Preview-only sample reservation.',
-      status,
-      created_at: new Date(Date.now() - index * 86400000).toISOString(),
-      is_mock: true,
-    };
-  });
-}
-
 function AdminIcon({ name }) {
   const paths = {
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
@@ -801,7 +753,6 @@ function GuestsView({ bookings }) {
 function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [bookings, setBookings] = useState([]);
   const [accommodations, setAccommodations] = useState([]);
-  const [mockBookings, setMockBookings] = useState(null);
   const [activeView, setActiveView] = useState('bookings');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -824,20 +775,13 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
 
-  const displayedBookings = mockBookings ?? bookings;
   const stats = useMemo(() => ({
-    pending: displayedBookings.filter(booking => booking.status === 'pending').length,
-    confirmed: displayedBookings.filter(booking => booking.status === 'confirmed').length,
-    guests: displayedBookings.filter(booking => ['confirmed', 'checked_in'].includes(booking.status)).reduce((sum, booking) => sum + Number(booking.guests), 0),
-  }), [displayedBookings]);
+    pending: bookings.filter(booking => booking.status === 'pending').length,
+    confirmed: bookings.filter(booking => booking.status === 'confirmed').length,
+    guests: bookings.filter(booking => ['confirmed', 'checked_in'].includes(booking.status)).reduce((sum, booking) => sum + Number(booking.guests), 0),
+  }), [bookings]);
 
   const updateStatus = async (id, status) => {
-    if (String(id).startsWith('mock-')) {
-      setMockBookings(current => current.map(item => item.id === id ? { ...item, status } : item));
-      setNotice('Mock booking updated locally. No database records were changed.');
-      return;
-    }
-
     try {
       const response = await fetch('/api/admin/bookings.php', {
         method: 'PATCH',
@@ -864,17 +808,6 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const toggleMockData = () => {
-    if (mockBookings) {
-      setMockBookings(null);
-      setNotice('Live booking data restored.');
-      return;
-    }
-
-    setMockBookings(createMockBookings());
-    setNotice('Mock preview enabled. This sample data is not saved to the database.');
-  };
-
   return <div className="admin-shell">
     <aside className="admin-sidebar">
       <span className="admin-wordmark admin-sidebar__label">ODIDEPSE</span>
@@ -882,13 +815,13 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
       <button type="button" title="Sign out" onClick={logout}><AdminIcon name="logout" /><span className="admin-sidebar__label">Sign out</span></button>
     </aside>
     <main className="admin-main">
-      <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : ['stays','services','content'].includes(activeView) ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-header-actions"><button type="button" className={mockBookings ? 'admin-mock-button is-active' : 'admin-mock-button'} aria-pressed={Boolean(mockBookings)} disabled={loading} onClick={toggleMockData}>{mockBookings ? 'Show live data' : 'Generate mock data'}</button><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></div></header>
+      <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : ['stays','services','content'].includes(activeView) ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'bookings' && <BookingsView bookings={displayedBookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setMockBookings(null); setNotice(`Booking ${data.reference} saved.`); load(); }} />}
+        {activeView === 'bookings' && <BookingsView bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
-        {activeView === 'guests' && <GuestsView bookings={displayedBookings} />}
+        {activeView === 'guests' && <GuestsView bookings={bookings} />}
       </>}
     </main>
   </div>;
