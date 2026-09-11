@@ -11,8 +11,7 @@
 .booking-status--checked_in { color: #245a75; background: #e0edf3; }
 .booking-status--completed { color: #5b615e; background: #e8eae8; }
 .booking-status--cancelled { color: #934438; background: #f5e3df; }
-.booking-card__guest { gap: 12px; margin: 18px 0; }
-.booking-guest-avatar { display: grid; flex: 0 0 auto; place-items: center; width: 42px; height: 42px; border-radius: 50%; color: white; background: var(--deep); font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.booking-card__guest { margin: 18px 0; }
 .booking-card__guest div { min-width: 0; }
 .booking-card__guest strong { display: block; overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .booking-card__guest small { display: block; margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -42,7 +41,6 @@
 .admin-request-modal__guest > div { min-width: 0; flex: 1; }
 .admin-request-modal__guest > div span,.admin-request-modal__guest > div small { display: block; color: rgba(255,255,255,.62); font-size: 10px; }
 .admin-request-modal__guest > div strong { display: block; margin: 3px 0; font-size: 16px; }
-.admin-request-modal__guest .booking-guest-avatar { color: var(--deep); background: var(--coral); }
 .admin-request-modal__guest .booking-status { flex: 0 0 auto; }
 .admin-request-modal__layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .75fr); gap: 18px; padding: 22px 30px 30px; }
 .admin-request-modal__main,.admin-request-modal__aside { display: grid; align-content: start; gap: 16px; }
@@ -92,6 +90,5 @@
 .resort-editor > .resort-editor__actions { margin-top: 24px; }
 .resort-editor__preview { max-width: 260px; margin-top: 20px; }
 .resort-manager :is(button,input,select,textarea):focus-visible { outline: 2px solid var(--lagoon); outline-offset: 3px; }
-.admin-shell .admin-mobile-nav { grid-template-columns: repeat(auto-fit,minmax(125px,1fr)); }
 @media(max-width:900px) { .booking-card-grid { grid-template-columns:1fr; }.admin-request-modal__layout { grid-template-columns:1fr; }.admin-request-modal__aside { grid-template-columns:1fr 1fr; } }
 @media(max-width:650px) { .resort-editor { padding:20px; }.resort-editor__fields { grid-template-columns:1fr; }.resort-editor fieldset { padding:12px; }.admin-request-modal__head { padding:22px 18px 18px; }.admin-request-modal__guest { padding-inline:18px; }.admin-request-modal__layout { padding:16px 18px 22px; }.admin-request-modal__aside { grid-template-columns:1fr; }.admin-request-modal__guest .booking-status { display:none; }.request-date-route { grid-template-columns:1fr; gap:13px; }.request-date-route > div:last-child { text-align:left; }.request-date-route__line { width:1px; height:18px; margin-left:5px; }.request-date-route__line span { margin:4px 0 0 12px; white-space:nowrap; }.request-times { grid-template-columns:auto 1fr; }.request-times span:last-child { grid-column:2; }.request-facts { grid-template-columns:1fr; }.booking-card__footer { align-items:stretch; flex-direction:column; }.booking-card__actions { flex-wrap:wrap; } }

@@ -183,14 +183,12 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   if (!booking) return null;
   const nights = getBookingNights(booking);
   const request = getBookingNotes(booking.message);
-  const guestInitials = booking.guest_name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   return <dialog ref={dialogRef} className="admin-request-modal" aria-labelledby="request-modal-title" onClose={onClose} onCancel={onClose}>
     <div className="admin-request-modal__head">
       <div><span className="admin-kicker">Reservation · {booking.reference_code}</span><h2 id="request-modal-title">View &amp; manage</h2></div>
       <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
     </div>
     <div className="admin-request-modal__guest">
-      <span className="booking-guest-avatar" aria-hidden="true">{guestInitials}</span>
       <div><span>Guest</span><strong>{booking.guest_name}</strong><small>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</small></div>
       <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
     </div>
@@ -251,14 +249,12 @@ function BookingsView({ bookings, notice, setNotice, updateStatus }) {
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {
         const nights = getBookingNights(booking);
-        const initials = booking.guest_name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
         return <article className="booking-card" key={booking.id}>
           <div className="booking-card__top">
             <span>{booking.reference_code}</span>
             <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
           </div>
           <div className="booking-card__guest">
-            <span className="booking-guest-avatar" aria-hidden="true">{initials}</span>
             <div><strong>{booking.guest_name}</strong><small>{booking.email}</small></div>
           </div>
           <div className="booking-card__stay">
@@ -397,13 +393,13 @@ function Dashboard({ user, csrfToken, onLogout }) {
 
   return <div className="admin-shell">
     <aside className="admin-sidebar">
-      <span className="admin-wordmark">ODIDEPSE</span>
-      <nav aria-label="Admin navigation"><span>Workspace</span>{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} />{item.label}</button>)}</nav>
-      <button type="button" onClick={logout}><AdminIcon name="logout" />Sign out</button>
+      <span className="admin-wordmark admin-sidebar__label">ODIDEPSE</span>
+      <nav aria-label="Admin navigation"><span className="admin-sidebar__label">Workspace</span>{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-sidebar__label">{item.label}</span></button>)}</nav>
+      <button type="button" title="Sign out" onClick={logout}><AdminIcon name="logout" /><span className="admin-sidebar__label">Sign out</span></button>
     </aside>
     <main className="admin-main">
       <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : ['stays','services','content'].includes(activeView) ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-header-actions"><button type="button" className={mockBookings ? 'admin-mock-button is-active' : 'admin-mock-button'} aria-pressed={Boolean(mockBookings)} disabled={loading} onClick={toggleMockData}>{mockBookings ? 'Show live data' : 'Generate mock data'}</button><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></div></header>
-      <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} />{item.label}</button>)}</nav>
+      <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'bookings' && <BookingsView bookings={displayedBookings} notice={notice} setNotice={setNotice} updateStatus={updateStatus} />}
