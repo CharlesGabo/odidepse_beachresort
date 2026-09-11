@@ -657,7 +657,8 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   </dialog>;
 }
 
-function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus }) {
+function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved }) {
+  const [manualBookingOpen, setManualBookingOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
@@ -710,7 +711,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       <div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div>
       <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
     </div>
-    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}</div>
+    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {
@@ -746,6 +747,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
     <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
+    {manualBookingOpen && <ManualBookingModal open onClose={() => setManualBookingOpen(false)} csrfToken={csrfToken} onSaved={data => { setFilter('pending'); setQuery(''); onBookingSaved(data); }} />}
     </section>
   </>;
 }
@@ -786,7 +788,7 @@ function GuestsView({ bookings }) {
   </section>;
 }
 
-function Dashboard({ user, csrfToken, onLogout }) {
+function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [bookings, setBookings] = useState([]);
   const [accommodations, setAccommodations] = useState([]);
   const [mockBookings, setMockBookings] = useState(null);
@@ -874,7 +876,7 @@ function Dashboard({ user, csrfToken, onLogout }) {
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'bookings' && <BookingsView bookings={displayedBookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} />}
+        {activeView === 'bookings' && <BookingsView bookings={displayedBookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setMockBookings(null); setNotice(`Booking ${data.reference} saved.`); load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={displayedBookings} />}
       </>}
@@ -882,7 +884,7 @@ function Dashboard({ user, csrfToken, onLogout }) {
   </div>;
 }
 
-export default function AdminApp() {
+export default function AdminApp({ ManualBookingModal }) {
   const [session, setSession] = useState({ loading: true, user: null, csrfToken: '' });
   const mobileSplashEnabled = window.matchMedia('(max-width: 900px)').matches;
   const logout = useCallback(() => setSession({ loading: false, user: null, csrfToken: '' }), []);
@@ -911,5 +913,5 @@ export default function AdminApp() {
   useEffect(() => { check(); }, [check]);
   if (session.loading) return mobileSplashEnabled ? <div className="admin-loading"><span>ODIDEPSE</span></div> : null;
   if (!session.user) return <AdminLogin onLogin={(user, csrfToken) => setSession({ loading: false, user, csrfToken })} />;
-  return <Dashboard user={session.user} csrfToken={session.csrfToken} onLogout={logout} />;
+  return <Dashboard user={session.user} csrfToken={session.csrfToken} onLogout={logout} ManualBookingModal={ManualBookingModal} />;
 }

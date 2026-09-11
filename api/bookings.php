@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEP
 require_once dirname(__DIR__) . '/includes/resort.php';
 
 requireMethod('POST');
+$manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
 $data = readJsonBody();
 
 $name = cleanText($data['guest_name'] ?? null, 100);
@@ -30,7 +31,7 @@ try {
     $checkIn = new DateTimeImmutable((string) ($data['check_in'] ?? ''), new DateTimeZone('Asia/Manila'));
     $checkOut = new DateTimeImmutable((string) ($data['check_out'] ?? ''), new DateTimeZone('Asia/Manila'));
     $today = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
-    if ($checkIn <= $today) $errors['check_in'] = 'Check-in must be a future date.';
+    if ($manualBooking ? $checkIn < $today : $checkIn <= $today) $errors['check_in'] = $manualBooking ? 'Check-in must be today or a future date.' : 'Check-in must be a future date.';
     if ($checkOut <= $checkIn) $errors['check_out'] = 'Check-out must be after check-in.';
     if ($checkIn->diff($checkOut)->days > 30) $errors['check_out'] = 'A stay may not exceed 30 nights.';
     if ($checkIn->format('Y-m-d') !== (string) ($data['check_in'] ?? '') || $checkOut->format('Y-m-d') !== (string) ($data['check_out'] ?? '')) throw new Exception();
@@ -47,7 +48,7 @@ try {
     $identifier = clientIdentifier('booking');
     $count = $db->prepare('SELECT COUNT(*) FROM request_attempts WHERE identifier_hash = ? AND attempted_at >= (NOW() - INTERVAL 1 HOUR)');
     $count->execute([$identifier]);
-    if ((int) $count->fetchColumn() >= 5) {
+    if ((int) $count->fetchColumn() >= 5 && !$manualBooking) {
         jsonResponse(['status' => 'error', 'message' => 'Too many booking requests were sent. Please try again later.'], 429);
     }
 
@@ -67,7 +68,7 @@ try {
         $query->execute([$serviceId]); $serviceRecord = $query->fetch();
         if (!$serviceRecord) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This service is no longer listed. Refresh and choose another service.'], 422); }
     }
-    $db->prepare('INSERT INTO request_attempts (identifier_hash, attempted_at) VALUES (?, NOW())')->execute([$identifier]);
+    if (!$manualBooking) $db->prepare('INSERT INTO request_attempts (identifier_hash, attempted_at) VALUES (?, NOW())')->execute([$identifier]);
     $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayRecord['name'] ?? null, $message ?: null, $stayRecord['id'] ?? null, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);

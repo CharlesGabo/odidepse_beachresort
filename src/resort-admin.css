@@ -1,4 +1,8 @@
 .resort-manager > p { color: var(--muted); font-size: 14px; }
+.filter-row { align-items:center; }
+.filter-row > button { flex:0 0 auto; }
+.filter-row .filter-row__add-booking { margin-left:auto; padding-inline:16px; color:white; background:var(--deep); border-color:var(--deep); font-weight:700; }
+.filter-row .filter-row__add-booking:hover { background:#184f47; }
 .booking-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; background: transparent; }
 .booking-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fbfbf8; box-shadow: 0 8px 24px rgba(12, 44, 39, .045); transition: border-color .2s, box-shadow .2s, transform .2s; }
 .booking-card--calendar-link { cursor:pointer; }

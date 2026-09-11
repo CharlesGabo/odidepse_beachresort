@@ -88,7 +88,7 @@ function CompactTimePicker({ label, value, onChange }) {
   </div>;
 }
 
-function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '' }) {
+function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved }) {
   const { copy, stays, services, roomPhotos } = useResort();
   const dialogRef = useRef(null);
   const [status, setStatus] = useState({ type: 'idle', message: '' });
@@ -99,7 +99,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const [availability, setAvailability] = useState({ type: 'idle' });
   const [arrivalTime, setArrivalTime] = useState('14:00');
   const [departureTime, setDepartureTime] = useState('12:00');
-  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 86400000));
+  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + (manual ? 0 : 86400000)));
   const [calendarMonth, setCalendarMonth] = useState((initialDate || tomorrow).slice(0, 7));
   const bookingActivities = services.some(item => /\bufo\b/i.test(item.title)) ? services : [...services, {
     id: 'ufo-inquiry', title: 'UFO rental', photo: null,
@@ -207,11 +207,12 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const soleActivityId = selectedActivities.length === 1 ? Number(selectedActivities[0]) : null;
     body.service_id = Number.isInteger(soleActivityId) ? soleActivityId : null;
     try {
-      const response = await fetch('/api/bookings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+      const response = await fetch(manual ? '/api/admin/create-booking.php' : '/api/bookings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(manual ? { 'X-CSRF-Token': csrfToken } : {}) }, body: JSON.stringify(body) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'We could not send your request.');
       form.reset();
-      setStatus({ type: 'success', message: `Request ${data.reference} received. Our team will contact you to discuss availability and rates.` });
+      setStatus({ type: 'success', message: manual ? `Booking ${data.reference} saved as a new request.` : `Request ${data.reference} received. Our team will contact you to discuss availability and rates.` });
+      onSaved?.(data);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
@@ -219,17 +220,17 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
 
   return <dialog ref={dialogRef} className="booking-modal" onClose={onClose} onCancel={onClose} aria-labelledby="booking-title">
     <button className="icon-button modal-close" type="button" onClick={onClose} aria-label="Close booking form"><Icon name="close" /></button>
-    <div className="modal-intro"><span className="eyebrow">{copy.inquiry["your_escape_starts_here"]}</span><h2 id="booking-title">{copy.inquiry["request_your_stay"]}</h2><p>{copy.inquiry["share_your_dates_and_group_size_our_team_will_confirm_availabilit"]}</p></div>
+    <div className="modal-intro">{!manual && <span className="eyebrow">{copy.inquiry["your_escape_starts_here"]}</span>}<h2 id="booking-title">{manual ? 'Add booking' : copy.inquiry["request_your_stay"]}</h2><p>{manual ? 'Record a walk-in, phone, or message booking. Enter the guest details, accommodation, dates, and requested activities.' : copy.inquiry["share_your_dates_and_group_size_our_team_will_confirm_availabilit"]}</p></div>
     {status.type === 'success' ? <div className="booking-success" role="status">
       <span className="success-orbit"><Icon name="wave" size={30} /></span>
-      <h3>{copy.inquiry["see_you_by_the_sea"]}</h3>
+      <h3>{manual ? 'Booking saved' : copy.inquiry["see_you_by_the_sea"]}</h3>
       <p>{status.message}</p>
-      <a className="booking-success__facebook" href="https://www.facebook.com/profile.php?id=61576647053739" target="_blank" rel="noreferrer">Message us on Facebook <Icon name="arrow" size={17} /></a>
+      {!manual && <a className="booking-success__facebook" href="https://www.facebook.com/profile.php?id=61576647053739" target="_blank" rel="noreferrer">Message us on Facebook <Icon name="arrow" size={17} /></a>}
       <button className="text-link" type="button" onClick={onClose}>{copy.inquiry["close"]}<Icon name="arrow" size={16} /></button>
     </div> :
       <form key={open ? 'open' : 'closed'} className="booking-form booking-experience" onSubmit={submit}>
         <section className="booking-step field--wide" aria-labelledby="choose-stay-title">
-          <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">Choose your space</h3><p>Browse every stay option. Photos are representative while room assignments are confirmed by our team.</p></div></div>
+          <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">{manual ? 'Select accommodation' : 'Choose your space'}</h3><p>{manual ? 'Select the accommodation requested by the guest. Review availability for the selected dates below.' : 'Browse every stay option. Photos are representative while room assignments are confirmed by our team.'}</p></div></div>
           <div className="booking-card-grid booking-card-grid--stays">
             {stays.map((stay, index) => {
               const inputId = `booking-stay-${stay.id}`;
@@ -244,7 +245,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           </div>
         </section>
         <section className="booking-step field--wide" aria-labelledby="schedule-title">
-          <div className="booking-step__heading"><span>02</span><div><h3 id="schedule-title">Set your schedule</h3><p>{!checkInDate ? 'First, tap your check-in date.' : !checkOutDate ? 'Great — now tap your check-out date.' : 'Your dates are ready. You can tap another date to start again.'}</p></div></div>
+          <div className="booking-step__heading"><span>02</span><div><h3 id="schedule-title">{manual ? 'Set booking dates and times' : 'Set your schedule'}</h3><p>{manual ? (!checkInDate ? 'Select the check-in date.' : !checkOutDate ? 'Select the check-out date.' : 'Dates selected. Select another date to start again.') : (!checkInDate ? 'First, tap your check-in date.' : !checkOutDate ? 'Great — now tap your check-out date.' : 'Your dates are ready. You can tap another date to start again.')}</p></div></div>
           <div className="booking-calendar-layout">
             <div className="booking-calendar" aria-label="Choose check-in and check-out dates">
               <div className="booking-calendar__toolbar">
@@ -281,7 +282,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           </div>
         </section>
         <section className="booking-step field--wide" aria-labelledby="activities-title-modal">
-          <div className="booking-step__heading"><span>03</span><div><h3 id="activities-title-modal">Add an adventure <small>Optional</small></h3><p>Select as many rental activities as you like. Rates and availability are confirmed separately.</p></div></div>
+          <div className="booking-step__heading"><span>03</span><div><h3 id="activities-title-modal">{manual ? 'Requested activities' : 'Add an adventure'} <small>Optional</small></h3><p>{manual ? 'Record the activities requested by the guest. Verify rates and availability separately.' : 'Select as many rental activities as you like. Rates and availability are confirmed separately.'}</p></div></div>
           <div className="booking-card-grid booking-card-grid--activities">
             {bookingActivities.map((activity, index) => {
               const inputId = `booking-activity-${activity.id}`;
@@ -296,16 +297,16 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           </div>
         </section>
         <section className="booking-step booking-step--details field--wide" aria-labelledby="guest-details-title">
-          <div className="booking-step__heading"><span>04</span><div><h3 id="guest-details-title">Tell us about your group</h3><p>{selectedStayDetails ? `${selectedStayDetails.name} is selected. Add your contact details to request availability.` : 'Select a stay above, then add your contact details.'}</p></div></div>
+          <div className="booking-step__heading"><span>04</span><div><h3 id="guest-details-title">{manual ? 'Guest details' : 'Tell us about your group'}</h3><p>{manual ? 'Enter the guest’s contact information, party size, and any booking notes.' : (selectedStayDetails ? `${selectedStayDetails.name} is selected. Add your contact details to request availability.` : 'Select a stay above, then add your contact details.')}</p></div></div>
           <div className="booking-details-grid">
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
             <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required placeholder="you@example.com" /></div>
             <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">Enter the 10 digits after +63.</small></div>
             <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={selectedStayDetails?.guests ?? 2} /></div>
-        <div className="field field--wide"><label htmlFor="message">{copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
+        <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>
         </section>
-        <aside className="booking-price-summary field--wide" aria-labelledby="price-summary-title">
+        {!manual && <aside className="booking-price-summary field--wide" aria-labelledby="price-summary-title">
           <div><span>Preview estimate</span><h3 id="price-summary-title">Your estimated total</h3></div>
           <dl>
             <div><dt>{selectedStayDetails && nightCount ? `${selectedStayDetails.name} × ${nightCount} ${nightCount === 1 ? 'night' : 'nights'}` : 'Stay'}</dt><dd>{staySubtotal ? formatMockPrice(staySubtotal) : 'Select dates'}</dd></div>
@@ -313,12 +314,16 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           </dl>
           <div className="booking-price-summary__total"><span>Estimated total</span><strong>{mockTotal ? formatMockPrice(mockTotal) : '—'}</strong></div>
           <p>Mock rates for preview only. Final rates and availability will be confirmed by our team.</p>
-        </aside>
+        </aside>}
         {status.type === 'error' && <p className="form-error field--wide" role="alert">{status.message}</p>}
-        <button className="button button--dark field--wide" disabled={status.type === 'loading'}>{status.type === 'loading' ? copy.inquiry.sending : copy.inquiry.submit} <Icon name="arrow" size={18} /></button>
-        <p className="form-note field--wide">{copy.inquiry["no_payment_is_taken_today_your_stay_is_confirmed_only_after_our_t"]}</p>
+        <button className="button button--dark field--wide" disabled={status.type === 'loading'}>{manual ? (status.type === 'loading' ? 'Saving booking…' : 'Save booking') : (status.type === 'loading' ? copy.inquiry.sending : copy.inquiry.submit)} <Icon name="arrow" size={18} /></button>
+        <p className="form-note field--wide">{manual ? 'Saved bookings appear under New request. Confirm the booking after reviewing availability and arrangements.' : copy.inquiry["no_payment_is_taken_today_your_stay_is_confirmed_only_after_our_t"]}</p>
       </form>}
   </dialog>;
+}
+
+function ManualBookingModal(props) {
+  return <ResortProvider><BookingModal {...props} manual /></ResortProvider>;
 }
 
 function PublicSite() {
@@ -435,5 +440,5 @@ function PublicSite() {
 
 export default function App() {
   const isAdminPath = window.location.pathname.replace(/\/+$/, '').endsWith('/admin');
-  return isAdminPath ? <AdminApp /> : <ResortProvider><PublicSite /></ResortProvider>;
+  return isAdminPath ? <AdminApp ManualBookingModal={ManualBookingModal} /> : <ResortProvider><PublicSite /></ResortProvider>;
 }
