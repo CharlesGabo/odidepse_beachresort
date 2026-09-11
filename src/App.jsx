@@ -221,7 +221,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       return;
     }
     delete body.stay_choice;
-    body.phone = `+63 ${String(body.phone ?? '').trim()}`;
+    const phone = String(body.phone ?? '').trim();
+    body.phone = phone ? `+63 ${phone}` : '';
     if (!checkInDate || !checkOutDate) {
       setStatus({ type: 'error', message: 'Please select both your check-in and check-out dates on the calendar.' });
       return;
@@ -336,8 +337,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-step__heading"><span>04</span><div><h3 id="guest-details-title">{manual ? 'Guest details' : 'Tell us about your group'}</h3><p>{manual ? 'Enter the guest’s contact information, party size, and any booking notes.' : (selectedStayDetails ? `${selectedStayDetails.name} is selected. Add your contact details to request availability.` : 'Select a stay above, then add your contact details.')}</p></div></div>
           <div className="booking-details-grid">
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
-            <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required placeholder="you@example.com" /></div>
-            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">Enter the 10 digits after +63.</small></div>
+            <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
+            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
             <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={selectedStayDetails?.guests ?? 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>

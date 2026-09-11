@@ -670,7 +670,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     <BookingCalendar bookings={bookings} accommodations={accommodations} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
-      <div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div>
+      <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
       <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
     </div>
     <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>

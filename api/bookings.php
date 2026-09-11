@@ -21,8 +21,8 @@ $serviceId = $data['service_id'] ?? null;
 
 $errors = [];
 if (mb_strlen($name) < 2) $errors['guest_name'] = 'Enter your full name.';
-if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) $errors['email'] = 'Enter a valid email address.';
-if (preg_match('/\A[0-9+()\-\s]{7,30}\z/', $phone) !== 1) $errors['phone'] = 'Enter a valid mobile number.';
+if ((!$manualBooking || $email !== '') && filter_var($email, FILTER_VALIDATE_EMAIL) === false) $errors['email'] = 'Enter a valid email address.';
+if ((!$manualBooking || $phone !== '') && preg_match('/\A[0-9+()\-\s]{7,30}\z/', $phone) !== 1) $errors['phone'] = 'Enter a valid mobile number.';
 if ($guests === false) $errors['guests'] = 'Guests must be between 1 and 100.';
 if ($stayId !== null && (!is_int($stayId) || $stayId < 1)) $errors['stay_id'] = 'Choose a valid stay.';
 if ($serviceId !== null && (!is_int($serviceId) || $serviceId < 1)) $errors['service_id'] = 'Choose a valid service.';
