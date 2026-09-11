@@ -116,7 +116,9 @@
 .reservation-timeline__group-wrap { display:contents; }
 .reservation-timeline__group { min-height:74px; border-top:1px solid var(--line); background:#f3f6f3; }
 .reservation-timeline__group .reservation-timeline__track { background:#f7f9f7; }
-.reservation-timeline__group-toggle { display:flex; align-items:flex-start; flex-direction:column; justify-content:center; gap:5px; width:100%; border:0; color:var(--ink); font:inherit; text-align:left; cursor:pointer; }
+.reservation-timeline__group-toggle { display:flex; align-items:flex-start; flex-direction:column; justify-content:center; gap:5px; width:100%; border:0; color:var(--ink); font:inherit; text-align:left; cursor:pointer; transition:background-color .18s ease,box-shadow .18s ease; }
+.reservation-timeline__group-toggle:hover { background:#e9f1ed; }
+.reservation-timeline__group-toggle[aria-expanded="true"] { background:#d8e9e2; box-shadow:inset 4px 0 0 #23725d; }
 .reservation-timeline__group-toggle > span { display:flex; width:100%; min-width:0; align-items:center; gap:6px; }
 .reservation-timeline__group-toggle > span i { flex:0 0 auto; width:10px; color:#32675a; font-size:15px; font-style:normal; }
 .reservation-timeline__group-toggle strong { font-size:12px; line-height:1.3; white-space:normal; }
@@ -143,7 +145,7 @@
 .timeline-resource-controls button:disabled { opacity:.4; cursor:default; }
 .timeline-resource-summary { margin:6px 0 10px; color:var(--muted); font-size:11px; }
 .booking-calendar-landscape .reservation-timeline-scroll { overflow-x:auto; overflow-y:hidden; overscroll-behavior-inline:contain; touch-action:pan-x; }
-.booking-calendar-landscape .reservation-timeline { --resource-width:130px; --day-width:76px; display:grid; grid-template-rows:34px repeat(var(--resource-count),minmax(0,1fr)); width:max-content; min-width:100%; min-height:0; height:100%; }
+.booking-calendar-landscape .reservation-timeline { --resource-width:156px; --day-width:76px; display:grid; grid-template-rows:34px repeat(var(--resource-count),minmax(0,1fr)); width:max-content; min-width:100%; min-height:0; height:100%; }
 .booking-calendar-landscape .reservation-timeline__row { min-height:0; }
 .booking-calendar-landscape .reservation-timeline__group { min-height:0; }
 .booking-calendar-landscape .reservation-timeline__resource { position:sticky; left:0; z-index:4; padding:4px 6px; font-size:11px; background:#f7f8f5; box-shadow:1px 0 0 var(--line); }
@@ -152,7 +154,7 @@
 .booking-calendar-landscape .reservation-timeline__header > div { padding:0; }
 .booking-calendar-landscape .reservation-timeline__header time { height:18px; font-size:12px; }
 .booking-calendar-landscape .reservation-timeline__header small { font-size:10px; }
-.booking-calendar-landscape .reservation-timeline__bars { height:100%; grid-template-rows:repeat(2,minmax(0,1fr)); padding:2px 0; gap:1px; }
+.booking-calendar-landscape .reservation-timeline__bars { box-sizing:border-box; height:100%; grid-template-rows:repeat(2,minmax(0,1fr)); padding:2px 0; gap:1px 0; }
 .booking-calendar-landscape .reservation-timeline .booking-calendar__bar,.booking-calendar-landscape .reservation-timeline .booking-calendar__more { align-self:stretch; height:auto; min-height:0; font-size:11px; line-height:1; padding-block:0; }
 .booking-calendar-landscape .timeline-resource-controls { flex:0 0 auto; margin:0 0 4px; font-size:11px; }
 .booking-calendar-landscape .reservation-timeline-scroll { max-height:none; }
@@ -191,9 +193,9 @@
 .booking-calendar-landscape__header { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; min-height: 42px; margin-bottom: 6px; }
 .booking-calendar-landscape__header > div:first-child { min-width: 0; margin-right: auto; }
 .booking-calendar-landscape__header h2 { margin: 2px 0 0; overflow: hidden; font-size: 17px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.booking-calendar-landscape__header > button { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: white; font-size: 20px; cursor: pointer; }
+.booking-calendar-landscape__header > button { display: grid; flex: 0 0 auto; place-items: center; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: white; font-size: 20px; cursor: pointer; }
 .booking-calendar-landscape__toolbar { flex: 0 0 auto; margin: 0; }
-.booking-calendar-landscape__toolbar button { min-width: 34px; width: 34px; height: 34px; padding: 0; }
+.booking-calendar-landscape__toolbar button { min-width: 44px; width: 44px; height: 44px; padding: 0; }
 .booking-calendar-landscape .booking-calendar__scroll { flex:1 1 auto; min-height:0; margin:0; padding:0; overflow-x:auto; overflow-y:hidden; overscroll-behavior-inline:contain; touch-action:pan-x; }
 .booking-calendar-landscape .booking-calendar__grid { display: grid; grid-template-rows: auto repeat(var(--calendar-week-count),minmax(0,1fr)); width: 100%; min-width: 0; height: 100%; }
 .booking-calendar-landscape .booking-calendar__weekdays span { padding: 4px; font-size: 8px; }
@@ -236,8 +238,21 @@
 .reservation-timeline__group-statuses .booking-calendar__occupancy-alert.is-conflict { outline:2px dashed #7c2923; outline-offset:-3px; }
 .booking-calendar-landscape .reservation-timeline__group { min-height:0 !important; }
 .booking-calendar-landscape .reservation-timeline__group-statuses { grid-template-rows:repeat(var(--group-unit-count),minmax(0,1fr)); gap:1px 0; padding:1px 0; }
-.booking-calendar-landscape .reservation-timeline__group-statuses .booking-calendar__occupancy-alert { width:auto; margin-inline:3px; padding:0 3px; border-radius:2px; font-size:7px; }
-.booking-calendar-landscape .reservation-timeline__group-statuses .booking-calendar__occupancy-alert i { width:4px; height:4px; }
+.booking-calendar-landscape .reservation-timeline__group-statuses .booking-calendar__occupancy-alert { width:auto; margin-inline:3px; padding:0 5px; border-radius:4px; font-size:11px; }
+.booking-calendar-landscape .reservation-timeline__group-statuses .booking-calendar__occupancy-alert i { width:5px; height:5px; }
+.booking-calendar-landscape .reservation-timeline__track { min-height:0; container-type:size; }
+.booking-calendar-landscape .reservation-timeline__group-toggle { gap:2px; padding:3px 6px; }
+.booking-calendar-landscape .reservation-timeline__group-toggle[aria-expanded="true"] { background:#d8e9e2; }
+.booking-calendar-landscape .reservation-timeline__group-toggle strong { font-size:11px; line-height:1.15; }
+.booking-calendar-landscape .reservation-timeline__unit > .reservation-timeline__resource { padding:3px 6px 3px 16px; display:flex; align-items:center; }
+.booking-calendar-landscape .timeline-resource-summary { flex:0 0 auto; margin:0 0 5px; font-size:10px; }
+.booking-calendar-landscape .reservation-timeline-scroll { scrollbar-width:thin; scrollbar-color:#718c82 #e7ece8; }
+@container (max-height:42px) {
+  .booking-calendar-landscape .reservation-timeline .booking-calendar__bar small { display:none; }
+}
+@media (orientation:landscape) {
+  .booking-calendar-landscape { padding:8px max(10px,env(safe-area-inset-right)) 8px max(10px,env(safe-area-inset-left)); }
+}
 .booking-calendar-dialog { width: min(390px,calc(100% - 28px)); max-height: calc(100dvh - 28px); margin: auto; padding: 24px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: white; box-shadow: 0 28px 80px rgba(7,31,28,.35); overflow: auto; }
 .booking-calendar-dialog::backdrop { background: rgba(7,31,28,.48); backdrop-filter: blur(3px); }
 .booking-calendar-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 16px; }

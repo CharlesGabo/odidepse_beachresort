@@ -302,7 +302,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking }) {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1, 12));
   const [dialogContent, setDialogContent] = useState(null);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState(() => new Set(['5-guest room']));
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set());
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
