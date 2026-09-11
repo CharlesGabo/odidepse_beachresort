@@ -294,7 +294,7 @@ function StatCards({ stats }) {
   </section>;
 }
 
-function BookingCalendar({ bookings, accommodations, onViewBooking }) {
+function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedBookingId }) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
@@ -333,6 +333,32 @@ function BookingCalendar({ bookings, accommodations, onViewBooking }) {
     });
   }, [bookings, accommodations]);
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
+
+  useEffect(() => {
+    if (!highlightedBookingId) return;
+    const booking = bookings.find(item => String(item.id) === String(highlightedBookingId));
+    if (!booking) return;
+
+    const bookingMonth = new Date(`${booking.check_in}T12:00:00`);
+    if (visibleMonth.getFullYear() !== bookingMonth.getFullYear() || visibleMonth.getMonth() !== bookingMonth.getMonth()) {
+      setVisibleMonth(new Date(bookingMonth.getFullYear(), bookingMonth.getMonth(), 1, 12));
+      return;
+    }
+
+    const resource = resources.find(item => item.bookings.some(candidate => String(candidate.id) === String(booking.id)));
+    if (resource && !expandedGroups.has(resource.key)) {
+      setExpandedGroups(current => new Set(current).add(resource.key));
+      return;
+    }
+
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const selector = `[data-calendar-booking-id="${String(booking.id)}"]`;
+      const target = document.querySelector(`.booking-calendar .reservation-timeline__unit ${selector}`)
+        || document.querySelector(`.booking-calendar ${selector}`)
+        || document.querySelector(selector);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }));
+  }, [highlightedBookingId, bookings, resources, visibleMonth, expandedGroups]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -408,15 +434,17 @@ function BookingCalendar({ bookings, accommodations, onViewBooking }) {
                 {occupiedUnitSummaries.flatMap(({ unit, unitIndex, segments }, laneIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
                   const segmentDate = displayedDays[start];
                   const unitLabel = `Room ${unitIndex + 1}`;
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}`} key={`${unit.key}-${start}-${end}-${status}`}
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}${activeBookings.some(booking => String(booking.id) === String(highlightedBookingId)) ? ' is-booking-highlighted' : ''}`} key={`${unit.key}-${start}-${end}-${status}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: laneIndex + 1 }}
+                    data-calendar-booking-id={activeBookings.length === 1 ? activeBookings[0].id : undefined}
                     aria-label={`${unitLabel}: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
                     onClick={() => activeBookings.length === 1 ? selectBooking(activeBookings[0]) : showOverflow(segmentDate, activeBookings)}><i aria-hidden="true" /><span>{unitLabel} · {statusLabels[status]}</span></button>;
                 }))}
                 {conflictSummaries.flatMap(({ booking, segments }, conflictIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
                   const segmentDate = displayedDays[start];
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status} is-conflict`} key={`conflict-${booking.id}-${start}-${end}`}
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status} is-conflict${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`conflict-${booking.id}-${start}-${end}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictIndex + 1 }}
+                    data-calendar-booking-id={booking.id}
                     aria-label={`Unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
                     onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>Conflict · {statusLabels[status]}</span></button>;
                 }))}
@@ -431,12 +459,18 @@ function BookingCalendar({ bookings, accommodations, onViewBooking }) {
               <div className="reservation-timeline__track">
                 {dateCells()}
                 <div className="reservation-timeline__bars">
-                  {visible.map(({ booking, start, end, startsHere, endsHere }) => <button type="button" key={booking.id}
-                    className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
-                    style={{ gridColumn: `${start + 1} / ${end + 2}` }}
-                    aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)}, check-out ${formatBookingDate(booking.check_out)}, ${statusLabels[booking.status]}`}
-                    title={`Check-in: ${booking.check_in} • Check-out: ${booking.check_out}`}
-                    onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} – {formatBookingDate(booking.check_out, true)}</small></button>)}
+                  {visible.map(({ booking, start, end, startsHere, endsHere }) => {
+                    const schedule = getBookingNotes(booking.message);
+                    const arrival = formatBookingTime(schedule.arrival) || 'Time not set';
+                    const departure = formatBookingTime(schedule.departure) || 'Time not set';
+                    return <button type="button" key={booking.id}
+                      className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`}
+                      style={{ gridColumn: `${start + 1} / ${end + 2}` }}
+                      data-calendar-booking-id={booking.id}
+                      aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)} at ${arrival}, check-out ${formatBookingDate(booking.check_out)} at ${departure}, ${statusLabels[booking.status]}`}
+                      title={`Check-in: ${formatBookingDate(booking.check_in)} at ${arrival} • Check-out: ${formatBookingDate(booking.check_out)} at ${departure}`}
+                      onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} {arrival} – {formatBookingDate(booking.check_out, true)} {departure}</small></button>;
+                  })}
                 </div>
               </div>
             </div>;
@@ -585,13 +619,29 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const [query, setQuery] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [highlightedBookingId, setHighlightedBookingId] = useState(null);
+  const [highlightedCalendarBookingId, setHighlightedCalendarBookingId] = useState(null);
   const highlightTimerRef = useRef(null);
-  const visible = useMemo(() => bookings.filter(item => (
-    (filter === 'all' || item.status === filter)
-    && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
-  )), [bookings, filter, query]);
+  const calendarHighlightTimerRef = useRef(null);
+  const visible = useMemo(() => {
+    const todayKey = calendarDateKey(new Date());
+    return bookings.filter(item => (
+      (filter === 'all' || item.status === filter)
+      && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
+    )).sort((a, b) => {
+      const aIsUpcoming = a.check_in >= todayKey;
+      const bIsUpcoming = b.check_in >= todayKey;
+      if (aIsUpcoming !== bIsUpcoming) return aIsUpcoming ? -1 : 1;
+      const dateOrder = aIsUpcoming
+        ? a.check_in.localeCompare(b.check_in)
+        : b.check_in.localeCompare(a.check_in);
+      return dateOrder || String(a.id).localeCompare(String(b.id));
+    });
+  }, [bookings, filter, query]);
 
-  useEffect(() => () => window.clearTimeout(highlightTimerRef.current), []);
+  useEffect(() => () => {
+    window.clearTimeout(highlightTimerRef.current);
+    window.clearTimeout(calendarHighlightTimerRef.current);
+  }, []);
 
   const viewBookingFromCalendar = bookingId => {
     setFilter('all');
@@ -604,8 +654,14 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     }));
   };
 
+  const viewBookingInCalendar = bookingId => {
+    setHighlightedCalendarBookingId(String(bookingId));
+    window.clearTimeout(calendarHighlightTimerRef.current);
+    calendarHighlightTimerRef.current = window.setTimeout(() => setHighlightedCalendarBookingId(null), 2500);
+  };
+
   return <>
-    <BookingCalendar bookings={bookings} accommodations={accommodations} onViewBooking={viewBookingFromCalendar} />
+    <BookingCalendar bookings={bookings} accommodations={accommodations} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div>
@@ -616,7 +672,10 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {
         const nights = getBookingNights(booking);
-        return <article className={`booking-card${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}>
+        return <article className={`booking-card booking-card--calendar-link${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}
+          tabIndex="0" role="button" aria-label={`Show ${booking.guest_name}'s booking in the calendar`}
+          onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking.id); }}
+          onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking.id); } }}>
           <div className="booking-card__top">
             <span>{booking.reference_code}</span>
             <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
@@ -782,22 +841,32 @@ function Dashboard({ user, csrfToken, onLogout }) {
 
 export default function AdminApp() {
   const [session, setSession] = useState({ loading: true, user: null, csrfToken: '' });
+  const mobileSplashEnabled = window.matchMedia('(max-width: 900px)').matches;
   const logout = useCallback(() => setSession({ loading: false, user: null, csrfToken: '' }), []);
 
   const check = useCallback(async () => {
+    const splashStartedAt = performance.now();
+    let nextSession;
+
     try {
       const response = await fetch('/api/admin/session.php', { headers: { Accept: 'application/json' } });
       const data = await response.json();
-      setSession(response.ok && data.authenticated
+      nextSession = response.ok && data.authenticated
         ? { loading: false, user: data.user, csrfToken: data.csrf_token }
-        : { loading: false, user: null, csrfToken: '' });
+        : { loading: false, user: null, csrfToken: '' };
     } catch {
-      setSession({ loading: false, user: null, csrfToken: '' });
+      nextSession = { loading: false, user: null, csrfToken: '' };
     }
-  }, []);
+
+    if (mobileSplashEnabled) {
+      const remainingSplashTime = Math.max(0, 2000 - (performance.now() - splashStartedAt));
+      await new Promise(resolve => window.setTimeout(resolve, remainingSplashTime));
+    }
+    setSession(nextSession);
+  }, [mobileSplashEnabled]);
 
   useEffect(() => { check(); }, [check]);
-  if (session.loading) return <div className="admin-loading"><span>ODIDEPSE</span></div>;
+  if (session.loading) return mobileSplashEnabled ? <div className="admin-loading"><span>ODIDEPSE</span></div> : null;
   if (!session.user) return <AdminLogin onLogin={(user, csrfToken) => setSession({ loading: false, user, csrfToken })} />;
   return <Dashboard user={session.user} csrfToken={session.csrfToken} onLogout={logout} />;
 }

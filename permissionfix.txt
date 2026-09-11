@@ -1,0 +1,19 @@
+step 1
+USE capstone_db;
+SHOW TABLES;
+
+USE odidepse_db;
+SHOW TABLES;
+
+step 2
+CREATE USER IF NOT EXISTS 'odidepse_app'@'localhost'
+IDENTIFIED BY '5a759a4de4614015a91c534b5cc405b7d7f9cd82ee584d2e';
+
+ALTER USER 'odidepse_app'@'localhost'
+IDENTIFIED BY '5a759a4de4614015a91c534b5cc405b7d7f9cd82ee584d2e';
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON odidepse_db.*
+TO 'odidepse_app'@'localhost';
+
+FLUSH PRIVILEGES;
