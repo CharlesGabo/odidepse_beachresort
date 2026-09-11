@@ -72,16 +72,16 @@ function calendarMonthWeeks(monthDate) {
 
 function layoutCalendarWeek(weekDays, bookings, maximumLanes = 3) {
   const weekStart = weekDays[0];
-  const weekEnd = weekDays[6];
+  const weekEnd = weekDays[weekDays.length - 1];
   const segments = bookings.flatMap(booking => {
     const checkIn = parseCalendarDate(booking.check_in);
     const checkOut = parseCalendarDate(booking.check_out);
-    if (!checkIn || !checkOut || checkOut < weekStart || checkIn > weekEnd) return [];
+    if (!checkIn || !checkOut || checkOut < checkIn || checkOut < weekStart || checkIn > weekEnd) return [];
 
     return [{
       booking,
       start: Math.max(0, calendarDayDifference(weekStart, checkIn)),
-      end: Math.min(6, calendarDayDifference(weekStart, checkOut)),
+      end: Math.min(weekDays.length - 1, calendarDayDifference(weekStart, checkOut)),
       startsHere: checkIn >= weekStart,
       endsHere: checkOut <= weekEnd,
     }];
@@ -258,9 +258,38 @@ function BookingCalendar({ bookings, onViewBooking }) {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1, 12));
   const [dialogContent, setDialogContent] = useState(null);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
+  const [resourcePage, setResourcePage] = useState(0);
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
-  const weeks = useMemo(() => calendarMonthWeeks(visibleMonth), [visibleMonth]);
+  const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
+  const resources = useMemo(() => {
+    const grouped = new Map();
+    const accommodationOrder = [
+      '5-guest room',
+      '8-guest room',
+      '9-guest room',
+      '10-guest room',
+      'Entire building exclusive',
+      'Large-group accommodation',
+    ];
+    const normalizedAccommodationOrder = accommodationOrder.map(name => name.toLowerCase());
+    accommodationOrder.forEach(name => grouped.set(name.toLowerCase(), {
+      key: `accommodation-${name.toLowerCase()}`,
+      name,
+      bookings: [],
+    }));
+    bookings.forEach(booking => {
+      const name = booking.stay_type || booking.service_name || 'Unassigned accommodation';
+      grouped.get(name.toLowerCase())?.bookings.push(booking);
+    });
+    return [...grouped.values()].sort((a, b) => {
+      const aIndex = normalizedAccommodationOrder.indexOf(a.name.toLowerCase());
+      const bIndex = normalizedAccommodationOrder.indexOf(b.name.toLowerCase());
+      return (aIndex === -1 ? normalizedAccommodationOrder.length : aIndex)
+        - (bIndex === -1 ? normalizedAccommodationOrder.length : bIndex)
+        || a.name.localeCompare(b.name);
+    });
+  }, [bookings]);
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
 
   useEffect(() => {
@@ -291,43 +320,50 @@ function BookingCalendar({ bookings, onViewBooking }) {
     setDialogContent({ type: 'more', date, bookings: hiddenBookings });
   };
 
-  const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => <div className="booking-calendar__scroll" tabIndex="0" aria-label={`${monthLabel} calendar${labelSuffix}${isLandscape ? '' : '; scroll horizontally when needed'}`}>
-    <div className="booking-calendar__grid" style={{ '--calendar-week-count': weeks.length }}>
-      <div className="booking-calendar__weekdays" aria-hidden="true">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <span key={day}>{day}</span>)}
+  const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => {
+    // The landscape dialog deliberately keeps the full month available for touch scrolling.
+    const displayedDays = days;
+    const displayedResources = resources.slice(resourcePage * 6, resourcePage * 6 + 6);
+    return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`}>
+    <div className="reservation-timeline" style={{ '--timeline-days': displayedDays.length, '--resource-count': Math.max(1, displayedResources.length) }}>
+      <div className="reservation-timeline__header">
+        <strong className="reservation-timeline__resource">Accommodation</strong>
+        {displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''}>
+          <small>{date.toLocaleDateString('en-PH', { weekday: 'short' })}</small>
+          <time dateTime={calendarDateKey(date)}>{date.getDate()}</time>
+        </div>)}
       </div>
-      {weeks.map((weekDays, weekIndex) => {
-        const { visible, overflow } = layoutCalendarWeek(weekDays, bookings, isLandscape ? 2 : 3);
-        return <div className="booking-calendar__week" key={calendarDateKey(weekDays[0])}>
-          {weekDays.map(date => {
-            const key = calendarDateKey(date);
-            const outsideMonth = date.getMonth() !== visibleMonth.getMonth();
-            return <div className={`booking-calendar__day${outsideMonth ? ' is-outside' : ''}${key === calendarDateKey(today) ? ' is-today' : ''}`} key={key}>
-              <time dateTime={key}>{date.getDate()}</time>
-            </div>;
-          })}
-          <div className="booking-calendar__bookings">
-            {visible.map(({ booking, start, end, startsHere, endsHere, lane }) => <button
-              type="button"
-              className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
-              style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
-              key={`${booking.id}-${weekIndex}`}
-              title={`${booking.guest_name}: ${formatBookingDate(booking.check_in)} to ${formatBookingDate(booking.check_out)}`}
-              onClick={() => selectBooking(booking)}
-            ><span>{booking.guest_name}</span></button>)}
-            {overflow.map(({ date, bookings: hiddenBookings }) => <button
-              type="button"
-              className="booking-calendar__more"
-              style={{ gridColumn: `${calendarDayDifference(weekDays[0], date) + 1}`, gridRow: isLandscape ? 3 : 4 }}
-              key={`more-${calendarDateKey(date)}`}
-              onClick={() => showOverflow(date, hiddenBookings)}
-            >+{hiddenBookings.length} more</button>)}
+      {displayedResources.map(resource => {
+        const { visible, overflow } = layoutCalendarWeek(displayedDays, resource.bookings, 1);
+        return <div className="reservation-timeline__row" key={resource.key}>
+          <div className="reservation-timeline__resource"><strong>{resource.name}</strong><small>{resource.bookings.filter(booking => booking.check_in <= calendarDateKey(days.at(-1)) && booking.check_out >= calendarDateKey(days[0])).length} reservations this month</small></div>
+          <div className="reservation-timeline__track">
+            <div className="reservation-timeline__cells" aria-hidden="true">{displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''} />)}</div>
+            <div className="reservation-timeline__bars">
+              {visible.map(({ booking, start, end, startsHere, endsHere, lane }) => <button type="button"
+                key={booking.id}
+                className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}`}
+                style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
+                aria-label={`${booking.guest_name}, ${resource.name}, check-in ${formatBookingDate(booking.check_in)}, check-out ${formatBookingDate(booking.check_out)}, ${statusLabels[booking.status]}`}
+                title={`Check-in: ${booking.check_in} • Check-out: ${booking.check_out}`}
+                onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span></button>)}
+              {overflow.map(({ date, bookings: hidden }) => <button type="button" className="booking-calendar__more" key={calendarDateKey(date)}
+                style={{ gridColumn: calendarDayDifference(displayedDays[0], date) + 1, gridRow: 2 }}
+                aria-label={`${hidden.length} more bookings for ${resource.name} on ${formatBookingDate(calendarDateKey(date))}`}
+                onClick={() => showOverflow(date, hidden)}>+{hidden.length} more</button>)}
+            </div>
           </div>
         </div>;
       })}
+      {resources.length === 0 && <p className="reservation-timeline__empty">No accommodation reservations yet.</p>}
     </div>
   </div>;
+  };
 
+  const resourceControls = <div className="timeline-resource-controls">
+    <span>{resources.length ? `Accommodations ${resourcePage * 6 + 1}–${Math.min(resourcePage * 6 + 6, resources.length)} of ${resources.length}` : 'Loading accommodations'}</span>
+    {resources.length > 6 && <><button type="button" disabled={resourcePage === 0} onClick={() => setResourcePage(page => page - 1)}>Previous six</button><button type="button" disabled={(resourcePage + 1) * 6 >= resources.length} onClick={() => setResourcePage(page => page + 1)}>Next six</button></>}
+  </div>;
   return <>
     <section className="booking-calendar admin-view" aria-labelledby="booking-calendar-heading">
       <div className="booking-calendar__header">
@@ -340,11 +376,13 @@ function BookingCalendar({ bookings, onViewBooking }) {
         </div>
       </div>
       <div className="booking-calendar__toolbar">
+        <button type="button" className="reservation-timeline__today" onClick={() => setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1, 12))}>Today</button>
         <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">‹</button>
         <strong aria-live="polite">{monthLabel}</strong>
         <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
         <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={openLandscape}><AdminIcon name="landscape" /></button>
       </div>
+      {resourceControls}
       {renderCalendarGrid()}
     </section>
 
@@ -352,10 +390,14 @@ function BookingCalendar({ bookings, onViewBooking }) {
       <div className="booking-calendar-landscape__header">
         <div><span className="admin-kicker">Landscape calendar</span><h2 id="booking-calendar-landscape-title">{monthLabel}</h2></div>
         <div className="booking-calendar__toolbar booking-calendar-landscape__toolbar">
+          <button type="button" className="reservation-timeline__today" onClick={() => setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1, 12))}>Today</button>
           <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">‹</button>
           <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
         </div>
         <button type="button" onClick={closeLandscape} aria-label="Close landscape calendar">×</button>
+      </div>
+      <div className="timeline-resource-controls">
+        {resourceControls}
       </div>
       {renderCalendarGrid(' in landscape view', true)}
     </dialog>
