@@ -462,6 +462,7 @@ function PublicSite({ onHeroReady }) {
     <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">{copy.navigation["experience"]}</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
     <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>{copy.navigation["experience"]}</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
     <main>
+      <div className="hero-intro">
       <section className="hero hero--groups" ref={heroRef}>
         <HeroVideoBackground onReady={onHeroReady} />
         <div className="hero__wash" /><div className="hero__orb hero__orb--one" /><div className="hero__orb hero__orb--two" />
@@ -474,6 +475,7 @@ function PublicSite({ onHeroReady }) {
       <section className="quick-highlights" aria-label="Your stay at a glance">
         <dl>{highlights.map(item => <div key={item.title}><Icon name={item.icon} size={26} /><dt>{item.title}</dt><dd>{item.detail}</dd></div>)}</dl>
       </section>
+      </div>
       <section className="manifesto section resort-intro" id="story" data-reveal>
         <div className="section-label"><span>01</span>{copy.story["better_together"]}</div>
         <div className="manifesto__grid"><h2>{copy.story["beach_days"]}<br /><em>{copy.story["your_people"]}</em></h2><div className="manifesto__copy"><p className="lead">{copy.story["a_little_sea_air_a_lot_of_time_together"]}</p><p>{copy.story["odidepse_puts_you_a_25_second_walk_from_the_beach_with_air_condit"]}</p><p>{copy.story["bring_the_family_gather_the_barkada_or_plan_something_bigger_make"]}</p><a className="text-link" href="#amenities">{copy.story["see_what_s_included"]}<Icon name="arrow" size={17} /></a></div></div>
