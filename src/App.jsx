@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AdminApp from './AdminApp.jsx';
 import StayCapacityCard from './StayCapacityCard.jsx';
 import { stayPhotoSource } from './StayPhotos.jsx';
@@ -407,7 +407,7 @@ function ManualBookingModal(props) {
   return <ResortProvider><BookingModal {...props} manual /></ResortProvider>;
 }
 
-function PublicSite() {
+function PublicSite({ onHeroReady }) {
   const { copy, stays, highlights, amenityGroups, occasions, roomPhotos, services: experiences, revision } = useResort();
   const [menuOpen, setMenuOpen] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
@@ -417,10 +417,6 @@ function PublicSite() {
   const [selectedMessage, setSelectedMessage] = useState('');
   const [selectedService, setSelectedService] = useState('');
   const [stayPhotoStep, setStayPhotoStep] = useState(0);
-  const [introReady, setIntroReady] = useState(false);
-  const [introMinimumElapsed, setIntroMinimumElapsed] = useState(false);
-  const [introLeaving, setIntroLeaving] = useState(false);
-  const [showIntro, setShowIntro] = useState(true);
   const activityCards = experiences.some(item => /\bufo\b/i.test(item.title)) ? experiences : [...experiences, {
     id: 'ufo-inquiry', title: 'UFO', icon: 'wave', photo: null,
     image_caption: 'A little more adventure',
@@ -428,29 +424,6 @@ function PublicSite() {
     availabilityLabel: 'Rates and availability upon inquiry.',
   }];
   const heroRef = useRef(null);
-
-  useEffect(() => {
-    const minimumTimer = window.setTimeout(() => setIntroMinimumElapsed(true), 1400);
-    const fallbackTimer = window.setTimeout(() => {
-      setIntroReady(true);
-      setIntroMinimumElapsed(true);
-    }, 5000);
-    return () => { window.clearTimeout(minimumTimer); window.clearTimeout(fallbackTimer); };
-  }, []);
-
-  useEffect(() => {
-    if (!introReady || !introMinimumElapsed || !showIntro) return undefined;
-    setIntroLeaving(true);
-    const timer = window.setTimeout(() => setShowIntro(false), 650);
-    return () => window.clearTimeout(timer);
-  }, [introReady, introMinimumElapsed, showIntro]);
-
-  useEffect(() => {
-    if (!showIntro) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [showIntro]);
 
   useEffect(() => {
     const items = document.querySelectorAll('[data-reveal]');
@@ -485,12 +458,12 @@ function PublicSite() {
   const openBooking = (stay = '', date = '', message = '', service = '') => { setSelectedService(service); setSelectedStay(stay); setSelectedDate(date); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
-  return <><div className="site-shell" id="top" inert={showIntro} aria-hidden={showIntro || undefined}>
+  return <div className="site-shell" id="top">
     <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">{copy.navigation["experience"]}</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
     <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>{copy.navigation["experience"]}</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
     <main>
       <section className="hero hero--groups" ref={heroRef}>
-        <HeroVideoBackground onReady={() => setIntroReady(true)} />
+        <HeroVideoBackground onReady={onHeroReady} />
         <div className="hero__wash" /><div className="hero__orb hero__orb--one" /><div className="hero__orb hero__orb--two" />
         <div className="hero__content"><span className="eyebrow eyebrow--light hero__eyebrow">{copy.hero["san_felipe_zambales_philippines"]}</span>
           <h1>{copy.hero["your_beach_escape"]}<br /><em>{copy.hero["25_seconds"]}</em><br />{copy.hero["from_the_shore"]}</h1>
@@ -550,10 +523,43 @@ function PublicSite() {
     <button type="button" className={`scroll-to-top${headerScrolled ? ' is-visible' : ''}`} aria-label="Scroll to top" aria-hidden={!headerScrolled} tabIndex={headerScrolled ? 0 : -1} onClick={scrollToTop}><Icon name="arrow" size={20} /></button>
     <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.instagram} aria-label="Instagram"><Icon name="instagram" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
     <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
-  </div>{showIntro && <div className={`admin-loading public-loading${introLeaving ? ' is-leaving' : ''}`} role="status" aria-label="Loading Odidepse Beach Resort"><span>ODIDEPSE</span></div>}</>;
+  </div>;
+}
+
+function PublicApp() {
+  const [introReady, setIntroReady] = useState(false);
+  const [introMinimumElapsed, setIntroMinimumElapsed] = useState(false);
+  const [introLeaving, setIntroLeaving] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
+  const markIntroReady = useCallback(() => setIntroReady(true), []);
+
+  useEffect(() => {
+    const minimumTimer = window.setTimeout(() => setIntroMinimumElapsed(true), 1400);
+    const fallbackTimer = window.setTimeout(() => {
+      setIntroReady(true);
+      setIntroMinimumElapsed(true);
+    }, 5000);
+    return () => { window.clearTimeout(minimumTimer); window.clearTimeout(fallbackTimer); };
+  }, []);
+
+  useEffect(() => {
+    if (!introReady || !introMinimumElapsed || !showIntro) return undefined;
+    setIntroLeaving(true);
+    const timer = window.setTimeout(() => setShowIntro(false), 650);
+    return () => window.clearTimeout(timer);
+  }, [introReady, introMinimumElapsed, showIntro]);
+
+  useEffect(() => {
+    if (!showIntro) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [showIntro]);
+
+  return <><div inert={showIntro} aria-hidden={showIntro || undefined}><ResortProvider><PublicSite onHeroReady={markIntroReady} /></ResortProvider></div>{showIntro && <div className={`admin-loading public-loading${introLeaving ? ' is-leaving' : ''}`} role="status" aria-label="Loading Odidepse Beach Resort"><span>ODIDEPSE</span></div>}</>;
 }
 
 export default function App() {
   const isAdminPath = window.location.pathname.replace(/\/+$/, '').endsWith('/admin');
-  return isAdminPath ? <AdminApp ManualBookingModal={ManualBookingModal} /> : <ResortProvider><PublicSite /></ResortProvider>;
+  return isAdminPath ? <AdminApp ManualBookingModal={ManualBookingModal} /> : <PublicApp />;
 }

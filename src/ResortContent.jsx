@@ -46,6 +46,7 @@ export function ResortProvider({ children }) {
       services: snapshot.services.map(item => ({ ...item, title: item.name, copy: item.description, photo: item.asset ? photos.find(p => p.id === item.asset) : null, availabilityLabel: [item.availability_text || ({available:'Available', unavailable:'Currently unavailable', inquiry:'Available upon inquiry.'})[item.availability], formatPrice(item)].filter(Boolean).join(' · ') })),
     };
   }, [snapshot]);
-  if (!content) return <main className="section" aria-busy={!error}><p role="status">{error || 'Loading resort information…'}</p>{error && <button className="button button--dark" type="button" onClick={() => { setError(''); setRetry(value => value + 1); }}>Try again</button>}</main>;
+  if (!content && !error) return null;
+  if (!content) return <main className="section"><p role="alert">{error}</p><button className="button button--dark" type="button" onClick={() => { setError(''); setRetry(value => value + 1); }}>Try again</button></main>;
   return <ResortContext.Provider value={content}>{children}</ResortContext.Provider>;
 }
