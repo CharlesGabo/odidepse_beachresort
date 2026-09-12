@@ -27,19 +27,39 @@ export default function WeatherSection({ onBook }) {
   const [fullscreen, setFullscreen] = useState(false);
   const compactRef = useRef(null);
   const collapseRef = useRef(null);
+  const fullscreenScrollRef = useRef(0);
+  const fullscreenReturnExpandedRef = useRef(false);
 
   const toggleForecast = () => {
+    const scrollPosition = window.scrollY;
     setExpanded(!expanded);
     if (expanded) setFullscreen(false);
-    requestAnimationFrame(() => {
-      (expanded ? compactRef : collapseRef).current?.focus({ preventScroll: true });
-    });
+    if (expanded) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollPosition, left: 0, behavior: 'auto' });
+        compactRef.current?.focus({ preventScroll: true });
+      }));
+    } else {
+      requestAnimationFrame(() => collapseRef.current?.focus({ preventScroll: true }));
+    }
   };
 
   const openFullscreen = () => {
+    fullscreenScrollRef.current = window.scrollY;
+    fullscreenReturnExpandedRef.current = expanded;
     setFullscreen(true);
     setExpanded(true);
     requestAnimationFrame(() => collapseRef.current?.focus({ preventScroll: true }));
+  };
+
+  const closeFullscreen = () => {
+    const returnExpanded = fullscreenReturnExpandedRef.current;
+    setFullscreen(false);
+    setExpanded(returnExpanded);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.scrollTo({ top: fullscreenScrollRef.current, left: 0, behavior: 'auto' });
+      (returnExpanded ? collapseRef : compactRef).current?.focus({ preventScroll: true });
+    }));
   };
 
   useEffect(() => {
@@ -47,9 +67,7 @@ export default function WeatherSection({ onBook }) {
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = event => {
       if (event.key !== 'Escape') return;
-      setFullscreen(false);
-      setExpanded(false);
-      requestAnimationFrame(() => compactRef.current?.focus({ preventScroll: true }));
+      closeFullscreen();
     };
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', closeOnEscape);
@@ -100,10 +118,10 @@ export default function WeatherSection({ onBook }) {
       <span className="weather-compact__current"><span className="weather-kicker">Current forecast</span>
         {current ? <><span className="weather-temperature"><span>{Math.round(current.temperature)}<sup>°C</sup></span><span className="weather-symbol" aria-hidden="true">{conditions(current.symbol)[0]}</span></span><span className="weather-compact__condition">{conditions(current.symbol)[1]}</span><small>Forecast for {timeLabel(current.time)} PHT</small></> : <span className="weather-compact__status" role="status">{error ? 'Weather temporarily unavailable' : 'Checking the coastal skies…'}</span>}
       </span>
-      <span className="weather-compact__hint">{error ? 'Open forecast to retry' : 'View 7-day forecast'} <span aria-hidden="true">↗</span></span>
+      <span className="weather-compact__hint">{error ? 'Open forecast to retry' : 'View 7-day forecast'}</span>
     </div>}
     <div id="weather-details" className={`weather-panel${fullscreen ? ' weather-panel--fullscreen' : ''}`} hidden={!expanded} aria-busy={busy} role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? 'San Felipe seven-day weather forecast' : undefined}>
-      <div className="weather-toolbar"><span>{copy.weather["san_felipe_zambales_1"]}<small>{copy.weather["near_odidepse_philippine_time"]}</small></span><div className="weather-toolbar__actions"><button type="button" className="weather-refresh" disabled={busy} onClick={() => refreshRef.current?.()}>{busy ? 'Updating…' : '↻ Refresh'}</button><button ref={collapseRef} type="button" className="weather-refresh" aria-expanded={true} aria-controls="weather-details" onClick={toggleForecast}>{fullscreen ? 'Close ×' : 'Collapse ↑'}</button></div></div>
+      <div className="weather-toolbar"><span>{copy.weather["san_felipe_zambales_1"]}<small>{copy.weather["near_odidepse_philippine_time"]}</small></span><div className="weather-toolbar__actions"><button type="button" className="weather-refresh" disabled={busy} onClick={() => refreshRef.current?.()}>{busy ? 'Updating…' : '↻ Refresh'}</button>{!fullscreen && <button type="button" className="weather-refresh" onClick={openFullscreen}>Open fullscreen forecast</button>}<button ref={collapseRef} type="button" className="weather-refresh" aria-expanded={true} aria-controls="weather-details" onClick={fullscreen ? closeFullscreen : toggleForecast}>{fullscreen ? 'Close ×' : 'Collapse ↑'}</button></div></div>
       {error ? <div className="weather-empty" role="status"><span aria-hidden="true">☁</span><h3>A little pause in the forecast.</h3><p>{error}</p><button type="button" className="button button--light" disabled={busy} onClick={() => refreshRef.current?.()}>Try again</button></div> : !forecast ? <div className="weather-empty" role="status"><span aria-hidden="true">☀</span><h3>Checking the coastal skies…</h3><p>Fetching the latest forecast for your stay.</p></div> : <>
         <div className="weather-now"><div><span className="weather-kicker">Current forecast</span><div className="weather-temperature"><span>{Math.round(current.temperature)}<sup>°C</sup></span><span className="weather-symbol" aria-hidden="true">{conditions(current.symbol)[0]}</span></div><h3>{conditions(current.symbol)[1]}</h3><p>Forecast for {timeLabel(current.time)} PHT</p></div><dl><div><dt>Wind</dt><dd>{current.wind} <small>km/h</small></dd></div><div><dt>Humidity</dt><dd>{current.humidity == null ? '—' : `${Math.round(current.humidity)}%`}</dd></div><div><dt>Model updated</dt><dd className="weather-update">{timeLabel(forecast.updatedAt)} PHT</dd></div></dl></div>
         <div className="weather-days" aria-label="Seven day forecast">{forecast.days.map((item, index) => <button type="button" key={item.date} className={`weather-day ${day.date === item.date ? 'is-selected' : ''}`} aria-pressed={day.date === item.date} onClick={() => setSelectedDate(item.date)}><strong>{index === 0 ? 'Today' : localDate(item.date).toLocaleDateString('en-PH', { weekday: 'short', timeZone: 'Asia/Manila' })}</strong><small>{dateLabel(item.date)}</small><span className="weather-day__icon" aria-hidden="true">{conditions(item.symbol)[0]}</span><span className="weather-day__condition">{conditions(item.symbol)[1]}</span><span><b>{Math.round(item.high)}°</b> <span className="weather-low">{Math.round(item.low)}°</span></span><small className="weather-rain">{item.rain} mm rain</small></button>)}</div>

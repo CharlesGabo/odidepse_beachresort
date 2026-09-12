@@ -28,6 +28,13 @@
 .scroll-to-top svg { transform: rotate(-90deg); }
 .scroll-to-top.is-visible { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0) scale(1); }
 @media (hover: hover) { .scroll-to-top:hover { background: var(--coral); transform: translateY(-3px); } }
+@media (min-width: 651px) {
+  .scroll-to-top { right: auto; left: 50%; transform: translate(-50%, 14px) scale(.9); }
+  .scroll-to-top.is-visible { transform: translate(-50%, 0) scale(1); }
+}
+@media (min-width: 651px) and (hover: hover) {
+  .scroll-to-top:hover { transform: translate(-50%, -3px); }
+}
 .hero--groups .hero__content { width: min(1020px, 100%); min-height: max(740px, min(920px, 100svh)); padding-top: 160px; }
 .hero--groups h1 { font-size: clamp(52px, 6.8vw, 98px); line-height: 1; }
 .hero--groups .hero__content > p { max-width: 530px; }
@@ -61,7 +68,7 @@
 .amenity-card ul { margin: 24px 0 0; padding-left: 18px; }
 .amenity-card li + li { margin-top: 12px; }
 .amenity-card li::marker { color: var(--lagoon); }
-.capacity-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.capacity-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; width: min(100%, 1180px); margin-inline: auto; }
 .capacity-card { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 30px 24px; background: var(--foam); border: 1px solid var(--line); border-radius: 6px; }
 .capacity-card h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin: 8px 0 20px; }
 .capacity-card h3 strong { font: 400 clamp(52px, 5vw, 76px)/1 Georgia, serif; letter-spacing: -.05em; }
@@ -217,8 +224,10 @@
   .booking-calendar-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 650px) {
+  .site-shell::before { content: ''; position: fixed; inset: 0 0 auto; z-index: 30; height: env(safe-area-inset-top); background: var(--deep); pointer-events: none; }
   .hero-video-track { width: 600%; animation-duration: 50s; }
-  .site-header.is-scrolled { padding-block: 14px; }
+  .site-header { padding-top: calc(20px + env(safe-area-inset-top)); }
+  .site-header.is-scrolled { padding: calc(14px + env(safe-area-inset-top)) 20px 14px; }
   .site-header .logo { gap: 9px; }
   .site-header .logo small { font-size: 10px; letter-spacing: .12em; }
   .hero--groups .hero__content { min-height: 740px; padding: 145px 22px 105px; justify-content: center; }

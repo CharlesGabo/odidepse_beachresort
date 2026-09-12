@@ -47,6 +47,12 @@
 .weather-toolbar__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .weather-panel { padding: clamp(20px, 4vw, 48px); border-radius: 28px; color: white; background: radial-gradient(ellipse at 90% 0%, #5c8b79 0%, transparent 55%), linear-gradient(125deg, #123e39, #163a35); box-shadow: 0 22px 65px -30px #183b3570; }
 .weather-panel.weather-panel--fullscreen { position: fixed; inset: 0; z-index: 1200; width: 100dvw; max-width: none; height: 100dvh; max-height: none; padding: clamp(24px, 5vw, 72px); border-radius: 0; overflow: auto; }
+@media (max-width: 900px) and (orientation: portrait) {
+  .weather-panel.weather-panel--fullscreen { inset: 50% auto auto 50%; width: 100dvh; height: 100dvw; padding: 18px max(20px, env(safe-area-inset-right)) 18px max(20px, env(safe-area-inset-left)); transform: translate(-50%, -50%) rotate(90deg); transform-origin: center; }
+  .weather-panel.weather-panel--fullscreen .weather-toolbar { align-items: center; flex-direction: row; }
+  .weather-panel--fullscreen .weather-now { align-items: center; flex-direction: row; gap: 24px; padding: 22px 0 18px; }
+  .weather-panel--fullscreen .weather-now dl { width: auto; max-width: 340px; }
+}
 .weather-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .weather-toolbar > span { font-size: 14px; font-weight: 600; }
 .weather-toolbar small { display: block; margin-top: 7px; font-size: 11px; font-weight: 400; color: #d2e1da; }
@@ -145,4 +151,39 @@
   .review-card footer strong { font-size: 10px; }
   .weather-toolbar > span,
   .weather-toolbar small { font-size: 14px; }
+}
+
+@media (max-width: 900px) and (orientation: portrait), (max-height: 650px) and (orientation: landscape) {
+  .weather-panel.weather-panel--fullscreen { box-sizing: border-box; display: flex; flex-direction: column; padding: 10px 14px; overflow: hidden; }
+  .weather-panel.weather-panel--fullscreen .weather-toolbar { flex: 0 0 auto; align-items: center; flex-direction: row; gap: 10px; min-height: 34px; }
+  .weather-panel--fullscreen .weather-toolbar > span { font-size: 11px; }
+  .weather-panel--fullscreen .weather-toolbar small { margin-top: 2px; font-size: 8px; }
+  .weather-panel--fullscreen .weather-toolbar__actions { flex-wrap: nowrap; gap: 5px; }
+  .weather-panel--fullscreen .weather-refresh { min-height: 32px; padding-inline: 10px; font-size: 9px; }
+  .weather-panel--fullscreen .weather-now { flex: 0 0 auto; align-items: center; flex-direction: row; gap: 18px; padding: 7px 0; }
+  .weather-panel--fullscreen .weather-kicker { font-size: 8px; }
+  .weather-panel--fullscreen .weather-temperature { gap: 8px; }
+  .weather-panel--fullscreen .weather-temperature > span:first-child { font-size: 44px; line-height: 1; }
+  .weather-panel--fullscreen .weather-temperature sup { font-size: 14px; }
+  .weather-panel--fullscreen .weather-symbol { font-size: 32px; }
+  .weather-panel--fullscreen .weather-now h3 { font-size: 15px; }
+  .weather-panel--fullscreen .weather-now p { margin: 3px 0 0; font-size: 8px; }
+  .weather-panel--fullscreen .weather-now dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; width: auto; max-width: none; }
+  .weather-panel--fullscreen .weather-now dl > div:last-child { grid-column: auto; padding-bottom: 0; }
+  .weather-panel--fullscreen .weather-now dt { margin-bottom: 2px; font-size: 8px; }
+  .weather-panel--fullscreen .weather-now dd { font-size: 16px; }
+  .weather-panel--fullscreen .weather-now dd small { font-size: 8px; }
+  .weather-panel--fullscreen .weather-now dd.weather-update { font-size: 9px; }
+  .weather-panel--fullscreen .weather-days { flex: 1 1 auto; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; min-height: 0; padding: 0; overflow: hidden; }
+  .weather-panel--fullscreen .weather-day { gap: 3px; min-height: 0; padding: 5px 3px; border-radius: 8px; }
+  .weather-panel--fullscreen .weather-day > strong { font-size: 9px; }
+  .weather-panel--fullscreen .weather-day small { font-size: 7px; }
+  .weather-panel--fullscreen .weather-day__icon { margin: 0; font-size: 21px; }
+  .weather-panel--fullscreen .weather-day__condition { min-height: 18px; font-size: 8px; line-height: 1.1; }
+  .weather-panel--fullscreen .weather-rain { margin-top: 0; }
+  .weather-panel--fullscreen .weather-selection { flex: 0 0 auto; align-items: center; flex-direction: row; gap: 12px; margin-top: 6px; padding-top: 6px; }
+  .weather-panel--fullscreen .weather-selection strong { font-size: 10px; }
+  .weather-panel--fullscreen .weather-selection p { margin: 2px 0 0; font-size: 8px; line-height: 1.2; }
+  .weather-panel--fullscreen .weather-selection .button { width: auto; min-height: 32px; padding-inline: 12px; font-size: 9px; }
+  .weather-panel--fullscreen .weather-empty { padding: 20px 0; }
 }
