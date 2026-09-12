@@ -80,8 +80,10 @@
 .guest-photo-strip img { height: 100%; object-fit: cover; transition: transform .5s; }.guest-photo-strip button:hover img { transform: scale(1.05); }
 .guest-photo-strip button > span { position: absolute; right: 15px; top: 15px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: white; background: #123e39c9; }
 .guest-album-note { display: flex; justify-content: space-between; gap: 15px; margin-top: 12px; color: #59685f; font-size: 10px; }.guest-album-note > span:first-child { font: italic 17px Georgia, serif; }
-.review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 60px; }
-.review-card { display: flex; flex-direction: column; padding: 30px; border: 1px solid #d8d1c4; border-radius: 16px; background: #f8f5ee; }
+.review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 60px; perspective: 1000px; }
+.review-card { position: relative; display: flex; flex-direction: column; padding: 30px; border: 1px solid #d2cbbd; border-bottom-color: #aba596; border-radius: 16px; background: linear-gradient(145deg, #fffdf7 0%, #eee8dc 100%); box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9d2c5, 0 5px 0 #b8b1a3, 0 12px 22px #173d3520; transition: transform .3s ease, box-shadow .3s ease; }
+.review-card::after { content: ''; position: absolute; inset: 1px 1px auto; height: 34%; border-radius: 14px 14px 45% 45%; background: linear-gradient(180deg, #ffffff8c, transparent); pointer-events: none; }
+.review-card > * { position: relative; z-index: 1; }
 .review-card__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }.review-card__top > span { color: #a84e38; font-size: 16px; letter-spacing: .06em; }.review-card__top small { color: var(--muted); font-size: 9px; }
 .review-card blockquote { flex: 1; margin: 25px 0 35px; font: 400 22px/1.5 Georgia, serif; letter-spacing: -.02em; }
 .review-card footer { display: flex; gap: 12px; align-items: center; }.review-avatar { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: #e7e4d8; font: italic 22px Georgia, serif; }.review-card footer strong { font-size: 11px; }.review-card footer small { display: block; margin-top: 6px; color: var(--muted); font-size: 9px; }
@@ -92,12 +94,15 @@
   .weather-days { grid-template-columns: repeat(7, minmax(105px, 1fr)); overflow-x: auto; padding-bottom: 12px; scrollbar-width: thin; }
   .mobile-menu { overflow-y: auto; }.mobile-menu nav a { padding: 9px 0; font-size: 27px; }
 }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .review-card:hover { transform: translateY(-5px) rotateX(1.5deg); box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9d2c5, 0 8px 0 #aaa395, 0 18px 30px #173d3530; }
+}
 @media (max-width: 650px) {
   .weather-section--compact { grid-template-columns: minmax(0, 1fr); gap: 30px; }.weather-section--compact > .weather-credit { grid-column: 1; margin-top: -15px; }.weather-compact.weather-panel { max-width: 354px; justify-self: center; padding: 28px; }.weather-compact .weather-temperature > span:first-child { font-size: clamp(72px, 24vw, 94px); }.weather-compact .weather-symbol { font-size: 54px; }.weather-section--expanded .weather-toolbar { align-items: flex-start; flex-direction: column; }
   .floating-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; padding-inline: 3px; }.floating-photo { padding: 5px; --lift: 0px !important; }.floating-photo img, .floating-photo:nth-child(3n + 2) img { height: 190px; }.floating-photo > span { padding: 12px 4px; }.floating-photo strong { font-size: 18px; }.floating-photo small { font-size: 7px; }.floating-photo i { display: none; }
   .gallery-actions { align-items: flex-start; flex-direction: column; }.weather-section { padding-top: 30px; }.weather-panel { border-radius: 20px; }.weather-toolbar > span { font-size: 12px; }.weather-toolbar small { font-size: 10px; }
   .weather-now { align-items: flex-start; flex-direction: column; padding-top: 35px; gap: 20px; }.weather-now dl { grid-template-columns: 1fr 1fr; width: 100%; max-width: none; gap: 20px; }.weather-now dl > div:last-child { padding-bottom: 15px; }.weather-symbol { font-size: 60px; }
-  .weather-selection { align-items: flex-start; flex-direction: column; }.weather-selection .button { width: 100%; }.guest-intro { margin-top: 25px; }.guest-photo-strip button { flex-basis: 230px; height: 280px; }.guest-album-note { flex-direction: column; }.review-grid { grid-template-columns: 1fr; margin-top: 35px; }.review-card { padding: 28px; }.review-card blockquote { font-size: 23px; }
+  .weather-selection { align-items: flex-start; flex-direction: column; }.weather-selection .button { width: 100%; }.guest-intro { margin-top: 25px; }.guest-photo-strip button { flex-basis: 230px; height: 280px; }.guest-album-note { flex-direction: column; }.review-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 35px; padding-bottom: 6px; }.review-card { min-width: 0; padding: 10px 7px; overflow-wrap: anywhere; border-radius: 10px; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9d2c5, 0 3px 0 #b8b1a3, 0 7px 12px #173d3524; }.review-card__top { align-items: flex-start; flex-direction: column; gap: 3px; }.review-card__top > span { font-size: 9px; letter-spacing: 0; }.review-card blockquote { margin: 10px 0 14px; font-size: 12px; line-height: 1.35; }.review-card footer { align-items: flex-start; flex-direction: column; gap: 5px; }.review-avatar { width: 28px; height: 28px; font-size: 15px; }
 }
 @media (prefers-reduced-motion: reduce) { .floating-photo { transform: none; }.weather-day:hover { transform: none; } }
 
@@ -129,6 +134,9 @@
 
 @media (max-width: 650px) {
   .floating-photo small { font-size: 12px; }
+  .review-card__top small,
+  .review-card footer small { font-size: 9px; }
+  .review-card footer strong { font-size: 10px; }
   .weather-toolbar > span,
   .weather-toolbar small { font-size: 14px; }
 }

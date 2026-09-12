@@ -41,8 +41,11 @@
 .amenities { padding-top: 45px; }
 .amenities .eyebrow { display: block; margin-bottom: 24px; }
 .amenity-grid, .activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.amenity-grid { perspective: 1000px; }
 .activity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.amenity-card { padding: clamp(24px, 3vw, 36px); border: 1px solid var(--line); border-radius: 6px; }
+.amenity-card { position: relative; padding: clamp(24px, 3vw, 36px); border: 1px solid #c7cec6; border-bottom-color: #98a79e; border-radius: 10px; background: linear-gradient(145deg, #fffef9 0%, #f2efe5 100%); box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9ddd5, 0 5px 0 #aab5ad, 0 12px 22px #173d3520; transition: transform .3s ease, box-shadow .3s ease; }
+.amenity-card::after { content: ''; position: absolute; inset: 1px 1px auto; height: 38%; border-radius: 8px 8px 45% 45%; background: linear-gradient(180deg, #ffffff8c, transparent); pointer-events: none; }
+.amenity-card > * { position: relative; z-index: 1; }
 .amenity-card > svg { color: var(--lagoon); }
 .amenity-card h3, .activity-card h3 { margin: 20px 0 12px; font: 400 28px/1.15 Georgia, serif; letter-spacing: -.025em; }
 .amenity-card p, .amenity-card li { font-size: 15px; line-height: 1.7; }
@@ -184,6 +187,7 @@
   .booking-choice-card:hover .booking-choice-card__image img { transform: scale(1.04); }
 }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .amenity-card:hover { transform: translateY(-5px) rotateX(1.5deg); box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9ddd5, 0 8px 0 #9caaa1, 0 18px 30px #173d3530; }
   .activity-card:hover { transform: translateY(-5px); box-shadow: 0 20px 36px -22px #183b3540; }
 }
 @media (max-width: 1150px) {
@@ -216,12 +220,27 @@
   .quick-highlights dl > div:nth-child(even) { border-left: 1px solid #ffffff30; }
   .quick-highlights dt { font-size: 16px; }
   .resort-intro.manifesto { min-height: 0; padding-bottom: 40px; }
-  .capacity-grid, .activity-grid { grid-template-columns: 1fr; }
+  .amenity-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-bottom: 6px; }
+  .amenity-grid .amenity-card { min-width: 0; padding: 12px 9px; border-radius: 8px; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9ddd5, 0 3px 0 #aab5ad, 0 7px 12px #173d3524; }
+  .amenity-card h3 { margin: 8px 0 7px; font-size: 15px; line-height: 1.15; overflow-wrap: normal; word-break: normal; hyphens: none; }
+  .amenity-card p, .amenity-card li { font-size: 11px; line-height: 1.45; overflow-wrap: normal; word-break: normal; }
+  .amenity-card ul { margin-top: 10px; padding-left: 12px; }
+  .amenity-card li + li { margin-top: 5px; }
+  .capacity-grid { grid-template-columns: 1fr; }
+  .activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .capacity-card, .capacity-card--group, .capacity-card--exclusive { padding: 28px; }
   .group-highlight__image { height: 300px; }
   .group-highlight__content { padding: 48px 24px; }
   .group-highlight .button { font-size: 12px; padding-inline: 18px; gap: 10px; }
-  .activity-card__body { padding: 26px; }
+  .activity-card__visual { aspect-ratio: 4 / 3; }
+  .activity-card__visual--icon { gap: 8px; }
+  .activity-card__visual--icon svg { width: 44px; height: 44px; }
+  .activity-card__visual--icon span { font-size: 16px; }
+  .activity-card__body { padding: 14px; }
+  .activity-card h3 { margin-bottom: 7px; font-size: 20px; }
+  .activity-card p { margin: 0 0 10px; font-size: 12px; line-height: 1.45; }
+  .activity-availability { font-size: 10px; line-height: 1.4; }
+  .activity-card .text-link { min-height: 36px; margin-top: 6px; font-size: 9px; }
   .booking-form .field { min-width: 0; }
   .booking-modal:has(.booking-experience) { width: calc(100% - 16px); max-height: calc(100dvh - 16px); padding-inline: 18px; }
   .booking-card-grid--stays, .booking-card-grid--activities, .booking-details-grid { grid-template-columns: 1fr; }
