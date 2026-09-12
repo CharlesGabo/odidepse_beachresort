@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import MessengerInbox from './MessengerInbox.jsx';
 import './facebook-automations.css';
 
 const sections = [['message', 'Messenger'], ['comment', 'Comments'], ['alerts', 'Staff alerts'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
 const categories = ['booking', 'rates', 'amenities', 'location', 'complaint', 'general'];
+const VISIBLE_REFRESH_MS = 15000;
+const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
 const stamp = value => value ? value.replace('T', ' ').slice(0, 19) : '—';
 
@@ -102,10 +105,13 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   const [lead, setLead] = useState(null);
   const [draft, setDraft] = useState(null);
   const [editorKey, setEditorKey] = useState(0);
+  const lastRequestKey = useRef('');
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
+    const requestKey = `${section}:${page}`;
+    if (lastRequestKey.current !== requestKey) setLoading(true);
+    lastRequestKey.current = requestKey;
     fetch(`/api/admin/facebook.php?section=${section}&page=${page}`, { signal: controller.signal, headers: { Accept: 'application/json' } })
       .then(async response => {
         if (response.status === 401) { onLogout(); return; }
@@ -116,6 +122,31 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [section, page, refresh, onLogout]);
+
+  useEffect(() => {
+    let timer;
+    let stopped = false;
+    const schedule = () => {
+      const delay = document.visibilityState === 'visible' ? VISIBLE_REFRESH_MS : HIDDEN_REFRESH_MS;
+      timer = window.setTimeout(() => {
+        if (stopped) return;
+        setRefresh(value => value + 1);
+        schedule();
+      }, delay);
+    };
+    const visibilityChanged = () => {
+      window.clearTimeout(timer);
+      if (document.visibilityState === 'visible') setRefresh(value => value + 1);
+      schedule();
+    };
+    document.addEventListener('visibilitychange', visibilityChanged);
+    schedule();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+    };
+  }, []);
 
   const mutate = async payload => {
     if (busy) return false;
@@ -132,7 +163,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   };
   const navigate = value => { setSection(value); setPage(1); setNotice(''); setError(''); setDraft(null); };
   const finishEdit = () => { setDraft(null); setEditorKey(value => value + 1); };
-  const eventSection = ['message', 'comment', 'lead', 'alerts'].includes(section);
+  const eventSection = ['comment', 'lead', 'alerts'].includes(section);
   const connected = data?.connection === 'connected';
 
   return <section className="fb-workspace admin-view" aria-labelledby="facebook-heading">
@@ -143,6 +174,10 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
     {error && <p className="fb-feedback fb-feedback--error" role="alert">{error}</p>}
     {notice && <p className="fb-feedback" role="status">{notice}</p>}
     {loading ? <p role="status">Loading workspace…</p> : data && <>
+      {section === 'message' && <>
+        <MessengerInbox records={data.records} total={data.total} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />} />
+        <Intake kind="message" mutate={mutate} busy={busy} />
+      </>}
       {eventSection && <>{section !== 'alerts' && <Intake key={section} kind={section} mutate={mutate} busy={busy} />}<div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
         {section === 'comment' && <p>New comments appear here with staff attention flags. Acknowledge one by clearing its attention checkbox. Refresh to check for new items.</p>}
         {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />)}
@@ -159,7 +194,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
           {['blocked', 'pending', 'retry_wait'].includes(item.status) && <div className="fb-actions"><button type="button" disabled={busy} onClick={() => mutate({ action: 'cancel_job', id: Number(item.id) })}>Cancel delivery</button></div>}</article>)}
       </>}
       {section === 'audit' && <><h2>Audit log</h2><p>Records changes and processing outcomes without copying private conversations or credentials into the log.</p><div className="fb-panel">{data.records.map(item => <div className="fb-audit-row" key={item.id}><strong>{label(item.action)}</strong><span>{item.entity_type} #{item.entity_id} · {item.actor_id ? `Admin #${item.actor_id}` : 'System'}</span><small>{stamp(item.created_at)}</small></div>)}</div></>}
-      {section !== 'rules' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
+      {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
       {section !== 'rules' && data.total > 25 && <div className="fb-pagination"><button type="button" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {Math.ceil(data.total / 25)}</span><button type="button" disabled={busy || page * 25 >= data.total} onClick={() => setPage(value => value + 1)}>Next</button></div>}
     </>}
     {lead && <ManualBookingModal key={lead.id} open onClose={() => setLead(null)} csrfToken={csrfToken}

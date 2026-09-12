@@ -20,8 +20,28 @@ try {
         if (in_array($section, ['message', 'comment', 'lead', 'alerts'], true)) {
             $where = $section === 'alerts' ? 'e.needs_attention = 1' : 'e.kind = ?';
             $params = $section === 'alerts' ? [] : [$section];
-            $query = $db->prepare('SELECT e.*, b.reference_code FROM facebook_events e LEFT JOIN bookings b ON b.id = e.booking_id WHERE ' . $where . ' ORDER BY e.id DESC LIMIT 25 OFFSET ' . $offset);
+            $query = $db->prepare('SELECT e.*, UNIX_TIMESTAMP(e.received_at) AS received_epoch, b.reference_code FROM facebook_events e LEFT JOIN bookings b ON b.id = e.booking_id WHERE ' . $where . ' ORDER BY e.id DESC LIMIT 25 OFFSET ' . $offset);
             $query->execute($params); $records = $query->fetchAll();
+            if ($section === 'message' && $records !== []) {
+                $ids = array_column($records, 'id');
+                $replies = $db->prepare("SELECT id, event_id, payload AS body, UNIX_TIMESTAMP(updated_at) AS sent_epoch FROM facebook_jobs WHERE kind = 'reply' AND status = 'succeeded' AND event_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY updated_at, id');
+                $replies->execute($ids);
+                $byEvent = [];
+                foreach ($replies->fetchAll() as $reply) {
+                    $reply['sent_at'] = gmdate('Y-m-d\TH:i:s\Z', (int) $reply['sent_epoch']);
+                    unset($reply['sent_epoch']);
+                    $byEvent[$reply['event_id']][] = $reply;
+                }
+                foreach ($records as &$record) {
+                    // The webhook writes gmdate() text; manual intake uses the DB clock.
+                    // Preserve legacy storage and normalize only the inbox representation.
+                    $record['message_at'] = $record['source'] === 'facebook'
+                        ? str_replace(' ', 'T', $record['received_at']) . 'Z'
+                        : gmdate('Y-m-d\TH:i:s\Z', (int) $record['received_epoch']);
+                    $record['sent_replies'] = $byEvent[$record['id']] ?? [];
+                }
+                unset($record);
+            }
             $count = $db->prepare('SELECT COUNT(*) FROM facebook_events e WHERE ' . $where); $count->execute($params); $total = (int) $count->fetchColumn();
         } elseif ($section !== 'rules') {
             $tables = ['drafts' => 'facebook_drafts', 'jobs' => 'facebook_jobs', 'audit' => 'facebook_audit'];
