@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import AdminApp from './AdminApp.jsx';
+import StayCapacityCard from './StayCapacityCard.jsx';
+import { stayPhotoSource } from './StayPhotos.jsx';
 import ResortGallery, { GuestStories } from './ResortGallery.jsx';
 import WeatherSection from './WeatherSection.jsx';
 import './guest-features.css';
@@ -277,7 +279,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-card-grid booking-card-grid--stays">
             {stays.map((stay, index) => {
               const inputId = `booking-stay-${stay.id}`;
-              const photo = roomPhotos[index % roomPhotos.length];
+              const photo = stay.photos?.length ? { src: stayPhotoSource(stay.photos[0]), alt: stay.name } : roomPhotos[index % roomPhotos.length];
               const unitCount = stayInventoryCount(stay);
               return <label className={`booking-choice-card ${selectedStay === String(stay.id) ? 'is-selected' : ''}`} htmlFor={inputId} key={stay.id}>
                 <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => { setSelectedStay(String(stay.id)); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
@@ -380,6 +382,7 @@ function PublicSite() {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedMessage, setSelectedMessage] = useState('');
   const [selectedService, setSelectedService] = useState('');
+  const [stayPhotoStep, setStayPhotoStep] = useState(0);
   const activityCards = experiences.some(item => /\bufo\b/i.test(item.title)) ? experiences : [...experiences, {
     id: 'ufo-inquiry', title: 'UFO', icon: 'wave', photo: null,
     image_caption: 'A little more adventure',
@@ -400,6 +403,14 @@ function PublicSite() {
     updateHeader();
     window.addEventListener('scroll', updateHeader, { passive: true });
     return () => window.removeEventListener('scroll', updateHeader);
+  }, []);
+
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setStayPhotoStep(step => step + 1);
+    }, 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -438,11 +449,7 @@ function PublicSite() {
       </section>
       <section className="stays section" id="stays" aria-labelledby="stays-title">
         <div className="section-heading" data-reveal><div><div className="section-label"><span>02</span>{copy.stays["rooms_group_stays"]}</div><h2 id="stays-title">{copy.stays["room_for"]}<br /><em>{copy.stays["your_crew"]}</em></h2></div><p>{copy.stays["from_5_guest_rooms_to_an_exclusive_building_for_88_100_guests_tel"]}</p></div>
-        <div className="capacity-grid">{stays.map(stay => <article className={`capacity-card ${stay.featured ? 'capacity-card--group' : ''} ${stay.exclusive ? 'capacity-card--exclusive' : ''}`} key={stay.id} data-reveal>
-          {stay.badge && <span className="capacity-badge">{stay.badge}</span>}
-          <h3><strong>{stay.capacity}</strong><span>{copy.stays["guests"]}</span></h3><p className="capacity-detail">{stay.detail}</p><p>{stay.description}</p>
-          <button className={`text-link ${stay.exclusive ? 'text-link--light' : ''}`} type="button" onClick={() => openBooking(stay.id)} aria-label={`Inquire about ${stay.name}`}>{stay.featured || stay.exclusive ? copy.stays.group_cta : copy.stays.room_cta} <Icon name="arrow" size={17} /></button>
-        </article>)}</div><p className="capacity-note">{copy.stays["room_counts_describe_accommodation_options_not_live_availability_"]}</p>
+        <div className="capacity-grid">{stays.map(stay => <StayCapacityCard key={stay.id} stay={stay} copy={copy.stays} photoStep={stayPhotoStep} onBook={() => openBooking(stay.id)} />)}</div><p className="capacity-note">{copy.stays["room_counts_describe_accommodation_options_not_live_availability_"]}</p>
       </section>
       <ResortGallery />
       <section className="group-highlight" aria-labelledby="group-title">

@@ -199,4 +199,12 @@ If a critical release check fails:
 
 ## 10. End of Cloudflare-preview use
 
+### Stay photos
+
+Stay photo IDs and their order are saved in `resort_stays.details.photos` (JSON); existing records without this key have no assigned photos. No schema migration is required. Admins can assign existing room assets or upload JPEG/PNG/WebP images; the browser converts uploads to JPEG, at most 1920 pixels and 2 MB. PHP requires fileinfo, validates the JPEG dimensions/content type, and accepts authenticated, CSRF-protected uploads only.
+
+Uploaded files live in the ignored `includes/stay-photo-storage/` directory, protected by the existing denial of direct access to `includes/`. Make this directory writable by PHP on hosting. Back it up alongside the database and preserve it during releases. Deploy the new PHP endpoints along with the frontend. Photos are served through `/api/stay-photo.php`; unpublished or unassigned uploads require admin authentication. These API routes use the existing Vite proxy and restricted preview API routing.
+
+Removing a photo from a stay removes its association when saved; the file is retained for recovery. Uploads abandoned without saving are also retained and are admin-only. No automatic filesystem deletion occurs. Verify upload, save, public display, and direct-storage denial before release.
+
 Cloudflare tooling is local-only. It is not uploaded to Z.com and does not need to be removed from the development repository after production launch. It may continue to support isolated previews, provided it never connects to production data.

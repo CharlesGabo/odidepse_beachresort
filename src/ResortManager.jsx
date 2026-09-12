@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatPrice } from './ResortContent.jsx';
 import { photoAssets } from './resortPhotos.js';
+import { StayPhotoEditor } from './StayPhotos.jsx';
 import './resort-admin.css';
 
 const label = key => key.replace(/^copy\./, '').replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -28,6 +29,28 @@ function CatalogFields({ value, fields, onChange, photos }) {
   </label>)}</div>;
 }
 
+function StayFields({ value, onChange }) {
+  const changeCapacity = event => {
+    const capacity = event.target.value;
+    const numericCapacity = /^\d+$/.test(capacity) ? Number(capacity) : null;
+    onChange({
+      ...value,
+      capacity,
+      ...(numericCapacity >= 1 && numericCapacity <= 100 ? {
+        min_guests: Math.min(value.min_guests, numericCapacity),
+        max_guests: numericCapacity,
+        guests: numericCapacity,
+      } : {}),
+    });
+  };
+
+  return <div className="resort-editor__fields resort-editor__fields--simple">
+    <label>Name<input type="text" required maxLength="50" placeholder="e.g. 5-guest room" value={value.name} onChange={event=>onChange({...value,name:event.target.value})}/></label>
+    <label>Price (PHP)<input type="number" min="0" max="9999999999.99" step=".01" placeholder="Leave blank for upon inquiry" value={value.price??''} onChange={event=>onChange({...value,price:event.target.value===''?null:event.target.value})}/></label>
+    <label>Guest capacity<input type="text" required maxLength="30" inputMode="numeric" placeholder="e.g. 5, 35+, or 88–100" value={value.capacity} onChange={changeCapacity}/></label>
+  </div>;
+}
+
 export default function ResortManager({ kind, csrfToken, onLogout, bookings = [] }) {
   const [data,setData] = useState(null);
   const [selected,setSelected] = useState(null);
@@ -36,6 +59,8 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
   const [conflict,setConflict] = useState(false);
+  const [photoMode,setPhotoMode] = useState(false);
+  const [uploading,setUploading] = useState(false);
   const editorDialogRef = useRef(null);
   const load = useCallback(async () => {
     setBusy(true);setError('');
@@ -52,18 +77,19 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     const dialog=editorDialogRef.current;
     if(kind==='stays'&&draft&&dialog&&!dialog.open)dialog.showModal();
   },[kind,draft]);
-  const choose = (id, value) => {
+  const choose = (id, value, showPhotos = false) => {
     if(draft && !window.confirm('Discard unsaved edits and open another item?')) return;
-    setSelected(id);setDraft(clone(value));setNotice('');setError('');
+    setPhotoMode(showPhotos);setSelected(id);setDraft(clone(value));setNotice('');setError('');
   };
   const create = () => {
     const fields=data.fields[kind];
     const value=Object.fromEntries(Object.entries(fields).map(([key,spec])=>[key,spec[0]==='boolean'?key==='enabled':spec[0]==='price'?null:spec[0]==='number'?spec[1]:spec[0]==='select'?spec[1][0]:'']));
-    if(kind==='stays'){value.max_guests=100;value.guests=2;}
+    if(kind==='stays'){value.max_guests=100;value.guests=2;value.price_unit='night';value.photos=[];}
     value.availability='inquiry';value.sort_order=data[kind].length;
     choose('new',value);
   };
   const save=async event=>{
+    if(uploading){event.preventDefault();return;}
     event.preventDefault();setBusy(true);setError('');setNotice('');
     try{
       const value=clone(draft);delete value.id;
@@ -74,16 +100,18 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     }catch(exception){setError(exception.message || 'Save failed. Your edits are still here.');}
     finally{setBusy(false);}
   };
-  const closeEditor=()=>{setDraft(null);setSelected(null);setConflict(false);};
+  const closeEditor=()=>{if(uploading||busy)return;setDraft(null);setSelected(null);setConflict(false);};
   const closeEditorFromBackdrop=event=>{
-    if(event.target!==event.currentTarget||busy)return;
+    if(event.target!==event.currentTarget||busy||uploading)return;
     const bounds=event.currentTarget.getBoundingClientRect();
     if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)event.currentTarget.close();
   };
   const editor=draft&&<form className="resort-editor" onSubmit={save}><h3>{selected==='new'?'New '+(kind==='stays'?'stay':'service'):kind==='content'?label(selected):draft.name}</h3>
-    {kind==='content'?<ContentFields value={draft} template={data.templates[selected]} path={selected} onChange={setDraft}/>:<><CatalogFields value={draft} fields={data.fields[kind]} onChange={setDraft} photos={data.sections.photos}/>{kind==='stays'&&<p>Detail accepts {'{room_count}'} and {'{room_word}'} to keep the displayed room count in sync. Guest limits describe the offer; requests are not confirmed reservations.</p>}{draft.asset&&<img className="resort-editor__preview" src={photoAssets[draft.asset]} alt="Selected service image"/>}</>}
+    {error&&<p className="admin-error" role="alert">{error}</p>}
+    {kind==='stays'&&photoMode&&<StayPhotoEditor photos={draft.photos || []} name={draft.name} csrfToken={csrfToken} disabled={busy||uploading} onBusy={setUploading} onChange={photos=>setDraft(current=>({...current,photos}))} />}
+    {kind==='content'?<ContentFields value={draft} template={data.templates[selected]} path={selected} onChange={setDraft}/>:kind==='stays'?(photoMode?null:<StayFields value={draft} onChange={setDraft}/>):<><CatalogFields value={draft} fields={data.fields[kind]} onChange={setDraft} photos={data.sections.photos}/>{draft.asset&&<img className="resort-editor__preview" src={photoAssets[draft.asset]} alt="Selected service image"/>}</>}
     {conflict&&<p role="alert">Reload the latest data before saving. Your unsaved text remains available here to copy.</p>}
-    <div className="resort-editor__actions"><button className="admin-mock-button" disabled={busy||conflict}>{busy?'Saving…':'Save and publish'}</button><button className="admin-mock-button" type="button" disabled={busy} onClick={closeEditor}>Cancel</button></div>
+    <div className="resort-editor__actions"><button className="admin-mock-button" disabled={busy||uploading||conflict}>{uploading?'Uploading…':busy?'Saving…':'Save and publish'}</button><button className="admin-mock-button" type="button" disabled={busy||uploading} onClick={closeEditor}>Cancel</button></div>
   </form>;
   const title=kind==='content'?'Website content':kind==='stays'?'Your stays':'Services';
   return <section className="admin-view resort-manager" aria-label={title}>
@@ -93,9 +121,11 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     {!data?<p role="status">{busy?'Loading resort information…':'Use Reload latest data to try again.'}</p>:<>
       {kind==='content'?<div className="filter-row">{Object.keys(data.sections).map(key=><button type="button" disabled={busy} className={selected===key?'active':''} key={key} onClick={()=>choose(key,data.sections[key])}>{label(key)}</button>)}</div>:<div className="admin-stay-grid">{data[kind].map(record=>{
         const active=bookings.filter(b=>(Number(b.stay_id)===record.id||(!b.stay_id&&b.stay_type===record.name))&&['confirmed','checked_in'].includes(b.status));
-        return <article className="admin-stay-card" key={record.id}><div className="admin-stay-card__top"><span>{record.archived?'Archived':record.enabled?'Published':'Disabled'}</span><i className={record.availability==='unavailable'?'is-busy':''}>{label(record.availability)}</i></div><h3>{record.name}</h3><dl><div><dt>Price</dt><dd>{formatPrice(record)||'Upon inquiry'}</dd></div>{kind==='stays'&&<><div><dt>Capacity</dt><dd>{record.capacity} guests</dd></div><div><dt>Rooms</dt><dd>{record.room_count}</dd></div><div><dt>Active bookings</dt><dd>{active.length}</dd></div></>}</dl><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>choose(record.id,record)}>Edit {record.name}</button></article>;
+        return <article className={`admin-stay-card${kind==='stays'?' admin-stay-card--photos':''}`} key={record.id} onClick={event=>{if(kind==='stays'&&!busy&&!event.target.closest('button'))choose(record.id,record,true);}}>
+          {kind==='stays'&&<button className="admin-stay-photo-link" type="button" disabled={busy} onClick={()=>choose(record.id,record,true)} aria-label={`View and edit photos of ${record.name}`}>View photos</button>}
+          <div className="admin-stay-card__top"><span>{record.archived?'Archived':record.enabled?'Published':'Disabled'}</span><i className={record.availability==='unavailable'?'is-busy':''}>{label(record.availability)}</i></div><h3>{record.name}</h3><dl><div><dt>Price</dt><dd>{formatPrice(record)||'Upon inquiry'}</dd></div>{kind==='stays'&&<><div><dt>Capacity</dt><dd>{record.capacity} guests</dd></div><div><dt>Rooms</dt><dd>{record.room_count}</dd></div><div><dt>Active bookings</dt><dd>{active.length}</dd></div></>}</dl><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>choose(record.id,record)}>Edit {record.name}</button></article>;
       })}</div>}
-      {kind==='stays'&&draft?<dialog ref={editorDialogRef} className="resort-editor-dialog" aria-label={selected==='new'?'Add stay':`Edit ${draft.name}`} onClick={closeEditorFromBackdrop} onClose={closeEditor} onCancel={event=>{if(busy)event.preventDefault();}}><button className="resort-editor-dialog__close" type="button" disabled={busy} aria-label="Close stay editor" onClick={()=>editorDialogRef.current?.close()}>×</button>{editor}</dialog>:editor}
+      {kind==='stays'&&draft?<dialog ref={editorDialogRef} className="resort-editor-dialog" aria-label={selected==='new'?'Add stay':`Edit ${draft.name}`} onClick={closeEditorFromBackdrop} onClose={closeEditor} onCancel={event=>{if(busy||uploading)event.preventDefault();}}><button className="resort-editor-dialog__close" type="button" disabled={busy||uploading} aria-label="Close stay editor" onClick={()=>editorDialogRef.current?.close()}>×</button>{editor}</dialog>:editor}
     </>}
   </section>;
 }

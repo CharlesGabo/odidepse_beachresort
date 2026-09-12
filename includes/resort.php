@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/api.php';
+require_once __DIR__ . '/stay-photos.php';
 
 function resortSeed(): array
 {
@@ -26,6 +27,7 @@ function resortFields(string $kind): array
         'enabled' => ['boolean'], 'archived' => ['boolean'], 'sort_order' => ['number', 0, 10000],
     ];
     if ($kind === 'stays') return $fields + [
+        'photos' => ['photos'],
         'capacity' => ['text', 30], 'min_guests' => ['number', 1, 100], 'max_guests' => ['number', 1, 100],
         'guests' => ['number', 1, 100], 'room_count' => ['number', 0, 1000],
         'detail' => ['text', 300], 'badge' => ['text', 100], 'style' => ['select', ['standard', 'group', 'exclusive']],
@@ -55,6 +57,7 @@ function resortValidateEntity(string $kind, mixed $input): array
     foreach ($fields as $key => $spec) {
         $value = $input[$key] ?? null;
         switch ($spec[0]) {
+            case 'photos': $value = validateStayPhotos($value ?? []); break;
             case 'text': case 'textarea': $value = resortText($value, $key, $spec[1]); break;
             case 'select': if (!in_array($value, $spec[1], true)) resortInvalid($key); break;
             case 'boolean': if (!is_bool($value)) resortInvalid($key); break;
