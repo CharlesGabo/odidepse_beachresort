@@ -16,12 +16,20 @@ function facebookDefaultRules(): array
         'categorize' => true,
         'prepare_replies' => true,
         'notify_comments' => true,
+        'keywords' => [
+            'complaint' => ['complaint', 'refund', 'disappointed', 'disappointing', 'rude', 'unsafe', 'scam', 'reklamo', 'hindi maayos', 'pangit ang serbisyo'],
+            'rates' => ['price', 'rate', 'rates', 'cost', 'how much', 'magkano', 'presyo', 'bayad'],
+            'booking' => ['book', 'booking', 'reserve', 'reservation', 'availability', 'available', 'vacancy', 'mag-book', 'magpareserve', 'may available', 'bakante'],
+            'location' => ['where', 'location', 'address', 'direction', 'directions', 'saan', 'paano pumunta', 'malapit ba', 'direksyon'],
+            'amenities' => ['pool', 'wifi', 'parking', 'amenities', 'kayak', 'jetski', 'activities', 'pet', 'pets', 'may pool', 'may wifi', 'pwede pet'],
+            'general' => [],
+        ],
         'templates' => [
             'booking' => 'Thank you for your inquiry! Please share your preferred dates and number of guests so our team can check availability.',
             'rates' => 'Thank you for asking about our rates. Please share your preferred accommodation, dates, and group size for a quote from our team.',
             'amenities' => 'Thanks for reaching out! Which facilities or activities would you like to know about?',
             'location' => 'Thank you for your interest in Odidepse Beach Resort. Our team will help you with directions.',
-            'complaint' => '',
+            'complaint' => 'We’re sorry to hear about your concern. Please wait for an admin to review your message and assist you as soon as possible.',
             'general' => 'Thank you for contacting Odidepse Beach Resort! How can our team help you?',
         ],
     ];
@@ -30,7 +38,14 @@ function facebookDefaultRules(): array
 function facebookSettings(PDO $db): array
 {
     $row = $db->query('SELECT revision, rules_json FROM facebook_settings WHERE id = 1')->fetch();
-    return ['revision' => $row ? (int) $row['revision'] : 0, 'rules' => $row ? json_decode($row['rules_json'], true, 16, JSON_THROW_ON_ERROR) : facebookDefaultRules()];
+    if (!$row) return ['revision' => 0, 'rules' => facebookDefaultRules()];
+    $saved = json_decode($row['rules_json'], true, 16, JSON_THROW_ON_ERROR);
+    $defaults = facebookDefaultRules();
+    if (!is_array($saved)) $saved = [];
+    $rules = array_replace($defaults, $saved);
+    $rules['templates'] = array_replace($defaults['templates'], is_array($saved['templates'] ?? null) ? $saved['templates'] : []);
+    $rules['keywords'] = array_replace($defaults['keywords'], is_array($saved['keywords'] ?? null) ? $saved['keywords'] : []);
+    return ['revision' => (int) $row['revision'], 'rules' => $rules];
 }
 
 function facebookText(array $data, string $key, int $max, bool $required = true): string
@@ -42,17 +57,17 @@ function facebookText(array $data, string $key, int $max, bool $required = true)
     return trim($value);
 }
 
-function facebookCategory(string $body, bool $enabled = true): string
+function facebookCategory(string $body, bool $enabled = true, ?array $keywords = null): string
 {
     if (!$enabled) return 'general';
-    $patterns = [
-        'complaint' => '/\b(complaint|refund|disappoint\w*|rude|unsafe|scam|reklamo)\b/iu',
-        'rates' => '/\b(price|rates?|cost|magkano|presyo|how much)\b/iu',
-        'booking' => '/\b(book\w*|reserv\w*|availability|available|vacancy)\b/iu',
-        'location' => '/\b(where|location|address|directions?|saan|paano pumunta)\b/iu',
-        'amenities' => '/\b(pool|wifi|parking|amenities|kayak|jetski|activities|pets?)\b/iu',
-    ];
-    foreach ($patterns as $category => $pattern) if (preg_match($pattern, $body)) return $category;
+    $sets = $keywords ?? facebookDefaultRules()['keywords'];
+    foreach (['complaint', 'rates', 'booking', 'location', 'amenities'] as $category) {
+        foreach (is_array($sets[$category] ?? null) ? $sets[$category] : [] as $term) {
+            if (!is_string($term) || trim($term) === '') continue;
+            $phrase = str_replace(' ', '\\s+', preg_quote(trim($term), '/'));
+            if (preg_match('/(?<![\p{L}\p{N}])' . $phrase . '(?![\p{L}\p{N}])/iu', $body)) return $category;
+        }
+    }
     return 'general';
 }
 
@@ -72,7 +87,7 @@ function facebookAudit(PDO $db, ?int $actor, string $action, string $type, ?int 
 
 function facebookPrepareReply(PDO $db, array $event, array $rules, bool $automaticDelivery = false): bool
 {
-    if ($event['kind'] !== 'message' || $event['status'] === 'resolved' || $event['category'] === 'complaint') return false;
+    if ($event['kind'] !== 'message' || $event['status'] === 'resolved') return false;
     $body = $rules['templates'][$event['category']] ?? '';
     if ($body === '') return false;
     $key = 'reply:event:' . $event['id'];

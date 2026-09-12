@@ -12,6 +12,7 @@ $previewUrl = "http://${previewAddress}:${previewPort}"
 $cloudflaredProcess = $null
 $cloudflaredStdout = $null
 $cloudflaredStderr = $null
+$workerProcess = $null
 
 if (-not (Test-Path -LiteralPath $phpExecutable -PathType Leaf)) {
     throw "XAMPP PHP was not found at $phpExecutable."
@@ -60,6 +61,17 @@ try {
     if ($health.status -ne 'success') {
         throw 'The local PHP health check did not return a successful response.'
     }
+
+    & $phpExecutable (Join-Path $PSScriptRoot 'reset-facebook-webhook-state.php')
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The Facebook webhook connection state could not be reset for the new temporary URL.'
+    }
+
+    $workerProcess = Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'facebook-worker-loop.ps1')) `
+        -WindowStyle Hidden `
+        -PassThru
 
     $cloudflaredStdout = [System.IO.Path]::GetTempFileName()
     $cloudflaredStderr = [System.IO.Path]::GetTempFileName()
@@ -122,6 +134,10 @@ try {
     Write-Host 'Odidepse client preview is publicly reachable.' -ForegroundColor Green
     Write-Host $publicUrl -ForegroundColor Yellow
     Write-Host ''
+    Write-Host 'Meta Page webhook callback URL:'
+    Write-Host "$publicUrl/api/facebook-webhook.php" -ForegroundColor Yellow
+    Write-Host 'Update this callback in Meta and click Verify and save.'
+    Write-Host ''
     Write-Host 'Send only the URL shown above to the client.'
     Write-Host 'Keep this window, computer, internet connection, and XAMPP MySQL running.'
     Write-Host 'Press Ctrl+C to stop sharing.'
@@ -137,6 +153,10 @@ try {
 finally {
     if ($cloudflaredProcess -and -not $cloudflaredProcess.HasExited) {
         Stop-Process -Id $cloudflaredProcess.Id -Force
+    }
+
+    if ($workerProcess -and -not $workerProcess.HasExited) {
+        Stop-Process -Id $workerProcess.Id -Force
     }
 
     if ($phpProcess -and -not $phpProcess.HasExited) {

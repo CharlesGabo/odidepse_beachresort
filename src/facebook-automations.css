@@ -37,6 +37,10 @@
 .fb-check input { flex:0 0 18px; width:18px; height:18px; accent-color:#161616; }
 .fb-toggles { display:grid; gap:20px; margin:24px 0 32px; }
 .fb-toggles small { margin-top:4px; }
+.fb-keywords { margin:0 0 28px; padding:16px 18px; border:1px solid var(--line); border-radius:10px; background:#fafafa; }
+.fb-keywords summary { cursor:pointer; font-size:13px; font-weight:700; }
+.fb-keywords summary span { margin-left:8px; color:var(--muted); font-size:11px; font-weight:400; }
+.fb-keywords[open] summary { margin-bottom:14px; }
 .fb-event-fields { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:12px; }
 .fb-event-fields .fb-field { flex:1 1 130px; }
 .fb-workspace .fb-copy { color:#161616; font-weight:700; white-space:pre-wrap; overflow-wrap:anywhere; }

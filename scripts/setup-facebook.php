@@ -20,7 +20,7 @@ try {
         }
         $db->exec($statement);
     }
-    foreach (['facebook_settings', 'facebook_events', 'facebook_drafts', 'facebook_jobs', 'facebook_audit'] as $table) {
+    foreach (['facebook_settings', 'facebook_events', 'facebook_drafts', 'facebook_jobs', 'facebook_audit', 'facebook_webhook_state'] as $table) {
         $count = (int) $db->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn();
         echo $table . ': ' . $count . " rows\n";
     }

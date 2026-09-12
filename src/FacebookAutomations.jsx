@@ -47,7 +47,7 @@ function EventCard({ item, mutate, busy, onConvert, onBooking }) {
       <div className="fb-actions">
         {item.kind === 'comment' && <button type="button" className={item.website_status === 'published' ? '' : 'fb-primary'} disabled={busy} onClick={() => mutate({ action: item.website_status === 'published' ? 'hide_comment' : 'publish_comment', id: Number(item.id), revision: Number(item.revision) })}>{item.website_status === 'published' ? 'Hide from website' : 'Show on website'}</button>}
         {item.kind === 'comment' && <span>{item.website_status === 'published' ? 'Visible on the public homepage' : 'Hidden from the public website'}</span>}
-        {item.kind === 'message' && item.category !== 'complaint' && item.status !== 'resolved' && <button type="button" disabled={busy} onClick={() => mutate({ action: 'prepare_reply', id: Number(item.id), revision: Number(item.revision) })}>Queue template reply</button>}
+        {item.kind === 'message' && item.status !== 'resolved' && <button type="button" disabled={busy} onClick={() => mutate({ action: 'prepare_reply', id: Number(item.id), revision: Number(item.revision) })}>Queue template reply</button>}
         {item.kind === 'lead' && <button type="button" className="fb-primary" disabled={busy} onClick={() => onConvert(item)}>Create booking from lead</button>}
       </div>
     </>}
@@ -61,14 +61,16 @@ function Rules({ settings, mutate, busy }) {
     mutate({ action: 'save_rules', revision: Number(settings.revision), rules: {
       categorize: data.categorize === 'on', prepare_replies: data.prepare_replies === 'on', notify_comments: data.notify_comments === 'on',
       templates: Object.fromEntries(categories.map(category => [category, data[category] || ''])),
+      keywords: Object.fromEntries(categories.map(category => [category, String(data[`keywords_${category}`] || '').split(/[,\n]/).map(value => value.trim()).filter(Boolean)])),
     } });
   }}><fieldset disabled={busy}><h2>Automation rules</h2><p>Rules apply to new items. Review existing inquiries individually after changing these settings.</p>
     <div className="fb-toggles">
       <label className="fb-check"><input type="checkbox" name="categorize" defaultChecked={rules.categorize} /><span>Automatically categorize inquiries <small>Recognizes common English and Filipino keywords. Unmatched inquiries go to General.</small></span></label>
-      <label className="fb-check"><input type="checkbox" name="prepare_replies" defaultChecked={rules.prepare_replies} /><span>Automatically answer new Messenger inquiries <small>Uses the matching approved template when Meta permits a reply. Complaints and categories with a blank template go to staff.</small></span></label>
+      <label className="fb-check"><input type="checkbox" name="prepare_replies" defaultChecked={rules.prepare_replies} /><span>Automatically answer new Messenger inquiries <small>Uses the matching approved template when Meta permits a reply. Complaints receive only an acknowledgement and remain flagged for staff.</small></span></label>
       <label className="fb-check"><input type="checkbox" name="notify_comments" defaultChecked={rules.notify_comments} /><span>Flag new comments for staff <small>Shows an attention badge here. Complaints always create an alert.</small></span></label>
-    </div><h3>Reply templates</h3><p>Leave a template blank to skip that category. Complaints are handled by staff.</p>
-    <div className="fb-grid">{categories.filter(value => value !== 'complaint').map(category => <Field key={category} title={label(category)} name={category} value={rules.templates[category]} maxLength={1000} multiline />)}</div>
+    </div><details className="fb-keywords"><summary>Category keywords <span>Optional advanced settings</span></summary><p>Use commas or new lines. Complaint matches take priority; unmatched messages use General.</p><div className="fb-grid">{categories.filter(category => category !== 'general').map(category => <Field key={category} title={`${label(category)} keywords`} name={`keywords_${category}`} value={(rules.keywords?.[category] || []).join(', ')} maxLength={2500} multiline />)}</div></details>
+    <h3>Reply templates</h3><p>Leave a template blank to skip that category. A complaint reply should only acknowledge the concern and direct it to staff.</p>
+    <div className="fb-grid">{categories.map(category => <Field key={category} title={label(category)} name={category} value={rules.templates[category]} maxLength={1000} multiline />)}</div>
     <button className="fb-primary">{busy ? 'Saving…' : 'Save rules'}</button>
   </fieldset></form>;
 }
@@ -131,10 +133,11 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   const navigate = value => { setSection(value); setPage(1); setNotice(''); setError(''); setDraft(null); };
   const finishEdit = () => { setDraft(null); setEditorKey(value => value + 1); };
   const eventSection = ['message', 'comment', 'lead', 'alerts'].includes(section);
+  const connected = data?.connection === 'connected';
 
   return <section className="fb-workspace admin-view" aria-labelledby="facebook-heading">
     <div className="fb-row fb-heading"><div><span className="fb-eyebrow">Page operations</span><h1 id="facebook-heading">Facebook Automations</h1><p>One workspace for conversations, leads, and content.</p></div><button type="button" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
-    <div className="fb-connection"><span className="fb-badge fb-badge--strong">Not connected</span><div><strong>Your workspace is ready for setup.</strong><p>Manage rules, record inquiries, and prepare drafts now. Live imports, sending, publishing, and delivery retries start after the Facebook connection and webhooks are configured.</p></div></div>
+    <div className="fb-connection"><span className="fb-badge fb-badge--strong">{loading ? 'Checking' : connected ? 'Connected' : 'Not connected'}</span><div><strong>{loading ? 'Checking the Facebook connection…' : connected ? 'Facebook webhook verified.' : 'Your workspace is ready for setup.'}</strong><p>{connected ? 'Meta successfully verified this callback. Keep the active callback URL online and run the delivery worker for automatic replies.' : 'Complete Meta webhook verification to enable live Page activity.'}</p></div></div>
     <div className="fb-stats">{[['message', 'Open inquiries', 'inquiries'], ['alerts', 'Staff alerts', 'alerts'], ['lead', 'Unconverted leads', 'leads'], ['drafts', 'Awaiting approval', 'drafts']].map(([target, title, key]) => <button type="button" disabled={busy} key={key} onClick={() => navigate(target)}><span>{title}</span><strong>{data ? Number(data.counts[key] || 0) : '—'}</strong></button>)}</div>
     <nav className="fb-tabs" aria-label="Facebook automation sections">{sections.map(([key, title]) => <button type="button" key={key} disabled={busy} aria-current={section === key ? 'page' : undefined} className={section === key ? 'active' : ''} onClick={() => navigate(key)}>{title}</button>)}</nav>
     {error && <p className="fb-feedback fb-feedback--error" role="alert">{error}</p>}

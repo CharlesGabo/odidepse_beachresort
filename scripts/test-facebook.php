@@ -8,6 +8,9 @@ function checkFacebook(bool $condition, string $message): void {
 }
 try {
     checkFacebook(facebookCategory('Magkano po ang room?') === 'rates', 'Filipino rates classification');
+    checkFacebook(facebookCategory('Pwede po ba magpareserve?', true, facebookDefaultRules()['keywords']) === 'booking', 'Editable Tagalog booking classification');
+    checkFacebook(facebookCategory('Malapit ba kayo sa bayan?', true, facebookDefaultRules()['keywords']) === 'location', 'Editable Tagalog location classification');
+    checkFacebook(facebookCategory('This is a separate question') === 'general', 'Keyword boundaries avoid partial-word matches');
     checkFacebook(facebookCategory('Booking complaint: refund please') === 'complaint', 'Complaint priority');
     checkFacebook(facebookCategory('Is there availability?', false) === 'general', 'Disabled classification');
     checkFacebook(facebookProfileName(['name' => '  Maria   Santos  ']) === 'Maria Santos', 'Messenger profile name normalization');
@@ -32,13 +35,16 @@ try {
     checkFacebook(facebookPrepareReply($db, ['id' => $webhookId, 'kind' => 'message', 'category' => 'rates', 'status' => 'new'], facebookDefaultRules(), true), 'Automatic reply queueing');
     $query = $db->prepare('SELECT status FROM facebook_jobs WHERE event_id = ?'); $query->execute([$webhookId]);
     checkFacebook($query->fetchColumn() === 'pending', 'Verified webhook reply is ready for delivery');
-    $event['category'] = 'complaint';
-    checkFacebook(!facebookPrepareReply($db, $event, facebookDefaultRules()), 'Complaint handoff');
+    $db->exec("INSERT INTO facebook_events (source,kind,guest_name,body,category,needs_attention) VALUES ('manual','message','Complaint verification','I have a complaint','complaint',1)");
+    $complaintId = (int) $db->lastInsertId();
+    checkFacebook(facebookPrepareReply($db, ['id' => $complaintId, 'kind' => 'message', 'category' => 'complaint', 'status' => 'new'], facebookDefaultRules()), 'Complaint acknowledgement');
+    $query = $db->prepare('SELECT payload FROM facebook_jobs WHERE event_id = ?'); $query->execute([$complaintId]);
+    checkFacebook(str_contains((string) $query->fetchColumn(), 'admin'), 'Complaint acknowledgement directs to admin');
     facebookAudit($db, null, 'verification', 'event', $id);
     $query = $db->prepare('SELECT COUNT(*) FROM facebook_audit WHERE entity_id = ? AND action = ?'); $query->execute([$id, 'verification']);
     checkFacebook((int) $query->fetchColumn() === 1, 'Audit persistence');
     $db->rollBack();
-    echo "Passed: classification, profile names, reply deduplication, complaint handoff, automatic queueing, blocked manual delivery, retry policy, audit persistence. Test rows rolled back.\n";
+    echo "Passed: classification, profile names, reply deduplication, complaint acknowledgement, automatic queueing, blocked manual delivery, retry policy, audit persistence. Test rows rolled back.\n";
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
     fwrite(STDERR, 'Facebook verification failed: ' . ($error instanceof PDOException ? 'Database operation failed.' : $error->getMessage()) . "\n");

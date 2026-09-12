@@ -71,7 +71,7 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
             $body = is_array($message) && is_string($message['text'] ?? null) ? trim($message['text']) : '';
             if ($senderId === '' || $mid === '' || $body === '') continue;
             $receivedAt = webhookTimestamp($messageEvent['timestamp'] ?? null);
-            $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true));
+            $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true), $rules['keywords'] ?? null);
             webhookInsertEvent($db, [
                 'external_id' => $mid, 'page_id' => $pageId, 'sender_id' => $senderId, 'kind' => 'message',
                 'guest_name' => 'Messenger guest', 'body' => mb_substr($body, 0, 4000),
@@ -94,7 +94,7 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
                 }
                 $body = is_string($value['message'] ?? null) ? trim($value['message']) : '';
                 if ($body === '') continue;
-                $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true));
+                $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true), $rules['keywords'] ?? null);
                 if (($value['verb'] ?? '') === 'edited') {
                     $query = $db->prepare("UPDATE facebook_events SET guest_name = ?, body = ?, category = ?, status = 'new', needs_attention = 1, website_status = 'hidden', website_published_at = NULL, revision = revision + 1 WHERE kind = 'comment' AND external_id = ? AND page_id = ?");
                     $query->execute([cleanText($value['from']['name'] ?? 'Facebook guest', 100) ?: 'Facebook guest', mb_substr($body, 0, 4000), $category, $commentId, $pageId]);
@@ -138,6 +138,11 @@ if ($method === 'GET') {
         $challenge = (string) ($_GET['hub_challenge'] ?? $_GET['hub.challenge'] ?? '');
         $expected = webhookEnvironment('META_WEBHOOK_VERIFY_TOKEN');
         if ($mode !== 'subscribe' || $provided === '' || $challenge === '' || !hash_equals($expected, $provided)) webhookPlain('Forbidden', 403);
+        $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? 'unknown'));
+        if (preg_match('/\A[a-z0-9.-]+(?::[0-9]{1,5})?\z/', $host) !== 1 || strlen($host) > 255) $host = 'unknown';
+        $db = database();
+        $db->prepare('INSERT INTO facebook_webhook_state (id, verified_host) VALUES (1, ?) ON DUPLICATE KEY UPDATE verified_host = VALUES(verified_host), verified_at = CURRENT_TIMESTAMP')->execute([$host]);
+        facebookAudit($db, null, 'webhook_verified', 'connection', 1);
         webhookPlain($challenge, 200);
     } catch (Throwable) {
         webhookPlain('Webhook is not configured.', 503);

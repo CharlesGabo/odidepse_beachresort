@@ -55,10 +55,13 @@ The launcher:
 4. Confirms PHP and the database respond.
 5. Creates a temporary `trycloudflare.com` URL.
 6. Waits for Cloudflare DNS publication and verifies the public PHP health endpoint before displaying the URL.
+7. Runs the Facebook delivery worker every five seconds while the preview is open, then stops it with the tunnel.
 
 Send the displayed HTTPS URL to the client and keep the window, computer, internet connection, and XAMPP MySQL running. Press `Ctrl+C` to stop sharing.
 
 Quick Tunnel URLs are random and change after restart. Use preview/test data only. Do not expose production data or treat this tunnel as production hosting.
+
+After every restart, copy the exact Meta Page webhook callback URL printed by the launcher into the Meta app and complete **Verify and save**. The launcher resets the previous verification indicator because the old Quick Tunnel address is no longer current.
 
 Do not copy a URL from Cloudflare startup output or open it before the launcher reports that the client preview is publicly reachable. An early lookup can cache a temporary `NXDOMAIN` response. If Cloudflare creates a URL but does not publish its DNS record, the launcher stops with a service-error message; wait a few minutes and run it again.
 

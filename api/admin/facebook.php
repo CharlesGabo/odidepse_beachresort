@@ -31,7 +31,13 @@ try {
         }
         $counts = $db->query("SELECT SUM(kind = 'message' AND status <> 'resolved') AS inquiries, SUM(needs_attention = 1) AS alerts, SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
         $counts['drafts'] = (int) $db->query("SELECT COUNT(*) FROM facebook_drafts WHERE status = 'pending'")->fetchColumn();
-        jsonResponse(['status' => 'success', 'connection' => 'not_connected', 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page]);
+        $configured = true;
+        foreach (['META_APP_ID', 'META_APP_SECRET', 'META_PAGE_ID', 'META_PAGE_ACCESS_TOKEN', 'META_WEBHOOK_VERIFY_TOKEN', 'META_GRAPH_API_VERSION'] as $name) {
+            if (getenv($name) === false || getenv($name) === '') { $configured = false; break; }
+        }
+        $verifiedAt = $db->query('SELECT verified_at FROM facebook_webhook_state WHERE id = 1')->fetchColumn();
+        $connection = $configured && is_string($verifiedAt) ? 'connected' : 'not_connected';
+        jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page]);
     }
 
     $data = readJsonBody(32768);
@@ -50,8 +56,20 @@ try {
         }
         if (!is_array($rules['templates'] ?? null)) throw new FacebookWorkflowError('Reply templates are required.');
         foreach (facebookCategories() as $category) $validated['templates'][$category] = facebookText($rules['templates'], $category, 1000, false);
-        // Complaints always go to a person; this category is never auto-replied to.
-        $validated['templates']['complaint'] = '';
+        if (!is_array($rules['keywords'] ?? null)) throw new FacebookWorkflowError('Category keywords are required.');
+        foreach (facebookCategories() as $category) {
+            $items = $rules['keywords'][$category] ?? null;
+            if (!is_array($items) || count($items) > 40) throw new FacebookWorkflowError('Use no more than 40 keywords per category.');
+            $validated['keywords'][$category] = [];
+            foreach ($items as $item) {
+                if (!is_string($item)) throw new FacebookWorkflowError('Category keywords must be text.');
+                $item = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $item) ?? ''), 'UTF-8');
+                if ($item === '') continue;
+                if (mb_strlen($item) > 60 || preg_match('/[\x00-\x1F\x7F]/u', $item)) throw new FacebookWorkflowError('Each keyword must be 60 characters or fewer.');
+                $validated['keywords'][$category][$item] = $item;
+            }
+            $validated['keywords'][$category] = array_values($validated['keywords'][$category]);
+        }
         $json = json_encode($validated, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         if ($revision === 0) {
             $db->prepare('INSERT INTO facebook_settings (id, rules_json) VALUES (1, ?)')->execute([$json]);
@@ -73,7 +91,7 @@ try {
         $external = facebookText($data, 'external_id', 190, false);
         if ($external !== '' && !preg_match('/\A[0-9_]+\z/', $external)) throw new FacebookWorkflowError('Facebook IDs may contain digits and underscores only.');
         $settings = facebookSettings($db)['rules'];
-        $category = facebookCategory($body, $settings['categorize']);
+        $category = facebookCategory($body, $settings['categorize'], $settings['keywords'] ?? null);
         $alert = ($kind === 'comment' && $settings['notify_comments']) || $category === 'complaint';
         $db->prepare("INSERT INTO facebook_events (source, external_id, kind, guest_name, email, phone, body, category, needs_attention) VALUES ('manual', ?, ?, ?, ?, ?, ?, ?, ?)")->execute([$external ?: null, $kind, $name, strtolower($email), $phone, $body, $category, (int) $alert]);
         $eventId = (int) $db->lastInsertId();

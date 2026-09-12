@@ -127,7 +127,7 @@ try {
             $db->commit();
             continue;
         }
-        if (!$validSender || !$withinWindow || $job['event_status'] === 'resolved' || $job['category'] === 'complaint') {
+        if (!$validSender || !$withinWindow || $job['event_status'] === 'resolved') {
             workerFailJob($db, (int) $job['id'], 'ineligible_reply');
             continue;
         }

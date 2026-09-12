@@ -9,15 +9,20 @@ if (!is_file($path) || !is_readable($path) || !is_writable($path)) {
 }
 $contents = file_get_contents($path);
 if ($contents === false) { fwrite(STDERR, "Could not read the local environment file.\n"); exit(1); }
-if (preg_match('/^META_WEBHOOK_VERIFY_TOKEN=\S+/m', $contents) === 1) {
+$rotate = in_array('--rotate', $argv, true);
+if (!$rotate && preg_match('/^META_WEBHOOK_VERIFY_TOKEN=\S+/m', $contents) === 1) {
     echo "A local Meta webhook verification token is already configured. Its value was not displayed.\n";
     exit(0);
 }
-$separator = $contents === '' || str_ends_with($contents, "\n") ? '' : PHP_EOL;
-$addition = $separator . PHP_EOL . '# Meta test connection (server-side only)' . PHP_EOL
-    . 'META_WEBHOOK_VERIFY_TOKEN=' . bin2hex(random_bytes(32)) . PHP_EOL;
-if (file_put_contents($path, $addition, FILE_APPEND | LOCK_EX) === false) {
+$tokenLine = 'META_WEBHOOK_VERIFY_TOKEN=' . bin2hex(random_bytes(32));
+if (preg_match('/^META_WEBHOOK_VERIFY_TOKEN=.*$/m', $contents) === 1) {
+    $updated = preg_replace('/^META_WEBHOOK_VERIFY_TOKEN=.*$/m', $tokenLine, $contents, 1);
+} else {
+    $separator = $contents === '' || str_ends_with($contents, "\n") ? '' : PHP_EOL;
+    $updated = $contents . $separator . PHP_EOL . '# Meta test connection (server-side only)' . PHP_EOL . $tokenLine . PHP_EOL;
+}
+if (!is_string($updated) || file_put_contents($path, $updated, LOCK_EX) === false) {
     fwrite(STDERR, "Could not update the local environment file.\n");
     exit(1);
 }
-echo "A random Meta webhook verification token was added to the ignored local .env. Its value was not displayed.\n";
+echo "A random Meta webhook verification token was " . ($rotate ? 'rotated' : 'added') . ". Its value was not displayed.\n";
