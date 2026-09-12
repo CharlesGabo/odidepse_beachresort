@@ -5,8 +5,37 @@ import { stayPhotoSource } from './StayPhotos.jsx';
 import ResortGallery, { GuestStories } from './ResortGallery.jsx';
 import WeatherSection from './WeatherSection.jsx';
 import './guest-features.css';
-import heroImage from './assets/photos/odidepse-hero.png';
+import heroVideoLeft from './assets/photos/videos/AQNCi_7_62Mv61gK2al1G0wsEeWObbCY0mz8j6VCDiUrSlCXt77tyZkEMiOutmuIwNBGxnvbetK9cpIscFAGZmo6n_v5cPZaday73ZagnsPc2g.mp4';
+import heroVideoCenter from './assets/photos/videos/AQNhv0XRkIAq4fPmr3uSGu_XmkB8Lhx3F82TT6Wk6O_GGkpE_L7jhcSrh2FQGp2Zl3KHAy-jbFHSKzVZrF_p8fdTuHG2r9HsD_TYHdb14tjqdw.mp4';
+import heroVideoRight from './assets/photos/videos/AQOkF-xowAbopqdtYWya5DseSgK-cP_49HcfPjtzShRHLTk5x8Yf9AnML9x9a2ioRxXvBM1uRMq-pA2ZUl4TjsjdDYoAbwX1SJgkUBO8jCPNTw.mp4';
 import { ResortProvider, useResort } from './ResortContent.jsx';
+
+const heroVideos = [heroVideoLeft, heroVideoCenter, heroVideoRight];
+const loopingHeroVideos = [...heroVideos, ...heroVideos];
+
+function HeroVideoBackground() {
+  const videoRefs = useRef([]);
+  const started = useRef(false);
+  const startTogether = () => {
+    const videos = videoRefs.current.filter(Boolean);
+    if (started.current || videos.length !== loopingHeroVideos.length || videos.some(video => video.readyState < 2)) return;
+    started.current = true;
+    videos.forEach(video => { video.currentTime = 0; });
+    videos.forEach(video => video.play().catch(() => {}));
+  };
+
+  return <div className="hero-video-wall" aria-hidden="true"><div className="hero-video-track">{loopingHeroVideos.map((src, index) => <video
+      key={`${src}-${index}`}
+      ref={element => { videoRefs.current[index] = element; }}
+      src={src}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+      onCanPlay={startTogether}
+    />)}</div></div>;
+}
 
 function Icon({ name, size = 20 }) {
   const paths = {
@@ -422,13 +451,14 @@ function PublicSite() {
   }, []);
 
   const openBooking = (stay = '', date = '', message = '', service = '') => { setSelectedService(service); setSelectedStay(stay); setSelectedDate(date); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
   return <div className="site-shell" id="top">
     <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">{copy.navigation["experience"]}</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
     <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>{copy.navigation["experience"]}</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
     <main>
       <section className="hero hero--groups" ref={heroRef}>
-        <img src={heroImage} alt="A tropical shoreline with mountains beyond the sea" fetchPriority="high" />
+        <HeroVideoBackground />
         <div className="hero__wash" /><div className="hero__orb hero__orb--one" /><div className="hero__orb hero__orb--two" />
         <div className="hero__content"><span className="eyebrow eyebrow--light hero__eyebrow">{copy.hero["san_felipe_zambales_philippines"]}</span>
           <h1>{copy.hero["your_beach_escape"]}<br /><em>{copy.hero["25_seconds"]}</em><br />{copy.hero["from_the_shore"]}</h1>
@@ -485,6 +515,7 @@ function PublicSite() {
       </section>
       <section className="closing section resort-closing" data-reveal><span className="eyebrow">{copy.closing["the_sea_is_waiting"]}</span><h2>{copy.closing["effortless_fun"]}<br /><em>{copy.closing["a_little_extra"]}</em></h2><p>{copy.closing["because_your_beach_trip_should_be_all_three_from_beach_days_and_j"]}</p><button className="button button--dark" type="button" onClick={() => openBooking()}>{copy.closing["plan_your_stay"]}<Icon name="arrow" /></button></section>
     </main>
+    <button type="button" className={`scroll-to-top${headerScrolled ? ' is-visible' : ''}`} aria-label="Scroll to top" aria-hidden={!headerScrolled} tabIndex={headerScrolled ? 0 : -1} onClick={scrollToTop}><Icon name="arrow" size={20} /></button>
     <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.instagram} aria-label="Instagram"><Icon name="instagram" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
     <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
   </div>;
