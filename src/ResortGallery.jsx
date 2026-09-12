@@ -36,11 +36,25 @@ export default function ResortGallery() {
 export function GuestStories() {
   const { copy, customerPhotos, reviews } = useResort();
   const [index, setIndex] = useState(null);
+  const [facebookComments, setFacebookComments] = useState([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/facebook-comments.php', { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data?.comments && !controller.signal.aborted) setFacebookComments(data.comments); })
+      .catch(error => { if (error.name !== 'AbortError') setFacebookComments([]); });
+    return () => controller.abort();
+  }, []);
+  const publishedComments = facebookComments.map((comment, commentIndex) => ({
+    ...comment,
+    key: `${comment.received_at}-${comment.display_name}-${commentIndex}`,
+    date: new Intl.DateTimeFormat('en-PH', { month: 'short', year: 'numeric' }).format(new Date(comment.received_at.replace(' ', 'T'))),
+  }));
   return <section className="guest-stories" id="guest-stories" aria-labelledby="guest-title"><div className="section">
-    <div className="section-heading"><div><div className="section-label"><span>06</span>{copy.guest_stories["the_good_days_shared"]}</div><h2 id="guest-title">{copy.guest_stories["you_make"]}<br />{copy.guest_stories["the"]}<em>{copy.guest_stories["memories"]}</em></h2></div><div className="guest-intro"><span className="sample-badge">Sample feedback</span><p>Real moments from your photo collection. The names, ratings, and reviews below are fictional examples for this preview, not testimonials from the people pictured.</p></div></div>
+    <div className="section-heading"><div><div className="section-label"><span>06</span>{copy.guest_stories["the_good_days_shared"]}</div><h2 id="guest-title">{copy.guest_stories["you_make"]}<br />{copy.guest_stories["the"]}<em>{copy.guest_stories["memories"]}</em></h2></div><div className="guest-intro"><span className="sample-badge">{publishedComments.length ? 'Guest comments' : 'Sample feedback'}</span><p>{publishedComments.length ? 'Comments shared on our Facebook Page and selected by the resort team for this website.' : 'Real moments from your photo collection. The names, ratings, and reviews below are fictional examples for this preview, not testimonials from the people pictured.'}</p></div></div>
     <div className="guest-photo-strip" aria-label="Guest photo album">{customerPhotos.map((photo, i) => <button type="button" key={photo.src} onClick={() => setIndex(i)} aria-label={`View ${photo.alt}`}><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><span aria-hidden="true">↗</span></button>)}</div>
     <div className="guest-album-note"><span>{copy.guest_stories["little_moments_lasting_memories"]}</span><span>{copy.guest_stories["swipe_or_scroll_to_explore"]}</span></div>
-    <div className="review-grid">{reviews.map(review => <article className="review-card" key={review.name}><div className="review-card__top"><span aria-label={`${review.rating} out of 5 stars`}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span><small>Sample review</small></div><blockquote>“{review.quote}”</blockquote><footer><span className="review-avatar" aria-hidden="true">{review.name.charAt(0)}</span><div><strong>{review.name}</strong><small>{review.type} · Fictional guest</small></div></footer></article>)}</div>
+    <div className="review-grid">{publishedComments.length ? publishedComments.map(comment => <article className="review-card" key={comment.key}><div className="review-card__top"><span>Facebook</span><small>Published comment</small></div><blockquote>“{comment.body}”</blockquote><footer><span className="review-avatar" aria-hidden="true">{comment.display_name.charAt(0)}</span><div><strong>{comment.display_name}</strong><small>Facebook guest · {comment.date}</small></div></footer></article>) : reviews.map(review => <article className="review-card" key={review.name}><div className="review-card__top"><span aria-label={`${review.rating} out of 5 stars`}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span><small>Sample review</small></div><blockquote>“{review.quote}”</blockquote><footer><span className="review-avatar" aria-hidden="true">{review.name.charAt(0)}</span><div><strong>{review.name}</strong><small>{review.type} · Fictional guest</small></div></footer></article>)}</div>
     <PhotoViewer photos={customerPhotos} index={index} onClose={() => setIndex(null)} onChange={setIndex} />
   </div></section>;
 }

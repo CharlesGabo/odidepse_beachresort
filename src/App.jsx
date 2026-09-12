@@ -124,9 +124,10 @@ function CompactTimePicker({ label, value, onChange }) {
   </div>;
 }
 
-function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved }) {
+function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved, initialGuest = null, facebookLeadId = null }) {
   const { copy, stays, services, roomPhotos } = useResort();
   const dialogRef = useRef(null);
+  const leadPhoneDigits = String(initialGuest?.phone || '').replace(/\D/g, '').replace(/^(?:63|0)(?=\d{10}$)/, '');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [selectedStay, setSelectedStay] = useState(String(initialStay));
   const [selectedActivities, setSelectedActivities] = useState(initialService ? [String(initialService)] : []);
@@ -282,6 +283,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       return;
     }
     body.guests = Number(body.guests);
+    if (manual && facebookLeadId) body.facebook_lead_id = facebookLeadId;
     body.stay_id = selectedStay ? Number(selectedStay) : null;
     const soleActivityId = selectedActivities.length === 1 ? Number(selectedActivities[0]) : null;
     body.service_id = Number.isInteger(soleActivityId) ? soleActivityId : null;
@@ -380,9 +382,9 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
         <section className="booking-step booking-step--details field--wide" aria-labelledby="guest-details-title">
           <div className="booking-step__heading"><span>04</span><div><h3 id="guest-details-title">{manual ? 'Guest details' : 'Tell us about your group'}</h3><p>{manual ? 'Enter the guest’s contact information, party size, and any booking notes.' : (selectedStayDetails ? `${selectedStayDetails.name} is selected. Add your contact details to request availability.` : 'Select a stay above, then add your contact details.')}</p></div></div>
           <div className="booking-details-grid">
-            <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
-            <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
-            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
+            <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" defaultValue={initialGuest?.guest_name || ''} autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
+            <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" defaultValue={initialGuest?.email || ''} autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
+            <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" defaultValue={/^\d{10}$/.test(leadPhoneDigits) ? leadPhoneDigits : ''} autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
             <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={selectedStayDetails?.guests ?? 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>

@@ -25,7 +25,7 @@
 .operations-empty { margin: 20px 0 8px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .admin-main > .booking-calendar,.admin-main > .resort-manager,.admin-main > .guest-directory { margin-top: 32px; }
 @media (max-width: 900px) {
-  .admin-shell .admin-mobile-nav { grid-template-columns: repeat(6,minmax(0,1fr)); }
+  .admin-shell .admin-mobile-nav { grid-template-columns: repeat(7,minmax(0,1fr)); }
   .operations-add-booking--desktop { display: none; }
   .operations-add-booking--mobile { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: -8px; }
   .operations-today { grid-template-columns: minmax(0,1fr); gap: 8px; }

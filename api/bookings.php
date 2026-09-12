@@ -9,6 +9,11 @@ require_once dirname(__DIR__) . '/includes/resort.php';
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
 $data = readJsonBody();
+$facebookLeadId = $manualBooking ? ($data['facebook_lead_id'] ?? null) : null;
+if ($facebookLeadId !== null && (!is_int($facebookLeadId) || $facebookLeadId < 1)) {
+    jsonResponse(['status' => 'error', 'message' => 'Choose a valid Facebook lead.'], 422);
+}
+if ($facebookLeadId !== null) require_once dirname(__DIR__) . '/includes/facebook-automations.php';
 
 $name = cleanText($data['guest_name'] ?? null, 100);
 $email = cleanText($data['email'] ?? null, 190);
@@ -53,6 +58,15 @@ try {
     }
 
     $db->beginTransaction();
+    if ($facebookLeadId !== null) {
+        $leadQuery = $db->prepare("SELECT id, booking_id FROM facebook_events WHERE id = ? AND kind = 'lead' FOR UPDATE");
+        $leadQuery->execute([$facebookLeadId]);
+        $lead = $leadQuery->fetch();
+        if (!$lead || $lead['booking_id'] !== null) {
+            $db->rollBack();
+            jsonResponse(['status' => 'error', 'message' => 'This lead was already converted or is no longer available. Refresh the automations page.'], 409);
+        }
+    }
     // Serialize offer resolution with content saves. Names are historical snapshots.
     $db->query('SELECT revision FROM resort_revision WHERE id = 1 LOCK IN SHARE MODE')->fetchColumn();
     $stayRecord = null;
@@ -72,6 +86,11 @@ try {
     $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayRecord['name'] ?? null, $message ?: null, $stayRecord['id'] ?? null, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
+    if ($facebookLeadId !== null) {
+        $bookingId = (int) $db->lastInsertId();
+        $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);
+        facebookAudit($db, (int) $_SESSION['admin_user']['id'], 'lead_converted', 'event', $facebookLeadId);
+    }
     $db->commit();
     jsonResponse(['status' => 'success', 'reference' => $reference], 201);
 } catch (Throwable $error) {

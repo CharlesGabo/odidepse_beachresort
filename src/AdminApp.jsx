@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ResortManager from './ResortManager.jsx';
+import FacebookAutomations from './FacebookAutomations.jsx';
 import { dashboardData } from './dashboardData.js';
 
 const statusLabels = {
@@ -208,10 +209,12 @@ const navItems = [
   { id: 'guests', label: 'Guests', icon: 'users' },
   { id: 'services', label: 'Services', icon: 'home' },
   { id: 'content', label: 'Website Content', icon: 'home' },
+  { id: 'facebook', label: 'Facebook Automations', icon: 'automation' },
 ];
 
 function AdminIcon({ name }) {
   const paths = {
+    automation: <><rect x="3" y="4" width="18" height="13" rx="3" /><path d="m7 17-2 4 7-4M8 9h8M8 12h5" /></>,
     overview: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
     home: <><path d="m3 11 9-8 9 8v10H3Z" /><path d="M9 21v-7h6v7" /></>,
@@ -888,6 +891,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
+        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} onBookingSaved={load} onOpenBooking={id => { navigate('bookings'); setNavigationIntent({ bookingId: id }); }} />}
       </>}
     </main>
   </div>;
