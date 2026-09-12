@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ResortManager from './ResortManager.jsx';
+import { dashboardData } from './dashboardData.js';
 
 const statusLabels = {
   pending: 'New request',
@@ -186,10 +187,11 @@ function buildOccupancySegments(days, bookings) {
 }
 
 function getBookingNotes(message = '') {
-  const arrival = message.match(/Preferred arrival:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
-  const departure = message.match(/Preferred departure:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
-  const activities = message.match(/Requested rental activities:\s*([^\n]+)/i)?.[1]?.trim() || null;
-  const note = message
+  const text = typeof message === 'string' ? message : '';
+  const arrival = text.match(/Preferred arrival:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
+  const departure = text.match(/Preferred departure:\s*(\d{1,2}:\d{2})/i)?.[1] || null;
+  const activities = text.match(/Requested rental activities:\s*([^\n]+)/i)?.[1]?.trim() || null;
+  const note = text
     .replace(/Preferred arrival:\s*\d{1,2}:\d{2}/gi, '')
     .replace(/Preferred departure:\s*\d{1,2}:\d{2}/gi, '')
     .replace(/Requested rental activities:\s*[^\n]+/gi, '')
@@ -200,6 +202,7 @@ function getBookingNotes(message = '') {
 }
 
 const navItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'overview' },
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'stays', label: 'Stays', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
@@ -209,6 +212,7 @@ const navItems = [
 
 function AdminIcon({ name }) {
   const paths = {
+    overview: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
     home: <><path d="m3 11 9-8 9 8v10H3Z" /><path d="M9 21v-7h6v7" /></>,
     users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></>,
@@ -271,8 +275,8 @@ function AdminLogin({ onLogin }) {
 function StatCards({ stats }) {
   return <section className="admin-stats" aria-label="Reservation summary">
     <article><span>New requests</span><strong>{stats.pending.toString().padStart(2, '0')}</strong><small>Awaiting your reply</small></article>
-    <article><span>Confirmed stays</span><strong>{stats.confirmed.toString().padStart(2, '0')}</strong><small>Upcoming arrivals</small></article>
-    <article><span>Expected guests</span><strong>{stats.guests.toString().padStart(2, '0')}</strong><small>Across active stays</small></article>
+    <article><span>Arriving today</span><strong>{stats.arrivals.length.toString().padStart(2, '0')}</strong><small>Confirmed check-ins</small></article>
+    <article><span>Guests checked in</span><strong>{stats.guests.toString().padStart(2, '0')}</strong><small>Currently staying</small></article>
   </section>;
 }
 
@@ -619,7 +623,7 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   </dialog>;
 }
 
-function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved }) {
+function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent }) {
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
@@ -628,6 +632,21 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const [highlightedCalendarBookingId, setHighlightedCalendarBookingId] = useState(null);
   const highlightTimerRef = useRef(null);
   const calendarHighlightTimerRef = useRef(null);
+  useEffect(() => {
+    if (!navigationIntent) return;
+    setFilter(navigationIntent.status || 'all');
+    setQuery('');
+    setManualBookingOpen(Boolean(navigationIntent.openManualBooking));
+    const id = navigationIntent.bookingId ? String(navigationIntent.bookingId) : null;
+    if (id) setHighlightedBookingId(id);
+    const timer = window.setTimeout(() => {
+      const target = id ? document.getElementById(`booking-${id}`) : document.getElementById('bookings-heading');
+      if (id) target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: id ? 'center' : 'start' });
+    }, 0);
+    if (id) highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [navigationIntent]);
   const visible = useMemo(() => {
     const todayKey = calendarDateKey(new Date());
     return bookings.filter(item => (
@@ -750,10 +769,38 @@ function GuestsView({ bookings }) {
   </section>;
 }
 
-function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
+function OperationsDashboard({ bookings, notice, setNotice, onOpenBookings }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const data = useMemo(() => dashboardData(bookings, now), [bookings, now]);
+  const list = (items, empty, departure = false, attention = false) => items.length ? <div className="operations-list">{items.map(booking => {
+    const schedule = getBookingNotes(booking.message);
+    const reason = 'Awaiting your reply';
+    return <button type="button" className="operations-booking" key={booking.id} onClick={() => onOpenBookings({ bookingId: booking.id })}>
+      <span><strong>{booking.guest_name || 'Guest'}</strong><small>{booking.reference_code} · {booking.stay_type || booking.service_name || 'Flexible stay'}</small></span>
+      <span><span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span><small>{attention ? reason : `${formatBookingDate(departure ? booking.check_out : booking.check_in, true)} · ${formatBookingTime(departure ? schedule.departure : schedule.arrival) || 'Time not set'}`}</small></span>
+      <AdminIcon name="arrow" />
+    </button>;
+  })}</div> : <p className="operations-empty">{empty}</p>;
+  return <section className="operations-dashboard admin-view" aria-labelledby="dashboard-heading">
+    <div className="admin-view__heading"><div><h2 id="dashboard-heading">Dashboard</h2><p>{formatBookingDate(data.today)}</p></div><button type="button" className="admin-mock-button operations-add-booking operations-add-booking--desktop" onClick={() => onOpenBookings({ openManualBooking: true })}>+ Add booking</button></div>
+    {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
+    <StatCards stats={data} />
+    <button type="button" className="admin-mock-button operations-add-booking operations-add-booking--mobile" onClick={() => onOpenBookings({ openManualBooking: true })}>+ Add booking</button>
+    <section className="operations-panel" aria-labelledby="attention-heading"><div className="operations-panel__heading"><h3 id="attention-heading">Needs attention <span>{data.attention.length}</span></h3><button type="button" className="admin-mock-button" onClick={() => onOpenBookings({ status: 'pending' })}>View all pending</button></div>{list(data.attention, 'You’re all caught up. No bookings need attention.', false, true)}</section>
+    <section className="operations-panel" aria-labelledby="today-heading"><h3 id="today-heading">Today</h3><div className="operations-today"><section><h4>Arriving · {data.arrivals.length}</h4>{list(data.arrivals, 'No confirmed arrivals scheduled today.')}</section><section><h4>Checked In · {data.checkedIn.length}</h4>{list(data.checkedIn, 'No guests are currently checked in.')}</section><section><h4>Check Out · {data.departures.length}</h4>{list(data.departures, 'No checkouts scheduled today.', true)}</section></div></section>
+    <section className="operations-panel" aria-labelledby="week-heading"><h3 id="week-heading">Next 7 days</h3><p className="operations-caption">Upcoming check-ins from tomorrow through the next seven days.</p>{list(data.upcoming, 'No arrivals scheduled for the next seven days.')}</section>
+  </section>;
+}
+
+function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [bookings, setBookings] = useState([]);
   const [accommodations, setAccommodations] = useState([]);
-  const [activeView, setActiveView] = useState('bookings');
+  const [activeView, setActiveView] = useState('dashboard');
+  const [navigationIntent, setNavigationIntent] = useState(null);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -774,12 +821,6 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
-
-  const stats = useMemo(() => ({
-    pending: bookings.filter(booking => booking.status === 'pending').length,
-    confirmed: bookings.filter(booking => booking.status === 'confirmed').length,
-    guests: bookings.filter(booking => ['confirmed', 'checked_in'].includes(booking.status)).reduce((sum, booking) => sum + Number(booking.guests), 0),
-  }), [bookings]);
 
   const updateStatus = async (id, status) => {
     try {
@@ -803,6 +844,7 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
   };
 
   const navigate = view => {
+    setNavigationIntent(null);
     setActiveView(view);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -815,11 +857,11 @@ function Dashboard({ user, csrfToken, onLogout, ManualBookingModal }) {
       <button type="button" title="Sign out" onClick={logout}><AdminIcon name="logout" /><span className="admin-sidebar__label">Sign out</span></button>
     </aside>
     <main className="admin-main">
-      <header><div><span className="admin-kicker">{activeView === 'bookings' ? 'Reservations overview' : ['stays','services','content'].includes(activeView) ? 'Property overview' : 'Guest relationships'}</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>
+      {activeView === 'dashboard' && <header><div><span className="admin-kicker">Daily operations</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>}
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
-      <StatCards stats={stats} />
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'bookings' && <BookingsView bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
+        {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
+        {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
       </>}
@@ -856,5 +898,5 @@ export default function AdminApp({ ManualBookingModal }) {
   useEffect(() => { check(); }, [check]);
   if (session.loading) return mobileSplashEnabled ? <div className="admin-loading"><span>ODIDEPSE</span></div> : null;
   if (!session.user) return <AdminLogin onLogin={(user, csrfToken) => setSession({ loading: false, user, csrfToken })} />;
-  return <Dashboard user={session.user} csrfToken={session.csrfToken} onLogout={logout} ManualBookingModal={ManualBookingModal} />;
+  return <AdminWorkspace user={session.user} csrfToken={session.csrfToken} onLogout={logout} ManualBookingModal={ManualBookingModal} />;
 }

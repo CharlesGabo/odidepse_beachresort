@@ -210,6 +210,14 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
   };
 
+  const closeFromBackdrop = event => {
+    if (event.target !== event.currentTarget) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const outside = event.clientX < bounds.left || event.clientX > bounds.right
+      || event.clientY < bounds.top || event.clientY > bounds.bottom;
+    if (outside) onClose();
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     setStatus({ type: 'loading', message: 'Sending your request…' });
@@ -253,7 +261,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     }
   };
 
-  return <dialog ref={dialogRef} className="booking-modal" onClose={onClose} onCancel={onClose} aria-labelledby="booking-title">
+  return <dialog ref={dialogRef} className="booking-modal" onClick={closeFromBackdrop} onClose={onClose} onCancel={onClose} aria-labelledby="booking-title">
     <button className="icon-button modal-close" type="button" onClick={onClose} aria-label="Close booking form"><Icon name="close" /></button>
     <div className="modal-intro">{!manual && <span className="eyebrow">{copy.inquiry["your_escape_starts_here"]}</span>}<h2 id="booking-title">{manual ? 'Add booking' : copy.inquiry["request_your_stay"]}</h2><p>{manual ? 'Record a walk-in, phone, or message booking. Enter the guest details, accommodation, dates, and requested activities.' : copy.inquiry["share_your_dates_and_group_size_our_team_will_confirm_availabilit"]}</p></div>
     {status.type === 'success' ? <div className="booking-success" role="status">
