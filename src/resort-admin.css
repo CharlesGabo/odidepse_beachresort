@@ -164,7 +164,8 @@
 .booking-calendar__toolbar button:hover { border-color: #aebdb7; background: #f7f8f5; }
 .booking-calendar__toolbar strong { min-width: 150px; padding: 0 8px; font-size: 13px; font-weight: 700; text-align: center; }
 .booking-calendar__toolbar .reservation-timeline__today { width: auto; font-size: 13px; padding-inline: 14px; }
-.reservation-timeline-scroll { max-height: none; }
+.reservation-timeline-scroll { max-height: none; cursor: grab; }
+.reservation-timeline-scroll.is-dragging { cursor: grabbing; user-select: none; }
 .reservation-timeline { --resource-width: 190px; --day-width: 86px; width: max-content; min-width: 100%; border: 1px solid var(--line); background: white; }
 .reservation-timeline__header,.reservation-timeline__row,.reservation-timeline__group { display:grid; grid-template-columns:var(--resource-width) repeat(var(--timeline-days),var(--day-width)); }
 .reservation-timeline__header { position: sticky; top: 0; z-index: 5; background: #f7f8f5; }

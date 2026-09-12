@@ -292,6 +292,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
   const handledCalendarFocusRef = useRef(null);
+  const timelineDragRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -384,13 +385,36 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
     setDialogContent({ type: 'more', date, bookings: hiddenBookings });
   };
 
+  const startTimelineDrag = event => {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
+    const scroller = event.currentTarget;
+    timelineDragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: scroller.scrollLeft };
+    scroller.setPointerCapture(event.pointerId);
+    scroller.classList.add('is-dragging');
+  };
+
+  const moveTimelineDrag = event => {
+    const drag = timelineDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.currentTarget.scrollLeft = drag.scrollLeft - (event.clientX - drag.startX);
+  };
+
+  const stopTimelineDrag = event => {
+    const drag = timelineDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    timelineDragRef.current = null;
+    event.currentTarget.classList.remove('is-dragging');
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => {
     const displayedDays = days;
     const renderedRowCount = resources.reduce((count, resource) => count + 1 + (expandedGroups.has(resource.key) ? resource.units.length : 0), 0);
     const monthStart = calendarDateKey(days[0]);
     const monthEnd = calendarDateKey(days.at(-1));
     const dateCells = () => <div className="reservation-timeline__cells" aria-hidden="true">{displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''} />)}</div>;
-    return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`}>
+    return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`} onPointerDown={startTimelineDrag} onPointerMove={moveTimelineDrag} onPointerUp={stopTimelineDrag} onPointerCancel={stopTimelineDrag}>
     <div className="reservation-timeline" style={{ '--timeline-days': displayedDays.length, '--resource-count': Math.max(1, renderedRowCount) }}>
       <div className="reservation-timeline__header">
         <strong className="reservation-timeline__resource">Accommodation</strong>
