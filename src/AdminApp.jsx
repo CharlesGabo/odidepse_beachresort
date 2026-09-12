@@ -872,6 +872,8 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
 export default function AdminApp({ ManualBookingModal }) {
   const [session, setSession] = useState({ loading: true, user: null, csrfToken: '' });
   const mobileSplashEnabled = window.matchMedia('(max-width: 900px)').matches;
+  const [showSplash, setShowSplash] = useState(mobileSplashEnabled);
+  const [splashLeaving, setSplashLeaving] = useState(false);
   const logout = useCallback(() => setSession({ loading: false, user: null, csrfToken: '' }), []);
 
   const check = useCallback(async () => {
@@ -888,15 +890,20 @@ export default function AdminApp({ ManualBookingModal }) {
       nextSession = { loading: false, user: null, csrfToken: '' };
     }
 
-    if (mobileSplashEnabled) {
-      const remainingSplashTime = Math.max(0, 2000 - (performance.now() - splashStartedAt));
-      await new Promise(resolve => window.setTimeout(resolve, remainingSplashTime));
-    }
     setSession(nextSession);
+    if (mobileSplashEnabled) {
+      const remainingSplashTime = Math.max(0, 1400 - (performance.now() - splashStartedAt));
+      await new Promise(resolve => window.setTimeout(resolve, remainingSplashTime));
+      setSplashLeaving(true);
+      await new Promise(resolve => window.setTimeout(resolve, 650));
+      setShowSplash(false);
+    }
   }, [mobileSplashEnabled]);
 
   useEffect(() => { check(); }, [check]);
-  if (session.loading) return mobileSplashEnabled ? <div className="admin-loading"><span>ODIDEPSE</span></div> : null;
-  if (!session.user) return <AdminLogin onLogin={(user, csrfToken) => setSession({ loading: false, user, csrfToken })} />;
-  return <AdminWorkspace user={session.user} csrfToken={session.csrfToken} onLogout={logout} ManualBookingModal={ManualBookingModal} />;
+  if (session.loading && !showSplash) return null;
+  const content = session.loading ? null : !session.user
+    ? <AdminLogin onLogin={(user, csrfToken) => setSession({ loading: false, user, csrfToken })} />
+    : <AdminWorkspace user={session.user} csrfToken={session.csrfToken} onLogout={logout} ManualBookingModal={ManualBookingModal} />;
+  return <>{content}{showSplash && <div className={`admin-loading${splashLeaving ? ' is-leaving' : ''}`} role="status" aria-label="Loading Odidepse administration"><span>ODIDEPSE</span></div>}</>;
 }
