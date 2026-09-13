@@ -18,7 +18,7 @@ const MESSENGER_REFRESH_MS = 1000;
 const VISIBLE_REFRESH_MS = 15000;
 const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
-const bookingStatusLabels = { pending: 'New request', confirmed: 'Confirmed', checked_in: 'Checked in', completed: 'Completed', cancelled: 'Cancelled' };
+const bookingStatusLabels = { pending: 'New request', confirmed: 'Confirmed', checked_in: 'Checked in', completed: 'Completed', no_show: 'No show', cancelled: 'Cancelled' };
 
 function formatBookingDate(value) {
   if (!value) return 'Not set';
@@ -96,11 +96,14 @@ function EventCard({ item, mutate, busy, onConvert, onBooking, showBookingSummar
   </article>;
 }
 
-function FacebookBookingCard({ item, onBooking }) {
+function FacebookBookingCard({ item, onLocate, onManage }) {
   const nights = getBookingNights(item);
   const status = item.booking_status || 'pending';
   const contact = item.booking_email || item.booking_phone || 'No contact provided';
-  return <article className="booking-card">
+  const openCalendar = () => onLocate(item.booking_id);
+  return <article className="booking-card booking-card--calendar-link" tabIndex="0" role="button" aria-label={`Show ${item.booking_guest_name || item.guest_name || 'Facebook customer'} in the booking calendar`}
+    onClick={event => { if (!event.target.closest('button,select,input,label,a')) openCalendar(); }}
+    onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); openCalendar(); } }}>
     <div className="booking-card__top">
       <span>{item.reference_code}</span>
       <span className={`booking-status booking-status--${status}`}>{bookingStatusLabels[status] || label(status)}</span>
@@ -118,7 +121,7 @@ function FacebookBookingCard({ item, onBooking }) {
         <div className="booking-card__route"><span>{nights ? `${nights + 1}D · ${nights}N` : '→'}</span></div>
         <div><span>Check-out</span><strong>{formatBookingDate(item.booking_check_out)}</strong></div>
       </div>
-      <div className="booking-card__actions"><button className="booking-manage-button" type="button" onClick={() => onBooking(item.booking_id)}>View &amp; manage</button></div>
+      <div className="booking-card__actions"><button className="booking-manage-button" type="button" onClick={() => onManage(item.booking_id)}>View &amp; manage</button></div>
     </div>
   </article>;
 }
@@ -164,7 +167,7 @@ function DraftEditor({ draft, mutate, busy, onDone }) {
   </fieldset></form>;
 }
 
-export default function FacebookAutomations({ csrfToken, onLogout, ManualBookingModal, onBookingSaved, onOpenBooking }) {
+export default function FacebookAutomations({ csrfToken, onLogout, ManualBookingModal, BookingRequestModal, bookings, updateStatus, onBookingSaved, onOpenBooking }) {
   const [section, setSection] = useState('message');
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
@@ -175,6 +178,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   const [notice, setNotice] = useState('');
   const [lead, setLead] = useState(null);
   const [draft, setDraft] = useState(null);
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [editorKey, setEditorKey] = useState(0);
   const lastRequestKey = useRef('');
 
@@ -253,7 +257,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       </>}
       {section === 'alerts' && <><div className="fb-row"><div><h2>Booking Requests</h2><p>Booking requests created through your connected Facebook Page.</p></div><small>{data.total} {data.total === 1 ? 'request' : 'requests'}</small></div>
         <div className="booking-table booking-card-grid fb-booking-requests">
-          {data.records.map(item => <FacebookBookingCard key={item.booking_id} item={item} onBooking={onOpenBooking} />)}
+          {data.records.map(item => <FacebookBookingCard key={item.booking_id} item={item} onLocate={onOpenBooking} onManage={setSelectedBookingId} />)}
         </div>
       </>}
       {eventSection && <><Intake key={section} kind={section} mutate={mutate} busy={busy} /><div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
@@ -279,5 +283,6 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       facebookLeadId={Number(lead.id)} initialGuest={lead}
       initialMessage={`Facebook lead #${lead.id}${lead.external_id ? ` (${lead.external_id})` : ''}: ${lead.body}`.slice(0, 650)}
       onSaved={result => { setLead(null); setNotice(`Lead converted to booking ${result.reference}.`); setRefresh(value => value + 1); onBookingSaved(); }} />}
+    <BookingRequestModal booking={bookings.find(item => Number(item.id) === Number(selectedBookingId)) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
   </section>;
 }

@@ -66,11 +66,13 @@
 .booking-status--confirmed { color: #17614f; background: #dfeee8; }
 .booking-status--checked_in { color: #245a75; background: #e0edf3; }
 .booking-status--completed { color: #5b615e; background: #e8eae8; }
+.booking-status--no_show { color:#76551d; background:#f2e7d1; }
 .booking-status--cancelled { color: #934438; background: #f5e3df; }
 .booking-card .booking-status--pending { color: #fffaf0; background: #9a650f; }
 .booking-card .booking-status--confirmed { color: #f4fffb; background: #17614f; }
 .booking-card .booking-status--checked_in { color: #f5fbff; background: #245f85; }
 .booking-card .booking-status--completed { color: #f8fbfa; background: #53635e; }
+.booking-card .booking-status--no_show { color:#fffaf0; background:#75551f; }
 .booking-card .booking-status--cancelled { color: #fff8f7; background: #a9473f; }
 .booking-card__guest { margin: 18px 0; }
 .booking-card__guest div { min-width: 0; }
@@ -162,6 +164,7 @@
 .booking-calendar__status-dot--confirmed { background: #17614f; box-shadow: 0 0 0 3px #cce2da; }
 .booking-calendar__status-dot--checked_in { background: #245f85; box-shadow: 0 0 0 3px #cfe2ec; }
 .booking-calendar__status-dot--completed { background: #53635e; box-shadow: 0 0 0 3px #d9dfdc; }
+.booking-calendar__status-dot--no_show { background:#75551f; box-shadow:0 0 0 3px #eadfc9; }
 .booking-calendar__status-dot--cancelled { background: #a9473f; box-shadow: 0 0 0 3px #edd3cf; }
 .booking-calendar__toolbar { display: flex; align-items: center; gap: 8px; margin: 22px 0 12px; }
 .booking-calendar__toolbar button { display: grid; place-items: center; min-width: 38px; height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: white; font-size: 20px; cursor: pointer; }
@@ -291,6 +294,7 @@
 .reservation-timeline .booking-calendar__bar--confirmed { color:#0d4437; background:#b9ddcf; border-color:#4e9a83; }
 .reservation-timeline .booking-calendar__bar--checked_in { color:#123f5a; background:#bdd9e9; border-color:#5792b5; }
 .reservation-timeline .booking-calendar__bar--completed { color:#30433d; background:#cbd5d1; border-color:#748982; }
+.reservation-timeline .booking-calendar__bar--no_show { color:#563d14; background:#e7d5b5; border-color:#a98245; }
 .reservation-timeline .booking-calendar__bar--cancelled { color:#6d2924; background:#e8c0bc; border-color:#bd6962; }
 .reservation-timeline .booking-calendar__bar.is-check-in { margin-left:0; padding-left:18px; border-radius:10px 0 0 10px; }
 .reservation-timeline .booking-calendar__bar.is-check-out { margin-right:0; padding-right:18px; border-radius:0 10px 10px 0; }
@@ -302,6 +306,7 @@
 .reservation-timeline .booking-calendar__occupancy-alert--confirmed { background:#17614f; border-color:#0d493a; }
 .reservation-timeline .booking-calendar__occupancy-alert--checked_in { background:#245f85; border-color:#184865; }
 .reservation-timeline .booking-calendar__occupancy-alert--completed { background:#53635e; border-color:#3d4b46; }
+.reservation-timeline .booking-calendar__occupancy-alert--no_show { background:#75551f; border-color:#563d14; }
 .reservation-timeline .booking-calendar__occupancy-alert--cancelled { background:#a9473f; border-color:#82362f; }
 .reservation-timeline .booking-calendar__occupancy-alert:hover { filter:brightness(1.08); }
 .reservation-timeline .is-booking-highlighted { z-index:4; scroll-margin:100px; animation:calendarBookingTarget 2.5s cubic-bezier(.16,1,.3,1) both; }

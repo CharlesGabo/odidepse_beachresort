@@ -12,7 +12,8 @@ requireAdmin();
 try {
     $db = database();
     if ($method === 'GET') {
-        $statement = $db->query("SELECT b.id, b.reference_code, b.guest_name, b.email, b.phone, b.check_in, b.check_out, b.guests, b.stay_type, b.stay_id, b.service_id, b.service_name, b.message, b.status, b.created_at,
+        $statement = $db->query("SELECT b.id, b.reference_code, b.guest_name, b.email, b.phone, b.check_in, b.check_out, b.guests, b.stay_type, b.stay_id, b.service_id, b.service_name, b.message,
+            CASE WHEN b.status = 'confirmed' AND b.check_in < CURDATE() THEN 'no_show' ELSE b.status END AS status, b.created_at,
             EXISTS(SELECT 1 FROM facebook_events e WHERE e.booking_id = b.id AND e.source = 'facebook') AS is_facebook_booking
             FROM bookings b ORDER BY b.created_at DESC LIMIT 250");
         $accommodations = array_map(

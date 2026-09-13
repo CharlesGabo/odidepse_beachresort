@@ -4,9 +4,9 @@
 .fb-workspace h3 { font-size:16px; margin:6px 0; }
 .fb-workspace p { color:var(--muted); font-size:14px; line-height:1.65; }
 .fb-workspace small { display:block; color:var(--muted); font-size:12px; line-height:1.5; }
-.fb-workspace button { border:1px solid #d4d4d4; border-radius:8px; padding:10px 14px; background:white; color:#161616; cursor:pointer; font:inherit; font-size:12px; }
-.fb-workspace button:hover { background:#f0f0f0; }
-.fb-workspace button:disabled { opacity:.5; cursor:default; }
+.fb-workspace button:not(.admin-request-modal button) { border:1px solid #d4d4d4; border-radius:8px; padding:10px 14px; background:white; color:#161616; cursor:pointer; font:inherit; font-size:12px; }
+.fb-workspace button:not(.admin-request-modal button):hover { background:#f0f0f0; }
+.fb-workspace button:not(.admin-request-modal button):disabled { opacity:.5; cursor:default; }
 .fb-workspace button.fb-primary { background:#161616; border-color:#161616; color:white; }
 .fb-workspace .booking-manage-button { display:inline-flex; align-items:center; justify-content:center; width:132px; min-height:39px; padding:0 10px; border:1px solid var(--deep); border-radius:6px; color:white; background:var(--deep); font-size:10px; font-weight:700; white-space:nowrap; }
 .fb-workspace .booking-manage-button:hover { color:white; background:#184f47; }

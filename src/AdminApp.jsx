@@ -8,6 +8,7 @@ const statusLabels = {
   confirmed: 'Confirmed',
   checked_in: 'Checked in',
   completed: 'Completed',
+  no_show: 'No show',
   cancelled: 'Cancelled',
 };
 
@@ -18,6 +19,7 @@ const statusActions = {
   ],
   confirmed: [{ status: 'checked_in', label: 'Check in', tone: 'primary' }],
   checked_in: [{ status: 'completed', label: 'Check out', tone: 'checked-in' }],
+  no_show: [{ status: 'checked_in', label: 'Correct to checked in', tone: 'primary' }],
 };
 
 function BookingStatusActions({ booking, updateStatus }) {
@@ -294,9 +296,9 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const timelineDragRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const calendarBookings = useMemo(() => bookings.filter(booking => (
-    statusFilter === 'cancelled'
-      ? booking.status === 'cancelled'
-      : booking.status !== 'cancelled' && (statusFilter === 'all' || booking.status === statusFilter)
+    ['no_show', 'cancelled'].includes(statusFilter)
+      ? booking.status === statusFilter
+      : !['no_show', 'cancelled'].includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
   )), [bookings, statusFilter]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -641,13 +643,16 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     setQuery('');
     setManualBookingOpen(Boolean(navigationIntent.openManualBooking));
     const id = navigationIntent.bookingId ? String(navigationIntent.bookingId) : null;
-    if (id) setHighlightedBookingId(id);
+    const focusCalendar = navigationIntent.focus === 'calendar';
+    if (id && focusCalendar) setHighlightedCalendarBookingId(id);
+    else if (id) setHighlightedBookingId(id);
     const timer = window.setTimeout(() => {
-      const target = id ? document.getElementById(`booking-${id}`) : document.getElementById('bookings-heading');
-      if (id) target?.focus({ preventScroll: true });
-      target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: id ? 'center' : 'start' });
+      const target = focusCalendar ? document.querySelector('.booking-calendar') : id ? document.getElementById(`booking-${id}`) : document.getElementById('bookings-heading');
+      if (id && !focusCalendar) target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: focusCalendar ? 'start' : id ? 'center' : 'start' });
     }, 0);
-    if (id) highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
+    if (id && focusCalendar) calendarHighlightTimerRef.current = window.setTimeout(() => setHighlightedCalendarBookingId(null), 2500);
+    else if (id) highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
     return () => window.clearTimeout(timer);
   }, [navigationIntent]);
   const visible = useMemo(() => {
@@ -695,7 +700,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
       <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
     </div>
-    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
+    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'no_show', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {
@@ -867,7 +872,11 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
-        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} onBookingSaved={load} onOpenBooking={id => { navigate('bookings'); setNavigationIntent({ bookingId: id }); }} />}
+        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} onBookingSaved={load} onOpenBooking={id => {
+          const booking = bookings.find(item => Number(item.id) === Number(id));
+          navigate('bookings');
+          setNavigationIntent({ bookingId: id, focus: 'calendar', status: ['no_show', 'cancelled'].includes(booking?.status) ? booking.status : 'all' });
+        }} />}
       </>}
     </main>
   </div>;
