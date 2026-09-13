@@ -283,7 +283,7 @@ function StatCards({ stats }) {
   </section>;
 }
 
-function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedBookingId }) {
+function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId }) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
@@ -297,6 +297,11 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
   const handledCalendarFocusRef = useRef(null);
   const timelineDragRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
+  const calendarBookings = useMemo(() => bookings.filter(booking => (
+    statusFilter === 'cancelled'
+      ? booking.status === 'cancelled'
+      : booking.status !== 'cancelled' && (statusFilter === 'all' || booking.status === statusFilter)
+  )), [bookings, statusFilter]);
   const resources = useMemo(() => {
     const accommodationOrder = [
       ['5-guest room', 1],
@@ -315,14 +320,14 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
       const unitCount = catalogStay?.style === 'exclusive'
         ? 1
         : Number.isInteger(configuredCount) && configuredCount > 0 ? configuredCount : fallbackCount;
-      const matchingBookings = bookings.filter(booking => {
+      const matchingBookings = calendarBookings.filter(booking => {
         if (catalogStay && Number(booking.stay_id) === Number(catalogStay.id)) return true;
         return (booking.stay_type || '').toLowerCase() === key;
       });
       const allocation = allocateBookingsToUnits(matchingBookings, unitCount, name);
       return { key, name, unitCount, bookings: matchingBookings, ...allocation };
     });
-  }, [bookings, accommodations]);
+  }, [calendarBookings, accommodations]);
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
 
   useEffect(() => {
@@ -332,7 +337,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
     }
     const focusId = String(highlightedBookingId);
     if (handledCalendarFocusRef.current === focusId) return;
-    const booking = bookings.find(item => String(item.id) === String(highlightedBookingId));
+    const booking = calendarBookings.find(item => String(item.id) === String(highlightedBookingId));
     if (!booking) {
       handledCalendarFocusRef.current = focusId;
       return;
@@ -358,7 +363,7 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
         || document.querySelector(selector);
       target?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }));
-  }, [highlightedBookingId, bookings, resources, visibleMonth, expandedGroups]);
+  }, [highlightedBookingId, calendarBookings, resources, visibleMonth, expandedGroups]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -461,27 +466,28 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
                 {occupiedUnitSummaries.flatMap(({ unit, unitIndex, segments }, laneIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
                   const segmentDate = displayedDays[start];
                   const unitLabel = `Room ${unitIndex + 1}`;
+                  const guestLabel = activeBookings.length === 1 ? activeBookings[0].guest_name : `${activeBookings.length} bookings`;
                   return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}${activeBookings.some(booking => String(booking.id) === String(highlightedBookingId)) ? ' is-booking-highlighted' : ''}`} key={`${unit.key}-${start}-${end}-${status}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: laneIndex + 1 }}
                     data-calendar-booking-id={activeBookings.length === 1 ? activeBookings[0].id : undefined}
-                    aria-label={`${unitLabel}: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
-                    onClick={() => activeBookings.length === 1 ? selectBooking(activeBookings[0]) : showOverflow(segmentDate, activeBookings)}><i aria-hidden="true" /><span>{unitLabel} · {statusLabels[status]}</span></button>;
+                    aria-label={`${guestLabel}, ${unitLabel}: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
+                    onClick={() => activeBookings.length === 1 ? selectBooking(activeBookings[0]) : showOverflow(segmentDate, activeBookings)}><i aria-hidden="true" /><span>{guestLabel} · {statusLabels[status]}</span></button>;
                 }))}
                 {conflictSummaries.flatMap(({ booking, segments }, conflictIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
                   const segmentDate = displayedDays[start];
                   return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status} is-conflict${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`conflict-${booking.id}-${start}-${end}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictIndex + 1 }}
                     data-calendar-booking-id={booking.id}
-                    aria-label={`Unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
-                    onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>Conflict · {statusLabels[status]}</span></button>;
+                    aria-label={`${booking.guest_name}, unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
+                    onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>{booking.guest_name} · {statusLabels[status]}</span></button>;
                 }))}
-                {cancelledSummaries.flatMap(({ booking, segments }, cancelledIndex) => segments.map(({ start, end, status, bookings: cancelled }) => {
+                {cancelledSummaries.flatMap(({ booking, segments }, cancelledIndex) => segments.map(({ start, end }) => {
                   const segmentDate = displayedDays[start];
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`cancelled-${booking.id}-${start}-${end}`}
+                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--cancelled${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`cancelled-${booking.id}-${start}-${end}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictSummaries.length + cancelledIndex + 1 }}
                     data-calendar-booking-id={booking.id}
-                    aria-label={`Cancelled booking from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
-                    onClick={() => selectBooking(cancelled[0])}><i aria-hidden="true" /><span>Cancelled</span></button>;
+                    aria-label={`${booking.guest_name}, cancelled booking from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
+                    onClick={() => selectBooking(booking)}><i aria-hidden="true" /><span>{booking.guest_name} · Cancelled</span></button>;
                 }))}
               </div>
             </div>
@@ -525,7 +531,8 @@ function BookingCalendar({ bookings, accommodations, onViewBooking, highlightedB
           <h2 id="booking-calendar-heading">Booking Calendar</h2>
         </div>
         <div className="booking-calendar__legend" aria-label="Booking status legend">
-          {Object.entries(statusLabels).map(([status, label]) => <span key={status}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</span>)}
+          <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
+          {Object.entries(statusLabels).map(([status, label]) => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</button>)}
         </div>
       </div>
       <div className="booking-calendar__toolbar">
@@ -713,7 +720,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   };
 
   return <>
-    <BookingCalendar bookings={bookings} accommodations={accommodations} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} />
+    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
