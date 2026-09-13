@@ -4,10 +4,30 @@ import './facebook-automations.css';
 
 const sections = [['message', 'Messenger'], ['comment', 'Comments'], ['alerts', 'Staff alerts'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
 const categories = ['booking', 'rates', 'amenities', 'location', 'complaint', 'general'];
+const guidedReplies = [
+  ['start', 'Booking flow introduction'], ['restart', 'Restart message'], ['ask_dates', 'Ask for dates'], ['confirm_dates', 'Confirm interpreted dates'],
+  ['ask_guests', 'Ask for guest count'], ['options_intro', 'Room suggestions introduction'], ['ask_stay', 'Ask for room choice'],
+  ['ask_contact', 'Ask for name and contact'], ['ask_booking_details', 'All booking details request'], ['ask_rate_details', 'Rate details request'], ['book_from_rates', 'Continue from rates to booking'], ['missing_name', 'Contact received, name missing'], ['missing_contact', 'Name received, contact missing'], ['summary_intro', 'Booking summary introduction'],
+  ['ask_confirmation', 'Ask for confirmation'], ['confirm_only', 'Confirmation reminder'], ['pending_created', 'Pending request created'],
+  ['progress_saved', 'Side question progress reminder'], ['invalid_answer', 'Unrecognized answer'], ['unavailable', 'Room became unavailable'],
+  ['no_options', 'No suitable room'], ['menu', 'Menu command'], ['handoff', 'Waiting for staff'],
+  ['completed', 'Existing pending request'], ['cancelled', 'Cancelled flow'],
+  ['pending_updated', 'Pending request updated'],
+];
 const VISIBLE_REFRESH_MS = 15000;
 const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
 const stamp = value => value ? value.replace('T', ' ').slice(0, 19) : '—';
+
+const bookingAlertDetails = item => [
+  ['Booking reference', item.reference_code],
+  ['Customer', item.booking_guest_name || 'Not provided'],
+  ['Stay dates', `${item.booking_check_in || 'Not provided'} to ${item.booking_check_out || 'Not provided'}`],
+  ['Total pax', item.booking_guests || 'Not provided'],
+  ['Accommodation', item.booking_stay_type || 'Not provided'],
+  ['Contact', [item.booking_email, item.booking_phone].filter(Boolean).join(' · ') || 'Not provided'],
+  ['Booking status', label(item.booking_status) || 'Not provided'],
+];
 
 function Field({ title, name, value, maxLength = 190, type = 'text', required = false, multiline = false }) {
   return <label className="fb-field"><span>{title}</span>{multiline
@@ -30,14 +50,17 @@ function Intake({ kind, mutate, busy }) {
   </details>;
 }
 
-function EventCard({ item, mutate, busy, onConvert, onBooking }) {
+function EventCard({ item, mutate, busy, onConvert, onBooking, showBookingSummary = false }) {
+  const hasBookingSummary = showBookingSummary && item.booking_id && item.reference_code;
   return <article className="fb-panel">
     <div className="fb-row"><div><span className="fb-eyebrow">{item.source === 'manual' ? 'Manually recorded' : 'Facebook'} · {item.kind} #{item.id}</span><h3>{item.guest_name}</h3></div>
       <span className={`fb-badge${Number(item.needs_attention) ? ' fb-badge--strong' : ''}`}>{Number(item.needs_attention) ? 'Staff attention' : label(item.status)}</span></div>
-    <p className="fb-copy">{item.body}</p>
-    {(item.email || item.phone) && <p>{[item.email, item.phone].filter(Boolean).join(' · ')}</p>}
+    {hasBookingSummary
+      ? <div className="fb-copy fb-booking-copy">{bookingAlertDetails(item).map(([title, value]) => <div key={title}><strong>{title}:</strong> <span>{value}</span></div>)}</div>
+      : <p className="fb-copy">{item.body}</p>}
+    {!hasBookingSummary && (item.email || item.phone) && <p>{[item.email, item.phone].filter(Boolean).join(' · ')}</p>}
     <small>Received {stamp(item.received_at)}{item.external_id ? ` · Facebook ID ${item.external_id}` : ''}</small>
-    {item.booking_id ? <div className="fb-actions"><span>Converted to {item.reference_code}</span><button type="button" onClick={() => onBooking(item.booking_id)}>View booking</button></div> : <>
+    {item.booking_id ? <div className="fb-actions"><span>Pending booking {item.reference_code}</span><button type="button" onClick={() => onBooking(item.booking_id)}>Review booking</button>{Number(item.needs_attention) ? <button type="button" disabled={busy} onClick={() => mutate({ action: 'clear_attention', id: Number(item.id), revision: Number(item.revision) })}>Clear staff alert</button> : null}</div> : <>
       <form key={item.revision} onSubmit={event => {
         event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget));
         mutate({ action: 'update_event', id: Number(item.id), revision: Number(item.revision), ...data, needs_attention: data.needs_attention === 'on' });
@@ -65,15 +88,20 @@ function Rules({ settings, mutate, busy }) {
       categorize: data.categorize === 'on', prepare_replies: data.prepare_replies === 'on', notify_comments: data.notify_comments === 'on',
       templates: Object.fromEntries(categories.map(category => [category, data[category] || ''])),
       keywords: Object.fromEntries(categories.map(category => [category, String(data[`keywords_${category}`] || '').split(/[,\n]/).map(value => value.trim()).filter(Boolean)])),
+      guided_replies: Object.fromEntries(guidedReplies.map(([key]) => [key, data[`guided_${key}`] || ''])),
     } });
   }}><fieldset disabled={busy}><h2>Automation rules</h2><p>Rules apply to new items. Review existing inquiries individually after changing these settings.</p>
     <div className="fb-toggles">
       <label className="fb-check"><input type="checkbox" name="categorize" defaultChecked={rules.categorize} /><span>Automatically categorize inquiries <small>Recognizes common English and Filipino keywords. Unmatched inquiries go to General.</small></span></label>
-      <label className="fb-check"><input type="checkbox" name="prepare_replies" defaultChecked={rules.prepare_replies} /><span>Automatically answer new Messenger inquiries <small>Uses the matching approved template when Meta permits a reply. Complaints receive only an acknowledgement and remain flagged for staff.</small></span></label>
+      <label className="fb-check"><input type="checkbox" name="prepare_replies" defaultChecked={rules.prepare_replies} /><span>Automatically answer new Messenger inquiries <small>Uses templates for questions and a guided, stateful flow for bookings. Complaints are handed to staff.</small></span></label>
       <label className="fb-check"><input type="checkbox" name="notify_comments" defaultChecked={rules.notify_comments} /><span>Flag new comments for staff <small>Shows an attention badge here. Complaints always create an alert.</small></span></label>
-    </div><details className="fb-keywords"><summary>Category keywords <span>Optional advanced settings</span></summary><p>Use commas or new lines. Complaint matches take priority; unmatched messages use General.</p><div className="fb-grid">{categories.filter(category => category !== 'general').map(category => <Field key={category} title={`${label(category)} keywords`} name={`keywords_${category}`} value={(rules.keywords?.[category] || []).join(', ')} maxLength={2500} multiline />)}</div></details>
-    <h3>Reply templates</h3><p>Leave a template blank to skip that category. A complaint reply should only acknowledge the concern and direct it to staff.</p>
+    </div><details className="fb-keywords"><summary>Category keywords <span>Optional advanced settings</span></summary><p>Use commas or new lines. Complaint matches take priority; unmatched messages use General. Close misspellings of words with five or more characters are recognized conservatively.</p><div className="fb-grid">{categories.filter(category => category !== 'general').map(category => <Field key={category} title={`${label(category)} keywords`} name={`keywords_${category}`} value={(rules.keywords?.[category] || []).join(', ')} maxLength={2500} multiline />)}</div></details>
+    <h3>Reply templates</h3><p>These answer normal and mid-booking questions. Booking requests then collect dates, guests, accommodation, name, and contact details before creating a pending request. Leave a template blank to skip that category.</p>
     <div className="fb-grid">{categories.map(category => <Field key={category} title={label(category)} name={category} value={rules.templates[category]} maxLength={1000} multiline />)}</div>
+    <details className="fb-keywords"><summary>Guided booking replies <span>Customize each conversation step</span></summary>
+      <p>The room choices, customer details, and final summary are inserted safely by the system. Use <code>{'{date_example}'}</code> in the date question, <code>{'{dates}'}</code> in the interpreted-date confirmation, and keep <code>{'{reference}'}</code> in the pending-request reply. The system always adds the pending/staff-approval warning.</p>
+      <div className="fb-grid">{guidedReplies.map(([key, title]) => <Field key={key} title={title} name={`guided_${key}`} value={rules.guided_replies?.[key] || ''} maxLength={1000} multiline />)}</div>
+    </details>
     <button className="fb-primary">{busy ? 'Saving…' : 'Save rules'}</button>
   </fieldset></form>;
 }
@@ -180,7 +208,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       </>}
       {eventSection && <>{section !== 'alerts' && <Intake key={section} kind={section} mutate={mutate} busy={busy} />}<div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
         {section === 'comment' && <p>New comments appear here with staff attention flags. Acknowledge one by clearing its attention checkbox. Refresh to check for new items.</p>}
-        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />)}
+        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} showBookingSummary={section === 'alerts'} />)}
       </>}
       {section === 'rules' && <Rules key={data.settings.revision} settings={data.settings} mutate={mutate} busy={busy} />}
       {section === 'drafts' && <><DraftEditor key={draft ? `edit-${draft.id}` : `new-${editorKey}`} draft={draft} mutate={mutate} busy={busy} onDone={finishEdit} />

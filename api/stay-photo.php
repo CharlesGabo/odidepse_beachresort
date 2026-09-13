@@ -7,8 +7,7 @@ requireMethod('GET');
 try {
     $id = $_GET['id'] ?? '';
     if (!is_string($id)) throw new InvalidArgumentException();
-    $path = stayPhotoPath($id);
-    if (!is_file($path)) throw new InvalidArgumentException();
+    $path = stayPhotoDeliveryPath($id);
     $statement = database()->prepare("SELECT id FROM resort_stays WHERE enabled = 1 AND archived = 0 AND JSON_CONTAINS(details, JSON_QUOTE(?), '$.photos') LIMIT 1");
     $statement->execute([$id]);
     if (!$statement->fetchColumn()) requireAdmin();

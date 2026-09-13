@@ -20,7 +20,19 @@ try {
         if (in_array($section, ['message', 'comment', 'lead', 'alerts'], true)) {
             $where = $section === 'alerts' ? 'e.needs_attention = 1' : 'e.kind = ?';
             $params = $section === 'alerts' ? [] : [$section];
-            $query = $db->prepare('SELECT e.*, UNIX_TIMESTAMP(e.received_at) AS received_epoch, b.reference_code FROM facebook_events e LEFT JOIN bookings b ON b.id = e.booking_id WHERE ' . $where . ' ORDER BY e.id DESC LIMIT 25 OFFSET ' . $offset);
+            $query = $db->prepare('SELECT e.*, UNIX_TIMESTAMP(e.received_at) AS received_epoch,
+                b.reference_code,
+                b.guest_name AS booking_guest_name,
+                b.email AS booking_email,
+                b.phone AS booking_phone,
+                b.check_in AS booking_check_in,
+                b.check_out AS booking_check_out,
+                b.guests AS booking_guests,
+                b.stay_type AS booking_stay_type,
+                b.status AS booking_status
+                FROM facebook_events e
+                LEFT JOIN bookings b ON b.id = e.booking_id
+                WHERE ' . $where . ' ORDER BY e.id DESC LIMIT 25 OFFSET ' . $offset);
             $query->execute($params); $records = $query->fetchAll();
             if ($section === 'message' && $records !== []) {
                 $ids = array_column($records, 'id');
@@ -28,6 +40,20 @@ try {
                 $replies->execute($ids);
                 $byEvent = [];
                 foreach ($replies->fetchAll() as $reply) {
+                    $reply['type'] = 'text';
+                    try { $deliveryPayload = json_decode((string) $reply['body'], true, 8, JSON_THROW_ON_ERROR); }
+                    catch (JsonException) { $deliveryPayload = null; }
+                    if (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'room_photo') {
+                        $photoId = (string) ($deliveryPayload['photo_id'] ?? '');
+                        if (preg_match('/\A(?:room_[0-9]|[a-f0-9]{32}\.jpg)\z/', $photoId) === 1) {
+                            $reply['type'] = 'image';
+                            $reply['photo_url'] = '/api/stay-photo.php?id=' . rawurlencode($photoId);
+                            $reply['body'] = 'Room photo';
+                        }
+                    } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'room_photo_caption') {
+                        $caption = $deliveryPayload['text'] ?? '';
+                        $reply['body'] = is_string($caption) && trim($caption) !== '' ? trim($caption) : 'Room photos sent.';
+                    }
                     $reply['sent_at'] = gmdate('Y-m-d\TH:i:s\Z', (int) $reply['sent_epoch']);
                     unset($reply['sent_epoch']);
                     $byEvent[$reply['event_id']][] = $reply;
@@ -60,7 +86,7 @@ try {
         jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page]);
     }
 
-    $data = readJsonBody(32768);
+    $data = readJsonBody(65536);
     $action = facebookText($data, 'action', 40);
     $actor = (int) $admin['id'];
     $id = $data['id'] ?? null;
@@ -76,6 +102,11 @@ try {
         }
         if (!is_array($rules['templates'] ?? null)) throw new FacebookWorkflowError('Reply templates are required.');
         foreach (facebookCategories() as $category) $validated['templates'][$category] = facebookText($rules['templates'], $category, 1000, false);
+        if (!is_array($rules['guided_replies'] ?? null)) throw new FacebookWorkflowError('Guided booking replies are required.');
+        foreach (facebookGuidedReplyKeys() as $key) $validated['guided_replies'][$key] = facebookText($rules['guided_replies'], $key, 1000);
+        if (!str_contains($validated['guided_replies']['confirm_dates'], '{dates}')) throw new FacebookWorkflowError('The date confirmation reply must include {dates}.');
+        if (!str_contains($validated['guided_replies']['pending_created'], '{reference}')) throw new FacebookWorkflowError('The pending booking reply must include {reference}.');
+        if (!str_contains($validated['guided_replies']['pending_updated'], '{reference}')) throw new FacebookWorkflowError('The pending booking update reply must include {reference}.');
         if (!is_array($rules['keywords'] ?? null)) throw new FacebookWorkflowError('Category keywords are required.');
         foreach (facebookCategories() as $category) {
             $items = $rules['keywords'][$category] ?? null;
@@ -118,11 +149,16 @@ try {
         facebookAudit($db, $actor, 'manual_intake', 'event', $eventId);
         if ($alert) facebookAudit($db, $actor, 'staff_alert_created', 'event', $eventId);
         if ($settings['prepare_replies'] && facebookPrepareReply($db, ['id' => $eventId, 'kind' => $kind, 'category' => $category, 'status' => 'new'], $settings)) facebookAudit($db, $actor, 'reply_prepared', 'event', $eventId);
-    } elseif (in_array($action, ['update_event', 'prepare_reply', 'publish_comment', 'hide_comment'], true)) {
+    } elseif (in_array($action, ['update_event', 'prepare_reply', 'publish_comment', 'hide_comment', 'clear_attention'], true)) {
         if (!is_int($id) || $id < 1 || !is_int($revision)) throw new FacebookWorkflowError('Invalid inquiry.');
         $query = $db->prepare('SELECT * FROM facebook_events WHERE id = ? FOR UPDATE'); $query->execute([$id]); $event = $query->fetch();
         if (!$event || (int) $event['revision'] !== $revision) throw new FacebookWorkflowError('This inquiry changed. Refresh and try again.', 409);
-        if (in_array($action, ['publish_comment', 'hide_comment'], true)) {
+        if ($action === 'clear_attention') {
+            $query = $db->prepare('UPDATE facebook_events SET needs_attention = 0, revision = revision + 1 WHERE id = ? AND revision = ?');
+            $query->execute([$id, $revision]);
+            if (!$query->rowCount()) throw new FacebookWorkflowError('This alert changed. Refresh and try again.', 409);
+            facebookAudit($db, $actor, 'staff_alert_cleared', 'event', $id);
+        } elseif (in_array($action, ['publish_comment', 'hide_comment'], true)) {
             if ($event['kind'] !== 'comment') throw new FacebookWorkflowError('Only comments can be shown on the website.');
             $publish = $action === 'publish_comment';
             $query = $db->prepare('UPDATE facebook_events SET website_status = ?, website_published_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?');

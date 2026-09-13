@@ -4,6 +4,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 require_once dirname(__DIR__) . '/includes/facebook-automations.php';
+require_once dirname(__DIR__) . '/includes/stay-photos.php';
 
 function workerFailJob(PDO $db, int $jobId, string $code): void
 {
@@ -47,11 +48,30 @@ function workerClaimReply(PDO $db): ?array
 function workerSendReply(array $job, string $pageId, string $token, string $version): array
 {
     $url = 'https://graph.facebook.com/' . rawurlencode($version) . '/' . rawurlencode($pageId) . '/messages';
-    $payload = json_encode([
-        'recipient' => ['id' => $job['sender_id']],
-        'messaging_type' => 'RESPONSE',
-        'message' => ['text' => $job['payload']],
-    ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $message = trim((string) $job['payload']);
+    $jobPayload = null;
+    try { $jobPayload = json_decode($message, true, 8, JSON_THROW_ON_ERROR); } catch (JsonException) {}
+    $isRoomPhoto = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'room_photo';
+    $isRoomCaption = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'room_photo_caption';
+    if ($isRoomPhoto) {
+        try { $photoPath = stayPhotoDeliveryPath((string) ($jobPayload['photo_id'] ?? '')); }
+        catch (InvalidArgumentException) { return ['ok' => false, 'status' => 422, 'ambiguous' => false]; }
+        $postFields = [
+            'recipient' => json_encode(['id' => $job['sender_id']], JSON_THROW_ON_ERROR),
+            'messaging_type' => 'RESPONSE',
+            'message' => json_encode(['attachment' => ['type' => 'image', 'payload' => ['is_reusable' => true]]], JSON_THROW_ON_ERROR),
+            'filedata' => new CURLFile($photoPath, 'image/jpeg', basename($photoPath)),
+        ];
+    } else {
+        if ($isRoomCaption) $message = trim((string) ($jobPayload['text'] ?? ''));
+        $notice = facebookAutomaticReplyNotice();
+        if (!$isRoomCaption && !str_contains($message, $notice)) $message .= "\n\n" . $notice;
+        $postFields = json_encode([
+            'recipient' => ['id' => $job['sender_id']],
+            'messaging_type' => 'RESPONSE',
+            'message' => ['text' => $message],
+        ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    }
     $handle = curl_init($url);
     if ($handle === false) throw new RuntimeException('Could not initialize Meta delivery.');
     curl_setopt_array($handle, [
@@ -59,8 +79,8 @@ function workerSendReply(array $job, string $pageId, string $token, string $vers
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 20,
-        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => $isRoomPhoto ? ['Authorization: Bearer ' . $token] : ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => $postFields,
     ]);
     $response = curl_exec($handle);
     $curlError = curl_errno($handle);
@@ -69,7 +89,14 @@ function workerSendReply(array $job, string $pageId, string $token, string $vers
     if ($response === false || $curlError !== 0) return ['ok' => false, 'status' => 0, 'ambiguous' => true];
     try { $decoded = json_decode($response, true, 32, JSON_THROW_ON_ERROR); }
     catch (JsonException) { return ['ok' => false, 'status' => $status, 'ambiguous' => $status >= 200 && $status < 300]; }
-    return ['ok' => $status >= 200 && $status < 300 && is_string($decoded['message_id'] ?? null), 'status' => $status, 'ambiguous' => false];
+    return [
+        'ok' => $status >= 200 && $status < 300 && is_string($decoded['message_id'] ?? null),
+        'status' => $status,
+        'ambiguous' => false,
+        'room_photo' => $isRoomPhoto,
+        'photo_index' => $isRoomPhoto ? (int) ($jobPayload['photo_index'] ?? 0) : null,
+        'photo_total' => $isRoomPhoto ? (int) ($jobPayload['photo_total'] ?? 0) : null,
+    ];
 }
 
 function workerFetchSenderProfile(string $senderId, string $token, string $version): array
@@ -138,6 +165,18 @@ try {
         }
         $db->beginTransaction();
         $db->prepare("UPDATE facebook_jobs SET status = 'succeeded', error_code = NULL WHERE id = ? AND status = 'processing'")->execute([(int) $job['id']]);
+        if (!empty($result['room_photo'])) {
+            $nextIndex = (int) $result['photo_index'] + 1;
+            if ($nextIndex < (int) $result['photo_total']) {
+                $nextKey = 'room-photo:event:' . (int) $job['event_id'] . ':' . $nextIndex;
+                $db->prepare("UPDATE facebook_jobs SET status = 'pending', error_code = NULL WHERE event_id = ? AND dedupe_key = ? AND status = 'blocked' AND error_code = 'awaiting_previous_photo'")
+                    ->execute([(int) $job['event_id'], $nextKey]);
+            } else {
+                $captionKey = 'room-photo-caption:event:' . (int) $job['event_id'];
+                $db->prepare("UPDATE facebook_jobs SET status = 'pending', error_code = NULL WHERE event_id = ? AND dedupe_key = ? AND status = 'blocked' AND error_code = 'awaiting_photos'")
+                    ->execute([(int) $job['event_id'], $captionKey]);
+            }
+        }
         $db->prepare("UPDATE facebook_events SET status = 'in_progress', revision = revision + 1 WHERE id = ? AND status = 'new'")->execute([(int) $job['event_id']]);
         facebookAudit($db, null, 'automatic_reply_sent', 'event', (int) $job['event_id']);
         $db->commit();

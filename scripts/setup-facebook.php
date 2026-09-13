@@ -9,18 +9,20 @@ try {
     }
     $db = database();
     $before = (int) $db->query('SELECT COUNT(*) FROM bookings')->fetchColumn();
-    $sql = file_get_contents(dirname(__DIR__) . '/database/migrations/004_facebook_automations.sql');
-    if ($sql === false) throw new RuntimeException('Migration file not found.');
-    foreach (explode(';', $sql) as $statement) {
-        if (trim($statement) === '') continue;
-        if (preg_match('/CREATE TABLE IF NOT EXISTS (facebook_[a-z]+)/', $statement, $match)) {
-            $exists = $db->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
-            $exists->execute([$match[1]]);
-            if ((int) $exists->fetchColumn() > 0) continue;
+    foreach (['004_facebook_automations.sql', '009_facebook_conversations.sql'] as $migration) {
+        $sql = file_get_contents(dirname(__DIR__) . '/database/migrations/' . $migration);
+        if ($sql === false) throw new RuntimeException('Migration file not found.');
+        foreach (explode(';', $sql) as $statement) {
+            if (trim($statement) === '') continue;
+            if (preg_match('/CREATE TABLE IF NOT EXISTS (facebook_[a-z]+)/', $statement, $match)) {
+                $exists = $db->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+                $exists->execute([$match[1]]);
+                if ((int) $exists->fetchColumn() > 0) continue;
+            }
+            $db->exec($statement);
         }
-        $db->exec($statement);
     }
-    foreach (['facebook_settings', 'facebook_events', 'facebook_drafts', 'facebook_jobs', 'facebook_audit', 'facebook_webhook_state'] as $table) {
+    foreach (['facebook_settings', 'facebook_events', 'facebook_drafts', 'facebook_jobs', 'facebook_audit', 'facebook_webhook_state', 'facebook_conversations'] as $table) {
         $count = (int) $db->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn();
         echo $table . ': ' . $count . " rows\n";
     }

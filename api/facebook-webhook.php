@@ -50,8 +50,11 @@ function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
         facebookAudit($db, null, 'sender_name_queued', 'event', $id);
     }
     if (($rules['prepare_replies'] ?? false) && $event['kind'] === 'message') {
-        if (facebookPrepareReply($db, ['id' => $id, 'kind' => 'message', 'category' => $event['category'], 'status' => 'new'], $rules, true)) {
+        $reply = facebookConversationReply($db, ['id' => $id] + $event, $rules);
+        if ($reply !== '' && facebookQueueReply($db, $id, $reply, true)) {
             facebookAudit($db, null, 'automatic_reply_queued', 'event', $id);
+            $photoCount = facebookQueueNativeRoomPhotos($db, $id, (string) $event['page_id'], (string) $event['sender_id']);
+            if ($photoCount > 0) facebookAudit($db, null, 'suggested_room_photos_queued', 'event', $id);
         }
     }
     return $id;

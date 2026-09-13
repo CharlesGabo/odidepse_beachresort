@@ -25,6 +25,7 @@ export default function MessengerInbox({ records, total, renderDetails }) {
   const [selectedKey, setSelectedKey] = useState(null);
   const [mobileThread, setMobileThread] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState(null);
   const scrollRef = useRef(null);
   const backRef = useRef(null);
   const listRef = useRef(null);
@@ -40,7 +41,7 @@ export default function MessengerInbox({ records, total, renderDetails }) {
   const chats = [...grouped.values()].map(chat => {
     const timeline = chat.messages.flatMap(item => [
       { key: `incoming:${item.id}`, body: item.body, at: item.message_at, outgoing: false },
-      ...(item.sent_replies || []).map(reply => ({ key: `reply:${reply.id}`, body: reply.body, at: reply.sent_at, outgoing: true })),
+      ...(item.sent_replies || []).map(reply => ({ key: `reply:${reply.id}`, body: reply.body, type: reply.type || 'text', photoUrl: reply.photo_url || '', at: reply.sent_at, outgoing: true })),
     ]).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     return { ...chat, timeline, preview: timeline[timeline.length - 1] };
   }).sort((a, b) => Date.parse(b.preview.at) - Date.parse(a.preview.at))
@@ -53,6 +54,13 @@ export default function MessengerInbox({ records, total, renderDetails }) {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [selected?.key, lastId, messageCount]);
+
+  useEffect(() => {
+    if (!previewPhoto) return undefined;
+    const closeOnEscape = event => { if (event.key === 'Escape') setPreviewPhoto(null); };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [previewPhoto]);
 
   function selectChat(key) {
     setSelectedKey(key); setMobileThread(true); setShowDetails(false);
@@ -87,7 +95,9 @@ export default function MessengerInbox({ records, total, renderDetails }) {
           <div className="messenger-history-note">Recorded messages and sent automated replies. Replies made directly in Facebook and full history are not synced yet.</div>
           {selected.timeline.map(item => <article className={`messenger-message${item.outgoing ? ' messenger-message--outgoing' : ''}`} key={item.key} aria-label={item.outgoing ? 'Your automated reply' : 'Guest message'}>
             <time className="messenger-message-time">{timestamp(item.at)}</time>
-            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}<p className="messenger-bubble">{item.body}</p></div>
+            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}{item.type === 'image'
+              ? <button className="messenger-photo" type="button" onClick={() => setPreviewPhoto({ src: item.photoUrl, alt: `${selected.name} room photo` })} aria-label="Open room photo"><img src={item.photoUrl} alt="Room sent through Messenger" loading="lazy" /></button>
+              : <p className="messenger-bubble">{item.body}</p>}</div>
             {item.outgoing && <small className="messenger-sent-label">Sent · Automated reply</small>}
           </article>)}
         </div>
@@ -95,5 +105,6 @@ export default function MessengerInbox({ records, total, renderDetails }) {
       </> : <div className="messenger-placeholder messenger-welcome"><span className="messenger-welcome-icon"><ChatIcon name="chat" /></span><h3>Your conversations, in one place</h3><p>Select a chat to view its recorded messages.</p></div>}
     </section>
     {selected && showDetails && <section id="messenger-details" className="messenger-details" aria-label="Inquiry management"><div className="fb-row"><h3>Inquiry details</h3><button type="button" onClick={() => setShowDetails(false)}>Close details</button></div>{selected.messages.map(item => renderDetails(item))}</section>}
+    {previewPhoto && <div className="messenger-photo-viewer" role="dialog" aria-modal="true" aria-label="Room photo preview" onClick={() => setPreviewPhoto(null)}><button type="button" aria-label="Close photo preview" onClick={() => setPreviewPhoto(null)}>×</button><img src={previewPhoto.src} alt={previewPhoto.alt} onClick={event => event.stopPropagation()} /></div>}
   </div>;
 }
