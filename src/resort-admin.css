@@ -42,6 +42,7 @@
 .resort-manager > p { color: var(--muted); font-size: 14px; }
 .filter-row { align-items:center; }
 .filter-row > button { flex:0 0 auto; }
+.status-filter-divider { flex:0 0 auto; align-self:center; color:#a8b1ad; font-size:14px; line-height:1; user-select:none; }
 .filter-row .filter-row__add-booking { margin-left:auto; padding-inline:16px; color:white; background:var(--deep); border-color:var(--deep); font-weight:700; }
 .filter-row .filter-row__add-booking:hover { background:#184f47; }
 .booking-board__summary { min-width:0; }

@@ -12,6 +12,8 @@ const statusLabels = {
   cancelled: 'Cancelled',
 };
 
+const calendarFilteredOnlyStatuses = ['completed', 'no_show', 'cancelled'];
+
 const statusActions = {
   pending: [
     { status: 'confirmed', label: 'Confirm', tone: 'primary' },
@@ -296,9 +298,9 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const timelineDragRef = useRef(null);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const calendarBookings = useMemo(() => bookings.filter(booking => (
-    ['no_show', 'cancelled'].includes(statusFilter)
+    calendarFilteredOnlyStatuses.includes(statusFilter)
       ? booking.status === statusFilter
-      : !['no_show', 'cancelled'].includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
+      : !calendarFilteredOnlyStatuses.includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
   )), [bookings, statusFilter]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -503,7 +505,10 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         </div>
         <div className="booking-calendar__legend" aria-label="Booking status legend">
           <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
-          {Object.entries(statusLabels).map(([status, label]) => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</button>)}
+          {Object.entries(statusLabels).flatMap(([status, label]) => [
+            status === 'completed' ? <span className="status-filter-divider" aria-hidden="true" key="completed-divider">|</span> : null,
+            <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</button>,
+          ])}
         </div>
       </div>
       <div className="booking-calendar__toolbar">
@@ -700,7 +705,10 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
       <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
     </div>
-    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'no_show', 'cancelled'].map(value => <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
+    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'no_show', 'cancelled'].flatMap(value => [
+      value === 'completed' ? <span className="status-filter-divider" aria-hidden="true" key="completed-divider">|</span> : null,
+      <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>,
+    ])}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
     <div className="booking-table booking-card-grid">
       {visible.map(booking => {

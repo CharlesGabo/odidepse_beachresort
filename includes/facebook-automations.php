@@ -30,7 +30,7 @@ function facebookDefaultRules(): array
             'general' => [],
         ],
         'templates' => [
-            'booking' => 'Thank you for your booking inquiry! We offer 5-, 8-, 9-, and 10-guest rooms, large-group accommodation, and an entire-building exclusive option for 88–100 guests. Please send your check-in and check-out dates, total number of guests, and preferred room so our team can check availability. Your request is confirmed only after our staff contacts you.',
+            'booking' => 'Thank you for your booking inquiry! We offer 5-, 8-, 9-, and 10-guest rooms, large-group accommodation, and an entire-building exclusive option for 88–100 guests. Please send your check-in and check-out dates and times, total number of guests, and preferred room so our team can check availability. Your request is confirmed only after our staff contacts you.',
             'rates' => "Thank you for your inquiry about our rates!\n\nOur rates may vary depending on your dates, number of guests, room arrangement, and optional activities.\n\nTo provide you with the correct rate, please send us:\n• Check-in and check-out dates\n• Total number of guests\n• Preferred accommodation (optional) — e.g. 5-, 8-, 9-, or 10-guest room, large-group accommodation, or entire building. Leave this blank if you want us to suggest the best fit.\n• Requested activities (optional) — ATV, banana boat, or jet ski rental, available upon inquiry\n\nOnce we receive your details, our team will prepare the appropriate quote for your stay.",
             'amenities' => 'Our amenities include air-conditioned rooms, pet-friendly stays, free Wi-Fi up to 800 Mbps, Netflix, HBO Max and Prime Video on the common TV, an LG XBOOM speaker with microphone, a karaoke-friendly common area, shared kitchen with utensils and rice cooker, common refrigerator, water dispenser, griller, tables and chairs. ATV, banana boat and jet ski rentals are available upon inquiry, and large groups may ask about a private pool option.',
             'location' => 'Odidepse Beach Resort is along Purok 8 Coastal Road, Brgy. Sto. Niño, San Felipe, Zambales (Plus Code: 3355+4P). Google Maps: https://www.google.com/maps/search/?api=1&query=Odidepse%20Beach%20Resort%2C%20San%20Felipe%2C%20Zambales We are about a 25-second walk from the beach and approximately four hours from Manila. Transfers are available upon request.',
@@ -45,9 +45,9 @@ function facebookDefaultRules(): array
             'ask_guests' => 'How many guests will be staying? You can say “5,” “lima kami,” or “2 adults and 3 kids.”',
             'ask_stay' => 'Reply with the number of your preferred accommodation.',
             'ask_contact' => 'Please send your full name and either your email or mobile number together. Example: Maria Santos, 09171234567.',
-            'ask_booking_details' => "Please reply once with:\n\n📅 Stay dates — e.g. September 15–18\n👥 Number of guests — e.g. 8\n🏠 Preferred room — optional; leave this blank and I will suggest the best fit\n👤 Full name\n📞 Mobile number or email\n\nYou may write these in any order.",
+            'ask_booking_details' => "Please reply once with:\n\n📅 Stay dates — e.g. September 15–18\n🕒 Check-in and check-out times — e.g. 2 PM and 11 AM\n👥 Number of guests — e.g. 8\n🏠 Preferred room — optional; leave this blank and I will suggest the best fit\n👤 Full name\n📞 Mobile number or email\n\nYou may write these in any order and use your usual time format.",
             'ask_rate_details' => "To check suitable rates, reply once with:\n\n📅 Stay dates — e.g. September 15–18\n👥 Number of guests — e.g. 8",
-            'book_from_rates' => "Want to book? Reply once with:\n\n🏠 Option number\n👤 Full name\n📞 Mobile number or email\n\nExample: Option 1, Maria Santos, 09171234567",
+            'book_from_rates' => "Want to book? Reply once with:\n\n🕒 Check-in and check-out times — e.g. 2 PM and 11 AM\n🏠 Option number\n👤 Full name\n📞 Mobile number or email\n\nExample: Check in 2 PM, check out 11 AM, Option 1, Maria Santos, 09171234567",
             'missing_name' => 'I got your contact detail. What is your full name?',
             'missing_contact' => 'I got your name. Please send either your email or mobile number.',
             'ask_confirmation' => 'Reply CONFIRM to create this pending request, BACK to change a detail, or CANCEL.',
@@ -87,6 +87,10 @@ function facebookSettings(PDO $db): array
         'ask_rate_details' => "To show suitable rates, please send these together:\nDates: next weekend, October 10 to 12, or YYYY-MM-DD to YYYY-MM-DD\nGuests: total adults and children",
         'book_from_rates' => 'To request a booking, reply once with your chosen option number, full name, and email or mobile number. Example: Option 1, Maria Santos, 09171234567.',
     ];
+    $previousBookingDetails = "Please reply once with:\n\n📅 Stay dates — e.g. September 15–18\n👥 Number of guests — e.g. 8\n🏠 Preferred room — optional; leave this blank and I will suggest the best fit\n👤 Full name\n📞 Mobile number or email\n\nYou may write these in any order.";
+    if (($rules['guided_replies']['ask_booking_details'] ?? '') === $previousBookingDetails) $rules['guided_replies']['ask_booking_details'] = $defaults['guided_replies']['ask_booking_details'];
+    $previousBookFromRates = "Want to book? Reply once with:\n\n🏠 Option number\n👤 Full name\n📞 Mobile number or email\n\nExample: Option 1, Maria Santos, 09171234567";
+    if (($rules['guided_replies']['book_from_rates'] ?? '') === $previousBookFromRates) $rules['guided_replies']['book_from_rates'] = $defaults['guided_replies']['book_from_rates'];
     foreach ($legacyGuidedReplies as $key => $legacyText) {
         if (($rules['guided_replies'][$key] ?? '') === $legacyText) $rules['guided_replies'][$key] = $defaults['guided_replies'][$key];
     }
@@ -389,6 +393,97 @@ function facebookConversationGuests(string $body, bool $requireLabel = false): ?
     return $guests >= 1 && $guests <= 100 ? $guests : null;
 }
 
+function facebookConversationNormalizeTime(string $value, string $role): ?string
+{
+    $text = mb_strtolower(trim($value), 'UTF-8');
+    $words = ['one'=>1,'una'=>1,'uno'=>1,'isa'=>1,'two'=>2,'dos'=>2,'dalawa'=>2,'three'=>3,'tres'=>3,'tatlo'=>3,'four'=>4,'kwatro'=>4,'quatro'=>4,'apat'=>4,'five'=>5,'singko'=>5,'lima'=>5,'six'=>6,'sais'=>6,'anim'=>6,'seven'=>7,'syete'=>7,'siete'=>7,'pito'=>7,'eight'=>8,'otso'=>8,'walo'=>8,'nine'=>9,'nwebe'=>9,'nueve'=>9,'siyam'=>9,'ten'=>10,'diyes'=>10,'sampu'=>10,'eleven'=>11,'onse'=>11,'labingisa'=>11,'twelve'=>12,'dose'=>12,'labindalawa'=>12];
+    if (preg_match('/\balas\s+([\p{L}]+)(?:\s+(?:y\s+)?(?:media|medya))?(?:\s+ng\s+(umaga|hapon|gabi))?/iu', $text, $match) === 1 && isset($words[$match[1]])) {
+        $hour = $words[$match[1]];
+        $minute = preg_match('/\b(?:media|medya)\b/iu', $match[0]) ? 30 : 0;
+        $period = $match[2] ?? '';
+        if (in_array($period, ['hapon', 'gabi'], true) && $hour < 12) $hour += 12;
+        if ($period === 'umaga' && $hour === 12) $hour = 0;
+        return sprintf('%02d:%02d', $hour, $minute);
+    }
+    $text = preg_replace('/\b([ap])\.?m\.?/iu', '$1m', $text) ?? $text;
+    $text = preg_replace('/(?<=\d)\.(?=\d{2}\b)/u', ':', $text) ?? $text;
+    $compact = preg_replace('/\s+/u', '', $text) ?? '';
+    if (preg_match('/\A(\d{1,2})(?::(\d{2}))?(am|pm)\z/i', $compact, $match) === 1) {
+        $hour = (int) $match[1]; $minute = isset($match[2]) && $match[2] !== '' ? (int) $match[2] : 0;
+        if ($hour < 1 || $hour > 12 || $minute > 59) return null;
+        if (strtolower($match[3]) === 'pm' && $hour < 12) $hour += 12;
+        if (strtolower($match[3]) === 'am' && $hour === 12) $hour = 0;
+        return sprintf('%02d:%02d', $hour, $minute);
+    }
+    if (preg_match('/\A(\d{1,2}):(\d{2})(?:h|hrs?)?\z/i', $compact, $match) === 1) {
+        $hour = (int) $match[1]; $minute = (int) $match[2];
+        return $hour <= 23 && $minute <= 59 ? sprintf('%02d:%02d', $hour, $minute) : null;
+    }
+    if (preg_match('/\A(\d{3,4})(?:h|hrs?)?\z/i', $compact, $match) === 1) {
+        $digits = str_pad($match[1], 4, '0', STR_PAD_LEFT);
+        $hour = (int) substr($digits, 0, 2); $minute = (int) substr($digits, 2, 2);
+        return $hour <= 23 && $minute <= 59 ? sprintf('%02d:%02d', $hour, $minute) : null;
+    }
+    if (preg_match('/\A(\d{1,2})\z/', $compact, $match) === 1) {
+        $hour = (int) $match[1];
+        if ($hour > 23) return null;
+        if ($hour >= 1 && $hour <= 7 && in_array($role, ['check_in', 'check_out'], true)) $hour += 12;
+        return sprintf('%02d:00', $hour);
+    }
+    return null;
+}
+
+function facebookConversationTimes(string $body): array
+{
+    $result = ['check_in_time' => null, 'check_out_time' => null];
+    $wordTime = 'alas\s+[\p{L}]+(?:\s+(?:y\s+)?(?:media|medya))?(?:\s+ng\s+(?:umaga|hapon|gabi))?';
+    $numericTime = '\d{1,2}(?:[:.]\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|\d{1,2}[:.]\d{2}|\d{3,4}\s*(?:h|hrs?)?';
+    $token = '(?:' . $wordTime . '|' . $numericTime . '|\d{1,2})';
+    $labels = [
+        'check_in_time' => '(?:check\s*[-]?\s*in|chek\s*[-]?\s*in|arrival|arrive|dating|pasok)',
+        'check_out_time' => '(?:check\s*[-]?\s*out|chek\s*[-]?\s*out|departure|depart|alis|uwi)',
+    ];
+    foreach ($labels as $key => $labelPattern) {
+        if (preg_match('/\b' . $labelPattern . '(?:\s*time)?\s*[:=\-]?\s*(' . $token . ')/iu', $body, $match) === 1) {
+            $result[$key] = facebookConversationNormalizeTime($match[1], $key === 'check_in_time' ? 'check_in' : 'check_out');
+        }
+    }
+    if (($result['check_in_time'] === null || $result['check_out_time'] === null)
+        && preg_match('/\b(?:in|arrival)\s*[:=\-]?\s*(' . $token . ').{0,40}?\b(?:out|departure)\s*[:=\-]?\s*(' . $token . ')/isu', $body, $match) === 1) {
+        $result['check_in_time'] ??= facebookConversationNormalizeTime($match[1], 'check_in');
+        $result['check_out_time'] ??= facebookConversationNormalizeTime($match[2], 'check_out');
+    }
+    if ($result['check_in_time'] === null || $result['check_out_time'] === null) {
+        preg_match_all('/\b(?:\d{1,2}(?:[:.]\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|\d{1,2}[:.]\d{2}|alas\s+[\p{L}]+(?:\s+(?:y\s+)?(?:media|medya))?(?:\s+ng\s+(?:umaga|hapon|gabi))?)\b/iu', $body, $matches);
+        if (count($matches[0] ?? []) >= 2) {
+            $result['check_in_time'] ??= facebookConversationNormalizeTime($matches[0][0], 'check_in');
+            $result['check_out_time'] ??= facebookConversationNormalizeTime($matches[0][1], 'check_out');
+        }
+    }
+    if ($result['check_in_time'] === null || $result['check_out_time'] === null) {
+        $standalone = [];
+        foreach (preg_split('/\R/u', $body) ?: [] as $line) {
+            if (preg_match('/\A\s*(\d{3,4})\s*(?:h|hrs?)?\s*\z/iu', $line, $match) === 1) $standalone[] = $match[1];
+        }
+        if (count($standalone) >= 2) {
+            $result['check_in_time'] ??= facebookConversationNormalizeTime($standalone[0], 'check_in');
+            $result['check_out_time'] ??= facebookConversationNormalizeTime($standalone[1], 'check_out');
+        }
+    }
+    if ($result['check_in_time'] === null && $result['check_out_time'] === null
+        && preg_match('/\A\s*(?:time(?:s)?\s*[:=\-]?\s*)?(\d{1,2})\s*(?:to|until|hanggang|-)\s*(\d{1,2})\s*\z/iu', $body, $match) === 1) {
+        $result['check_in_time'] = facebookConversationNormalizeTime($match[1], 'check_in');
+        $result['check_out_time'] = facebookConversationNormalizeTime($match[2], 'check_out');
+    }
+    return $result;
+}
+
+function facebookConversationTimeLabel(?string $value): string
+{
+    if (!is_string($value) || preg_match('/\A(?:[01]\d|2[0-3]):[0-5]\d\z/', $value) !== 1) return 'Needed';
+    return (new DateTimeImmutable('2000-01-01 ' . $value))->format('g:i A');
+}
+
 function facebookConversationAvailableUnits(PDO $db, int $stayId, string $stayName, string $checkIn, string $checkOut, int $configuredCount, bool $exclusive, ?int $excludeBookingId = null): int
 {
     $capacity = $exclusive ? 1 : max(1, $configuredCount);
@@ -491,6 +586,7 @@ function facebookConversationSelectStay(string $body, array $options): ?array
 function facebookConversationDetails(string $body): array
 {
     $identity = facebookConversationIdentityContact($body);
+    $times = facebookConversationTimes($body);
     $guests = facebookConversationGuests($body, true);
     if ($guests === null) {
         foreach (preg_split('/\R/u', $body) ?: [] as $line) {
@@ -503,13 +599,13 @@ function facebookConversationDetails(string $body): array
     if ($name === '') {
         foreach (preg_split('/[\n,;]+/u', $body) ?: [] as $part) {
             $part = trim($part);
-            if (preg_match('/\A[\p{L}\p{M} .\'\-]{2,100}\z/u', $part) !== 1 || preg_match('/\b(?:book|booking|reserve|reservation|available|availability|inquiry|date|guest|pax|room|option|best fit|email|phone|contact|weekend|bukas)\b/iu', $part)) continue;
+            if (preg_match('/\A[\p{L}\p{M} .\'\-]{2,100}\z/u', $part) !== 1 || preg_match('/\b(?:book|booking|reserve|reservation|available|availability|inquiry|date|guest|pax|room|option|best fit|email|phone|contact|weekend|bukas|check|arrival|departure|time|alas|dating|pasok|alis|uwi|umaga|hapon|gabi)\b/iu', $part)) continue;
             $name = trim(preg_replace('/\b(?:name|pangalan|ako si|i am|im)\b\s*[:=-]?/iu', '', $part) ?? '');
             if ($name !== '') break;
         }
     }
     if ($name === '' && ($identity['email'] !== '' || $identity['phone'] !== '')) $name = $identity['guest_name'];
-    return ['dates' => facebookConversationDates($body), 'guests' => $guests, 'guest_name' => $name, 'email' => $identity['email'], 'phone' => $identity['phone']];
+    return ['dates' => facebookConversationDates($body), 'check_in_time' => $times['check_in_time'], 'check_out_time' => $times['check_out_time'], 'guests' => $guests, 'guest_name' => $name, 'email' => $identity['email'], 'phone' => $identity['phone']];
 }
 
 function facebookConversationMissingDetails(array $data, bool $ratesOnly = false): array
@@ -518,6 +614,8 @@ function facebookConversationMissingDetails(array $data, bool $ratesOnly = false
     if (($data['check_in'] ?? '') === '' || ($data['check_out'] ?? '') === '') $missing[] = 'dates';
     if (!isset($data['guests'])) $missing[] = 'total guests';
     if (!$ratesOnly) {
+        if (($data['check_in_time'] ?? '') === '') $missing[] = 'check-in time';
+        if (($data['check_out_time'] ?? '') === '') $missing[] = 'check-out time';
         if (($data['guest_name'] ?? '') === '') $missing[] = 'full name';
         if (($data['email'] ?? '') === '' && ($data['phone'] ?? '') === '') $missing[] = 'email or mobile number';
     }
@@ -530,15 +628,17 @@ function facebookConversationDetailsChecklist(array $data, array $missing, bool 
     $dates = $hasDates
         ? (new DateTimeImmutable($data['check_in']))->format('M j') . '–' . (new DateTimeImmutable($data['check_out']))->format('M j, Y')
         : 'Needed';
-    $lines = [
-        ($hasDates ? '✅' : '❓') . ' Dates: ' . $dates,
-        isset($data['guests']) ? '✅ Total pax: ' . $data['guests'] : '❓ Total pax: NOT PROVIDED YET',
-    ];
+    $lines = [($hasDates ? '✅' : '❓') . ' Dates: ' . $dates];
     if (!$ratesOnly) {
         $room = ($data['stay_name'] ?? '') !== ''
             ? $data['stay_name'] . (!empty($data['stay_suggested']) ? ' (suggested)' : '')
             : 'Best fit will be suggested';
         $contact = ($data['email'] ?? '') !== '' ? $data['email'] : (($data['phone'] ?? '') !== '' ? $data['phone'] : 'Needed');
+        $lines[] = ($data['check_in_time'] ?? '') !== '' ? '✅ Check-in time: ' . facebookConversationTimeLabel($data['check_in_time']) : '❓ Check-in time: Needed';
+        $lines[] = ($data['check_out_time'] ?? '') !== '' ? '✅ Check-out time: ' . facebookConversationTimeLabel($data['check_out_time']) : '❓ Check-out time: Needed';
+    }
+    $lines[] = isset($data['guests']) ? '✅ Total pax: ' . $data['guests'] : '❓ Total pax: NOT PROVIDED YET';
+    if (!$ratesOnly) {
         $lines[] = '🏠 Room: ' . $room;
         $lines[] = ($data['guest_name'] ?? '') !== '' ? '✅ Name: ' . $data['guest_name'] : '❓ Name: Needed';
         $lines[] = $contact !== 'Needed' ? '✅ Contact: ' . $contact : '❓ Contact: Needed';
@@ -546,6 +646,8 @@ function facebookConversationDetailsChecklist(array $data, array $missing, bool 
     $labels = array_map(static fn(string $item): string => match ($item) {
         'dates' => 'stay dates',
         'total guests' => 'number of guests',
+        'check-in time' => 'check-in time (example: 2 PM)',
+        'check-out time' => 'check-out time (example: 11 AM)',
         'full name' => 'full name',
         'email or mobile number' => 'mobile number or email',
         default => $item,
@@ -638,6 +740,7 @@ function facebookConversationSummary(array $data, array $rules): string
     $roomLabel = !empty($data['stay_suggested']) ? 'Suggested room: ' : 'Room: ';
     return facebookGuidedReply($rules, 'summary_intro')
         . "\n\n📅 {$start}–{$end}"
+        . "\n🕒 Check-in " . facebookConversationTimeLabel($data['check_in_time']) . ' · Check-out ' . facebookConversationTimeLabel($data['check_out_time'])
         . "\n👥 {$data['guests']} guests"
         . "\n🏠 {$roomLabel}{$data['stay_name']}"
         . "\n👤 {$data['guest_name']}"
@@ -672,7 +775,7 @@ function facebookConversationConsolidatedReply(PDO $db, int $conversationId, arr
 {
     $details = facebookConversationDetails($body);
     if ($details['dates'] !== null) [$data['check_in'], $data['check_out']] = $details['dates'];
-    foreach (['guests', 'guest_name', 'email', 'phone'] as $key) if (($details[$key] ?? null) !== null && ($details[$key] ?? '') !== '') $data[$key] = $details[$key];
+    foreach (['check_in_time', 'check_out_time', 'guests', 'guest_name', 'email', 'phone'] as $key) if (($details[$key] ?? null) !== null && ($details[$key] ?? '') !== '') $data[$key] = $details[$key];
     $prerequisitesMissing = facebookConversationMissingDetails($data, true);
     if ($prerequisitesMissing !== []) {
         facebookConversationSave($db, $conversationId, $ratesOnly ? 'awaiting_rate_details' : 'awaiting_booking_details', $data, $eventId);
@@ -770,7 +873,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
         if (!isset($previous[$state])) return facebookConversationPrompt($state, $rules);
         $state = $previous[$state];
         foreach (match ($state) {
-            'awaiting_dates' => ['check_in', 'check_out', 'guests', 'options', 'stay_id', 'stay_name', 'guest_name', 'email', 'phone'],
+            'awaiting_dates' => ['check_in', 'check_out', 'check_in_time', 'check_out_time', 'guests', 'options', 'stay_id', 'stay_name', 'guest_name', 'email', 'phone'],
             'awaiting_guests' => ['guests', 'options', 'stay_id', 'stay_name', 'guest_name', 'email', 'phone'],
             'awaiting_stay' => ['stay_id', 'stay_name', 'guest_name', 'email', 'phone'],
             'awaiting_name' => ['guest_name', 'email', 'phone'],
@@ -782,9 +885,9 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
 
     if ($state === 'awaiting_confirmation') {
         $revisionDetails = facebookConversationDetails($body);
-        if ($revisionDetails['dates'] !== null || $revisionDetails['guests'] !== null) {
+        if ($revisionDetails['dates'] !== null || $revisionDetails['check_in_time'] !== null || $revisionDetails['check_out_time'] !== null || $revisionDetails['guests'] !== null) {
             if ($revisionDetails['dates'] !== null) {
-                $revisedData = array_intersect_key($data, array_flip(['guest_name', 'email', 'phone', 'editing_booking_id', 'reference']));
+                $revisedData = array_intersect_key($data, array_flip(['check_in_time', 'check_out_time', 'guest_name', 'email', 'phone', 'editing_booking_id', 'reference']));
             } else {
                 $revisedData = $data;
                 foreach (['options', 'stay_id', 'stay_name', 'stay_suggested', 'room_photos', 'room_photo_event_id'] as $key) unset($revisedData[$key]);
@@ -799,7 +902,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
     if ($category === 'rates' && !in_array($state, ['idle', 'cancelled', 'awaiting_rate_details'], true)) {
         $rateDetails = facebookConversationDetails($body);
         if ($rateDetails['dates'] === null && $rateDetails['guests'] === null) return (string) ($rules['templates']['rates'] ?? '');
-        $revisedData = array_intersect_key($data, array_flip(['guest_name', 'email', 'phone', 'editing_booking_id', 'reference']));
+        $revisedData = array_intersect_key($data, array_flip(['check_in_time', 'check_out_time', 'guest_name', 'email', 'phone', 'editing_booking_id', 'reference']));
         if ($state === 'completed' && $conversation['booking_id'] !== null) $revisedData['editing_booking_id'] = (int) $conversation['booking_id'];
         return facebookConversationConsolidatedReply($db, (int) $conversation['id'], $revisedData, $eventId, $body, $rules);
     }
@@ -817,7 +920,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
     }
     if ($state === 'awaiting_booking_details' && in_array($category, ['rates', 'amenities', 'location'], true)) {
         $sideDetails = facebookConversationDetails($body);
-        if ($sideDetails['dates'] === null && $sideDetails['guests'] === null && $sideDetails['email'] === '' && $sideDetails['phone'] === '') {
+        if ($sideDetails['dates'] === null && $sideDetails['check_in_time'] === null && $sideDetails['check_out_time'] === null && $sideDetails['guests'] === null && $sideDetails['email'] === '' && $sideDetails['phone'] === '') {
             return (string) ($rules['templates'][$category] ?? '');
         }
     }
@@ -826,7 +929,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
     if ($state === 'completed') {
         if ($category === 'booking') {
             $bookingId = $conversation['booking_id'] === null ? 0 : (int) $conversation['booking_id'];
-            $bookingQuery = $db->prepare('SELECT id, reference_code, guest_name, email, phone, guests, stay_id, stay_type, status FROM bookings WHERE id = ? FOR UPDATE');
+            $bookingQuery = $db->prepare('SELECT id, reference_code, guest_name, email, phone, guests, stay_id, stay_type, message, status FROM bookings WHERE id = ? FOR UPDATE');
             $bookingQuery->execute([$bookingId]);
             $booking = $bookingQuery->fetch();
             if (!$booking || $booking['status'] !== 'pending') {
@@ -842,6 +945,8 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
                 'guests' => (int) $booking['guests'], 'stay_id' => $booking['stay_id'] === null ? null : (int) $booking['stay_id'],
                 'stay_name' => $booking['stay_type'],
             ];
+            if (preg_match('/Preferred arrival:\s*((?:[01]\d|2[0-3]):[0-5]\d)/i', (string) $booking['message'], $timeMatch) === 1) $data['check_in_time'] = $timeMatch[1];
+            if (preg_match('/Preferred departure:\s*((?:[01]\d|2[0-3]):[0-5]\d)/i', (string) $booking['message'], $timeMatch) === 1) $data['check_out_time'] = $timeMatch[1];
             facebookAudit($db, null, 'conversation_restarted', 'event', $eventId);
             return "I'll update your pending request {$booking['reference_code']}.\n\n" . facebookConversationConsolidatedReply($db, (int) $conversation['id'], $data, $eventId, $body, $rules);
         }
@@ -945,8 +1050,9 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
                 facebookAudit($db, null, 'staff_alert_created', 'event', $eventId);
                 return 'This booking can no longer be changed automatically. An admin will review your message and assist you.';
             }
+            $bookingMessage = "Updated through the Messenger guided booking assistant. Staff confirmation is required.\nPreferred arrival: {$data['check_in_time']}\nPreferred departure: {$data['check_out_time']}";
             $update = $db->prepare('UPDATE bookings SET guest_name = ?, email = ?, phone = ?, check_in = ?, check_out = ?, guests = ?, stay_type = ?, stay_id = ?, message = ? WHERE id = ? AND status = \'pending\'');
-            $update->execute([$data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $stayRecord['name'], (int) $stayRecord['id'], 'Updated through the Messenger guided booking assistant. Staff confirmation is required.', $editingBookingId]);
+            $update->execute([$data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $stayRecord['name'], (int) $stayRecord['id'], $bookingMessage, $editingBookingId]);
             $reference = (string) $booking['reference_code'];
             $data['reference'] = $reference;
             unset($data['editing_booking_id']);
@@ -957,8 +1063,9 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
             return facebookGuidedReply($rules, 'pending_updated', ['reference' => $reference]) . ' It is still PENDING and is not confirmed until staff approves it.';
         }
         $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
+        $bookingMessage = "Created through the Messenger guided booking assistant. Staff confirmation is required.\nPreferred arrival: {$data['check_in_time']}\nPreferred departure: {$data['check_out_time']}";
         $insert = $db->prepare("INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)");
-        $insert->execute([$reference, $data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $stayRecord['name'], 'Created through the Messenger guided booking assistant. Staff confirmation is required.', (int) $stayRecord['id']]);
+        $insert->execute([$reference, $data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $stayRecord['name'], $bookingMessage, (int) $stayRecord['id']]);
         $bookingId = (int) $db->lastInsertId();
         $data['reference'] = $reference;
         facebookConversationSave($db, (int) $conversation['id'], 'completed', $data, $eventId, $bookingId);
