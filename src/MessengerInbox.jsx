@@ -46,7 +46,7 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
   const query = search.trim().toLocaleLowerCase();
   const chats = [...grouped.values()].map(chat => {
     const recordedTimeline = chat.messages.flatMap(item => [
-      { key: `incoming:${item.id}`, body: item.body, at: item.message_at, outgoing: false },
+      { key: `incoming:${item.id}`, body: item.body, type: (item.attachments || []).length > 1 ? 'gallery' : item.attachment_url && (item.attachment_type === 'sticker' || item.attachment_url.includes('/t39.1997-6/')) ? 'sticker' : item.attachment_type === 'image' && item.attachment_url ? 'image' : 'text', photos: item.attachments || [], photoUrl: item.attachment_url || '', at: item.message_at, outgoing: false },
       ...(item.sent_replies || []).map(reply => ({ key: `reply:${reply.id}`, body: reply.body, type: reply.type || 'text', origin: reply.origin || 'automated', photoUrl: reply.photo_url || '', at: reply.sent_at, outgoing: true })),
     ]);
     const localReplies = pendingReplies.filter(item => item.conversationKey === chat.key && !recordedTimeline.some(recorded => recorded.origin === 'staff' && recorded.body === item.body && Date.parse(recorded.at) >= Date.parse(item.at) - 2000));
@@ -68,10 +68,18 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
 
   useEffect(() => {
     if (!previewPhoto) return undefined;
-    const closeOnEscape = event => { if (event.key === 'Escape') setPreviewPhoto(null); };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
+    const navigatePreview = event => {
+      if (event.key === 'Escape') setPreviewPhoto(null);
+      if (event.key === 'ArrowLeft') setPreviewPhoto(current => current && current.photos.length > 1 ? { ...current, index: (current.index - 1 + current.photos.length) % current.photos.length } : current);
+      if (event.key === 'ArrowRight') setPreviewPhoto(current => current && current.photos.length > 1 ? { ...current, index: (current.index + 1) % current.photos.length } : current);
+    };
+    document.addEventListener('keydown', navigatePreview);
+    return () => document.removeEventListener('keydown', navigatePreview);
   }, [previewPhoto]);
+
+  function openPreview(photos, index = 0) {
+    setPreviewPhoto({ photos, index });
+  }
 
   function selectChat(key) {
     setSelectedKey(key); setMobileThread(true); setShowDetails(false);
@@ -93,7 +101,7 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
         </button>)}
         {!chats.length && <div className="messenger-placeholder"><ChatIcon name="chat" /><h3>{query ? 'No matching chats' : 'Your inbox starts here'}</h3><p>{query ? 'Try another name or message.' : 'Recorded Messenger inquiries will appear here.'}</p></div>}
       </div>
-      <p className="messenger-list-note">{records.length} of {total} recorded messages loaded. Search and conversations cover this page only.</p>
+      <p className="messenger-list-note">{chats.length} conversations · {records.length} of {total} recent messages loaded.</p>
     </aside>
     <section className="messenger-conversation" aria-label={selected ? `Conversation with ${selected.name}` : 'Conversation'}>
       {selected ? <>
@@ -111,8 +119,10 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
             return <article className={`messenger-message${item.outgoing ? ' messenger-message--outgoing' : ''}`} key={item.key} aria-label={item.outgoing ? 'Your reply' : 'Guest message'}>
             {startsNewDay && <time className="messenger-message-date">{dayLabel(item.at)}</time>}
             {(startsNewDay || followsTimeGap) && <time className="messenger-message-time">{timeLabel(item.at)}</time>}
-            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}{item.outgoing && <time className="messenger-hover-time" dateTime={item.at}>{timeLabel(item.at)}</time>}{item.type === 'image'
-              ? <button className="messenger-photo" type="button" onClick={() => setPreviewPhoto({ src: item.photoUrl, alt: `${selected.name} room photo` })} aria-label="Open room photo"><img src={item.photoUrl} alt="Room sent through Messenger" loading="lazy" /></button>
+            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}{item.outgoing && <time className="messenger-hover-time" dateTime={item.at}>{timeLabel(item.at)}</time>}{item.type === 'gallery'
+              ? <div className="messenger-photo-grid" aria-label={`${item.photos.length} photos received`}>{item.photos.map((photo, photoIndex) => <button className={`messenger-photo${photo.type === 'sticker' ? ' messenger-sticker' : ''}`} type="button" key={`${photo.url}:${photoIndex}`} onClick={() => openPreview(item.photos.map((entry, index) => ({ src: entry.url, alt: `${selected.name} photo ${index + 1}` })), photoIndex)} aria-label={`Open photo ${photoIndex + 1} of ${item.photos.length}`}><img src={photo.url} alt={`Photo ${photoIndex + 1} sent through Messenger`} loading="lazy" /></button>)}</div>
+              : item.type === 'image' || item.type === 'sticker'
+              ? <button className={`messenger-photo${item.type === 'sticker' ? ' messenger-sticker' : ''}`} type="button" onClick={() => openPreview([{ src: item.photoUrl, alt: item.type === 'sticker' ? `${selected.name} sticker` : `${selected.name} room photo` }])} aria-label={item.type === 'sticker' ? 'Open sticker' : 'Open room photo'}><img src={item.photoUrl} alt={item.type === 'sticker' ? 'Sticker sent through Messenger' : 'Room sent through Messenger'} loading="lazy" /></button>
               : <p className="messenger-bubble">{item.body}</p>}</div>
             {item.outgoing && <small className="messenger-sent-label">{item.deliveryStatus === 'sending' ? 'Sending' : item.deliveryStatus === 'queued' ? 'Queued' : 'Sent'} · {item.origin === 'staff' ? 'Staff reply' : 'Automated reply'}</small>}
           </article>})}
@@ -137,6 +147,11 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
       </> : <div className="messenger-placeholder messenger-welcome"><span className="messenger-welcome-icon"><ChatIcon name="chat" /></span><h3>Your conversations, in one place</h3><p>Select a chat to view its recorded messages.</p></div>}
     </section>
     {selected && showDetails && <section id="messenger-details" className="messenger-details" aria-label="Inquiry management"><div className="fb-row"><h3>Inquiry details</h3><button type="button" onClick={() => setShowDetails(false)}>Close details</button></div>{selected.messages.map(item => renderDetails(item))}</section>}
-    {previewPhoto && <div className="messenger-photo-viewer" role="dialog" aria-modal="true" aria-label="Room photo preview" onClick={() => setPreviewPhoto(null)}><button type="button" aria-label="Close photo preview" onClick={() => setPreviewPhoto(null)}>×</button><img src={previewPhoto.src} alt={previewPhoto.alt} onClick={event => event.stopPropagation()} /></div>}
+    {previewPhoto && <div className="messenger-photo-viewer" role="dialog" aria-modal="true" aria-label="Photo preview" onClick={() => setPreviewPhoto(null)}>
+      <button className="messenger-viewer-close" type="button" aria-label="Close photo preview" onClick={() => setPreviewPhoto(null)}>×</button>
+      {previewPhoto.photos.length > 1 && <button className="messenger-viewer-nav messenger-viewer-prev" type="button" aria-label="Previous photo" onClick={event => { event.stopPropagation(); setPreviewPhoto(current => ({ ...current, index: (current.index - 1 + current.photos.length) % current.photos.length })); }}>‹</button>}
+      <img src={previewPhoto.photos[previewPhoto.index].src} alt={previewPhoto.photos[previewPhoto.index].alt} onClick={event => event.stopPropagation()} />
+      {previewPhoto.photos.length > 1 && <><span className="messenger-viewer-count">{previewPhoto.index + 1} / {previewPhoto.photos.length}</span><button className="messenger-viewer-nav messenger-viewer-next" type="button" aria-label="Next photo" onClick={event => { event.stopPropagation(); setPreviewPhoto(current => ({ ...current, index: (current.index + 1) % current.photos.length })); }}>›</button></>}
+    </div>}
   </div>;
 }

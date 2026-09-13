@@ -14,7 +14,8 @@ try {
         $section = (string) ($_GET['section'] ?? 'message');
         $page = filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100000]]);
         if ($page === false || !in_array($section, ['message', 'comment', 'lead', 'alerts', 'drafts', 'jobs', 'audit', 'rules'], true)) throw new FacebookWorkflowError('Choose a valid section and page.');
-        $offset = ($page - 1) * 25;
+        $pageSize = $section === 'message' ? 100 : 25;
+        $offset = ($page - 1) * $pageSize;
         $records = [];
         $total = 0;
         if (in_array($section, ['message', 'comment', 'lead', 'alerts'], true)) {
@@ -32,7 +33,7 @@ try {
                 b.status AS booking_status
                 FROM facebook_events e
                 LEFT JOIN bookings b ON b.id = e.booking_id
-                WHERE ' . $where . ' ORDER BY e.id DESC LIMIT 25 OFFSET ' . $offset);
+                WHERE ' . $where . ' ORDER BY e.id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset);
             $query->execute($params); $records = $query->fetchAll();
             if ($section === 'message' && $records !== []) {
                 $ids = array_column($records, 'id');
@@ -68,6 +69,21 @@ try {
                 foreach ($records as &$record) {
                     // The webhook writes gmdate() text; manual intake uses the DB clock.
                     // Preserve legacy storage and normalize only the inbox representation.
+                    $record['attachments'] = [];
+                    if (is_string($record['attachments_json'] ?? null) && $record['attachments_json'] !== '') {
+                        try { $decodedAttachments = json_decode($record['attachments_json'], true, 16, JSON_THROW_ON_ERROR); }
+                        catch (JsonException) { $decodedAttachments = []; }
+                        if (is_array($decodedAttachments)) {
+                            foreach (array_slice($decodedAttachments, 0, 10) as $attachment) {
+                                if (!is_array($attachment) || !in_array($attachment['type'] ?? null, ['image', 'sticker'], true) || !is_string($attachment['url'] ?? null)) continue;
+                                $record['attachments'][] = ['type' => $attachment['type'], 'url' => $attachment['url']];
+                            }
+                        }
+                    }
+                    if ($record['attachments'] === [] && in_array($record['attachment_type'] ?? null, ['image', 'sticker'], true) && is_string($record['attachment_url'] ?? null) && $record['attachment_url'] !== '') {
+                        $record['attachments'][] = ['type' => $record['attachment_type'], 'url' => $record['attachment_url']];
+                    }
+                    unset($record['attachments_json']);
                     $record['message_at'] = $record['source'] === 'facebook'
                         ? str_replace(' ', 'T', $record['received_at']) . 'Z'
                         : gmdate('Y-m-d\TH:i:s\Z', (int) $record['received_epoch']);
@@ -79,7 +95,7 @@ try {
         } elseif ($section !== 'rules') {
             $tables = ['drafts' => 'facebook_drafts', 'jobs' => 'facebook_jobs', 'audit' => 'facebook_audit'];
             $table = $tables[$section];
-            $records = $db->query('SELECT * FROM ' . $table . ' ORDER BY id DESC LIMIT 25 OFFSET ' . $offset)->fetchAll();
+            $records = $db->query('SELECT * FROM ' . $table . ' ORDER BY id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset)->fetchAll();
             $total = (int) $db->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn();
         }
         $counts = $db->query("SELECT SUM(kind = 'message' AND status <> 'resolved') AS inquiries, SUM(needs_attention = 1) AS alerts, SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
@@ -90,7 +106,7 @@ try {
         }
         $verifiedAt = $db->query('SELECT verified_at FROM facebook_webhook_state WHERE id = 1')->fetchColumn();
         $connection = $configured && is_string($verifiedAt) ? 'connected' : 'not_connected';
-        jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page]);
+        jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
     }
 
     $data = readJsonBody(65536);
@@ -112,7 +128,7 @@ try {
         if ($messageAge === false || $messageAge < 0 || $messageAge > 86400) throw new FacebookWorkflowError('Facebook’s 24-hour reply window has ended for this conversation.');
         if ($event['status'] === 'resolved') throw new FacebookWorkflowError('Reopen this inquiry before replying.');
         $payload = json_encode(['__facebook_job_type' => 'staff_reply', 'text' => $body], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        $db->prepare("UPDATE facebook_jobs SET status = 'cancelled', error_code = 'staff_reply_superseded' WHERE event_id = ? AND kind = 'reply' AND status IN ('blocked','pending','retry_wait')")->execute([$id]);
+        $db->prepare("UPDATE facebook_jobs j INNER JOIN facebook_events e ON e.id = j.event_id SET j.status = 'cancelled', j.error_code = 'staff_reply_superseded' WHERE e.page_id = ? AND e.sender_id = ? AND j.kind = 'reply' AND j.status IN ('blocked','pending','retry_wait')")->execute([$event['page_id'], $event['sender_id']]);
         $dedupeKey = 'staff-reply:event:' . $id . ':' . bin2hex(random_bytes(12));
         $insert = $db->prepare("INSERT INTO facebook_jobs (event_id, kind, dedupe_key, payload, status) VALUES (?, 'reply', ?, ?, 'pending')");
         $insert->execute([$id, $dedupeKey, $payload]);

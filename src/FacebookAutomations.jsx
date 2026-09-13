@@ -14,6 +14,7 @@ const guidedReplies = [
   ['completed', 'Existing pending request'], ['cancelled', 'Cancelled flow'],
   ['pending_updated', 'Pending request updated'],
 ];
+const MESSENGER_REFRESH_MS = 1000;
 const VISIBLE_REFRESH_MS = 15000;
 const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
@@ -155,7 +156,9 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
     let timer;
     let stopped = false;
     const schedule = () => {
-      const delay = document.visibilityState === 'visible' ? VISIBLE_REFRESH_MS : HIDDEN_REFRESH_MS;
+      const delay = document.visibilityState === 'visible'
+        ? (section === 'message' ? MESSENGER_REFRESH_MS : VISIBLE_REFRESH_MS)
+        : HIDDEN_REFRESH_MS;
       timer = window.setTimeout(() => {
         if (stopped) return;
         setRefresh(value => value + 1);
@@ -174,7 +177,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', visibilityChanged);
     };
-  }, []);
+  }, [section]);
 
   const mutate = async payload => {
     if (busy) return false;
@@ -223,7 +226,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       </>}
       {section === 'audit' && <><h2>Audit log</h2><p>Records changes and processing outcomes without copying private conversations or credentials into the log.</p><div className="fb-panel">{data.records.map(item => <div className="fb-audit-row" key={item.id}><strong>{label(item.action)}</strong><span>{item.entity_type} #{item.entity_id} · {item.actor_id ? `Admin #${item.actor_id}` : 'System'}</span><small>{stamp(item.created_at)}</small></div>)}</div></>}
       {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
-      {section !== 'rules' && data.total > 25 && <div className="fb-pagination"><button type="button" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {Math.ceil(data.total / 25)}</span><button type="button" disabled={busy || page * 25 >= data.total} onClick={() => setPage(value => value + 1)}>Next</button></div>}
+      {section !== 'rules' && data.total > data.page_size && <div className="fb-pagination"><button type="button" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {Math.ceil(data.total / data.page_size)}</span><button type="button" disabled={busy || page * data.page_size >= data.total} onClick={() => setPage(value => value + 1)}>Next</button></div>}
     </>}
     {lead && <ManualBookingModal key={lead.id} open onClose={() => setLead(null)} csrfToken={csrfToken}
       facebookLeadId={Number(lead.id)} initialGuest={lead}

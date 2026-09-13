@@ -183,6 +183,7 @@ try {
         $sentPayload = null;
         try { $sentPayload = json_decode((string) $job['payload'], true, 8, JSON_THROW_ON_ERROR); } catch (JsonException) {}
         $sentByStaff = is_array($sentPayload) && ($sentPayload['__facebook_job_type'] ?? '') === 'staff_reply';
+        if ($sentByStaff) facebookStartHumanTakeover($db, (string) $job['page_id'], (string) $job['sender_id'], (int) $job['event_id']);
         facebookAudit($db, null, $sentByStaff ? 'staff_reply_sent' : 'automatic_reply_sent', 'event', (int) $job['event_id']);
         $db->commit();
     }

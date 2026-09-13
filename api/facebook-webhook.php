@@ -34,10 +34,11 @@ function webhookTimestamp(mixed $milliseconds): string
 
 function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
 {
-    $query = $db->prepare("INSERT IGNORE INTO facebook_events (source, external_id, page_id, sender_id, kind, guest_name, email, phone, body, last_customer_message_at, category, needs_attention, received_at) VALUES ('facebook', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $query = $db->prepare("INSERT IGNORE INTO facebook_events (source, external_id, page_id, sender_id, kind, guest_name, email, phone, body, attachment_type, attachment_url, attachments_json, last_customer_message_at, category, needs_attention, received_at) VALUES ('facebook', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $query->execute([
         $event['external_id'], $event['page_id'], $event['sender_id'], $event['kind'], $event['guest_name'],
-        $event['email'] ?? '', $event['phone'] ?? '', $event['body'], $event['last_customer_message_at'] ?? null,
+        $event['email'] ?? '', $event['phone'] ?? '', $event['body'], $event['attachment_type'] ?? null, $event['attachment_url'] ?? null,
+        empty($event['attachments']) ? null : json_encode($event['attachments'], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $event['last_customer_message_at'] ?? null,
         $event['category'], (int) $event['needs_attention'], $event['received_at'],
     ]);
     if ($query->rowCount() !== 1) return null;
@@ -49,7 +50,7 @@ function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
             ->execute([$id, 'profile:event:' . $id]);
         facebookAudit($db, null, 'sender_name_queued', 'event', $id);
     }
-    if (($rules['prepare_replies'] ?? false) && $event['kind'] === 'message') {
+    if (($rules['prepare_replies'] ?? false) && $event['kind'] === 'message' && ($event['automatic_reply'] ?? true)) {
         $reply = facebookConversationReply($db, ['id' => $id] + $event, $rules);
         $includeAutomaticNotice = trim($reply) !== trim(facebookConversationPrompt('handoff', $rules));
         if ($reply !== '' && facebookQueueReply($db, $id, $reply, true, $includeAutomaticNotice)) {
@@ -72,15 +73,19 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
             $message = $messageEvent['message'] ?? null;
             $senderId = (string) ($messageEvent['sender']['id'] ?? '');
             $mid = is_array($message) ? (string) ($message['mid'] ?? '') : '';
-            $body = is_array($message) && is_string($message['text'] ?? null) ? trim($message['text']) : '';
+            $normalizedMessage = is_array($message) ? facebookWebhookMessageBody($message) : ['body' => '', 'automatic_reply' => false];
+            $body = $normalizedMessage['body'];
             if ($senderId === '' || $mid === '' || $body === '') continue;
             $receivedAt = webhookTimestamp($messageEvent['timestamp'] ?? null);
             $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true), $rules['keywords'] ?? null);
             webhookInsertEvent($db, [
                 'external_id' => $mid, 'page_id' => $pageId, 'sender_id' => $senderId, 'kind' => 'message',
-                'guest_name' => 'Messenger guest', 'body' => mb_substr($body, 0, 4000),
+                'guest_name' => 'Messenger guest', 'body' => $body,
+                'attachment_type' => $normalizedMessage['attachment_type'], 'attachment_url' => $normalizedMessage['attachment_url'],
+                'attachments' => $normalizedMessage['attachments'],
                 'last_customer_message_at' => $receivedAt, 'category' => $category,
                 'needs_attention' => $category === 'complaint', 'received_at' => $receivedAt,
+                'automatic_reply' => $normalizedMessage['automatic_reply'],
             ], $rules);
         }
         foreach (($entry['changes'] ?? []) as $change) {

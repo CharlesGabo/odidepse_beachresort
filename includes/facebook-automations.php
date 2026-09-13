@@ -152,6 +152,32 @@ function facebookAutomaticReplyNotice(): string
     return 'Automated reply • Reply ADMIN for staff assistance.';
 }
 
+function facebookWebhookMessageBody(array $message): array
+{
+    $text = is_string($message['text'] ?? null) ? trim($message['text']) : '';
+    $attachmentInput = is_array($message['attachments'] ?? null) ? array_slice($message['attachments'], 0, 10) : [];
+    $hasStickerId = isset($message['sticker_id']) && (is_int($message['sticker_id']) || is_string($message['sticker_id']));
+    $attachments = [];
+    foreach ($attachmentInput as $attachment) {
+        if (!is_array($attachment)) continue;
+        $type = (string) ($attachment['type'] ?? '');
+        $candidateUrl = is_array($attachment['payload'] ?? null) && is_string($attachment['payload']['url'] ?? null) ? trim($attachment['payload']['url']) : '';
+        $validUrl = mb_strlen($candidateUrl) <= 4096 && filter_var($candidateUrl, FILTER_VALIDATE_URL) && parse_url($candidateUrl, PHP_URL_SCHEME) === 'https';
+        if (!$validUrl) continue;
+        $path = (string) parse_url($candidateUrl, PHP_URL_PATH);
+        $isSticker = $type === 'image' && ($hasStickerId || str_contains($path, '/t39.1997-6/'));
+        $attachments[] = ['type' => $isSticker ? 'sticker' : $type, 'url' => $candidateUrl];
+    }
+    $firstAttachment = $attachments[0] ?? null;
+    if ($text !== '') return ['body' => mb_substr($text, 0, 4000), 'automatic_reply' => true, 'attachment_type' => $firstAttachment['type'] ?? null, 'attachment_url' => $firstAttachment['url'] ?? null, 'attachments' => $attachments];
+    if ($hasStickerId && $attachments === []) return ['body' => '👍', 'automatic_reply' => false, 'attachment_type' => null, 'attachment_url' => null, 'attachments' => []];
+    $type = (string) ($firstAttachment['type'] ?? '');
+    $labels = ['image' => '📷 Photo received', 'audio' => '🎵 Audio received', 'video' => '🎥 Video received', 'file' => '📎 File received'];
+    $photoCount = count(array_filter($attachments, static fn(array $item): bool => $item['type'] === 'image'));
+    $body = $type === 'sticker' ? '👍' : ($photoCount > 1 ? '📷 ' . $photoCount . ' photos received' : ($labels[$type] ?? '📎 Attachment received'));
+    return ['body' => $attachments === [] ? '' : $body, 'automatic_reply' => false, 'attachment_type' => $firstAttachment['type'] ?? null, 'attachment_url' => $firstAttachment['url'] ?? null, 'attachments' => $attachments];
+}
+
 function facebookPrepareReply(PDO $db, array $event, array $rules, bool $automaticDelivery = false): bool
 {
     if ($event['kind'] !== 'message' || $event['status'] === 'resolved') return false;
@@ -625,6 +651,18 @@ function facebookConversationSave(PDO $db, int $id, string $state, array $data, 
     $db->prepare('UPDATE facebook_conversations SET state = ?, data_json = ?, booking_id = ?, last_event_id = ?, revision = revision + 1 WHERE id = ?')->execute([$state, $json, $bookingId, $eventId, $id]);
 }
 
+function facebookStartHumanTakeover(PDO $db, string $pageId, string $senderId, int $eventId): void
+{
+    $query = $db->prepare('SELECT id, data_json, booking_id FROM facebook_conversations WHERE page_id = ? AND sender_id = ? FOR UPDATE');
+    $query->execute([$pageId, $senderId]);
+    $conversation = $query->fetch();
+    if (!$conversation) return;
+    $data = json_decode((string) $conversation['data_json'], true, 32, JSON_THROW_ON_ERROR);
+    if (!is_array($data)) $data = [];
+    $data['human_takeover_until'] = time() + 86400;
+    facebookConversationSave($db, (int) $conversation['id'], 'handoff', $data, $eventId, $conversation['booking_id'] === null ? null : (int) $conversation['booking_id']);
+}
+
 function facebookConversationConsolidatedReply(PDO $db, int $conversationId, array $data, int $eventId, string $body, array $rules, bool $ratesOnly = false): string
 {
     $details = facebookConversationDetails($body);
@@ -682,6 +720,18 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
     $data = json_decode($conversation['data_json'], true, 32, JSON_THROW_ON_ERROR);
     if (!is_array($data)) $data = [];
     $command = facebookConversationCommand($body);
+
+    $takeoverUntil = filter_var($data['human_takeover_until'] ?? null, FILTER_VALIDATE_INT);
+    if ($takeoverUntil !== false && $takeoverUntil > time() && $command !== 'restart') {
+        facebookConversationSave($db, (int) $conversation['id'], 'handoff', $data, $eventId, $conversation['booking_id'] === null ? null : (int) $conversation['booking_id']);
+        return '';
+    }
+    if ($takeoverUntil !== false) {
+        $data = [];
+        $state = 'idle';
+        facebookConversationSave($db, (int) $conversation['id'], $state, $data, $eventId);
+        facebookAudit($db, null, $command === 'restart' ? 'human_takeover_restarted' : 'human_takeover_expired', 'event', $eventId);
+    }
 
     if ($category === 'complaint') {
         facebookConversationSave($db, (int) $conversation['id'], 'handoff', $data, $eventId, $conversation['booking_id'] === null ? null : (int) $conversation['booking_id']);
