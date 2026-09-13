@@ -18,14 +18,20 @@ function Avatar({ name }) {
 }
 
 const chatDate = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const chatDay = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'long', day: 'numeric' });
+const chatTime = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
 const timestamp = value => value && Number.isFinite(Date.parse(value)) ? chatDate.format(new Date(value)) : 'Time unavailable';
+const dayLabel = value => value && Number.isFinite(Date.parse(value)) ? chatDay.format(new Date(value)) : 'Date unavailable';
+const timeLabel = value => value && Number.isFinite(Date.parse(value)) ? chatTime.format(new Date(value)) : 'Time unavailable';
 
-export default function MessengerInbox({ records, total, renderDetails }) {
+export default function MessengerInbox({ records, total, renderDetails, connected, busy, onSend }) {
   const [search, setSearch] = useState('');
   const [selectedKey, setSelectedKey] = useState(null);
   const [mobileThread, setMobileThread] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState(null);
+  const [reply, setReply] = useState('');
+  const [pendingReplies, setPendingReplies] = useState([]);
   const scrollRef = useRef(null);
   const backRef = useRef(null);
   const listRef = useRef(null);
@@ -39,10 +45,12 @@ export default function MessengerInbox({ records, total, renderDetails }) {
   });
   const query = search.trim().toLocaleLowerCase();
   const chats = [...grouped.values()].map(chat => {
-    const timeline = chat.messages.flatMap(item => [
+    const recordedTimeline = chat.messages.flatMap(item => [
       { key: `incoming:${item.id}`, body: item.body, at: item.message_at, outgoing: false },
-      ...(item.sent_replies || []).map(reply => ({ key: `reply:${reply.id}`, body: reply.body, type: reply.type || 'text', photoUrl: reply.photo_url || '', at: reply.sent_at, outgoing: true })),
-    ]).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+      ...(item.sent_replies || []).map(reply => ({ key: `reply:${reply.id}`, body: reply.body, type: reply.type || 'text', origin: reply.origin || 'automated', photoUrl: reply.photo_url || '', at: reply.sent_at, outgoing: true })),
+    ]);
+    const localReplies = pendingReplies.filter(item => item.conversationKey === chat.key && !recordedTimeline.some(recorded => recorded.origin === 'staff' && recorded.body === item.body && Date.parse(recorded.at) >= Date.parse(item.at) - 2000));
+    const timeline = [...recordedTimeline, ...localReplies].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     return { ...chat, timeline, preview: timeline[timeline.length - 1] };
   }).sort((a, b) => Date.parse(b.preview.at) - Date.parse(a.preview.at))
     .filter(chat => !query || chat.name.toLocaleLowerCase().includes(query)
@@ -50,10 +58,13 @@ export default function MessengerInbox({ records, total, renderDetails }) {
   const selected = chats.find(chat => chat.key === selectedKey) || chats[0];
   const lastId = selected?.preview.key;
   const messageCount = selected?.timeline.length;
+  const canReply = Boolean(connected && selected?.latest.source === 'facebook' && selected.latest.page_id && selected.latest.sender_id && selected.latest.status !== 'resolved');
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [selected?.key, lastId, messageCount]);
+
+  useEffect(() => { setReply(''); }, [selected?.key]);
 
   useEffect(() => {
     if (!previewPhoto) return undefined;
@@ -93,15 +104,36 @@ export default function MessengerInbox({ records, total, renderDetails }) {
         </header>
         <div className="messenger-messages" ref={scrollRef} tabIndex={0} aria-label="Recorded conversation messages">
           <div className="messenger-history-note">Recorded messages and sent automated replies. Replies made directly in Facebook and full history are not synced yet.</div>
-          {selected.timeline.map(item => <article className={`messenger-message${item.outgoing ? ' messenger-message--outgoing' : ''}`} key={item.key} aria-label={item.outgoing ? 'Your automated reply' : 'Guest message'}>
-            <time className="messenger-message-time">{timestamp(item.at)}</time>
-            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}{item.type === 'image'
+          {selected.timeline.map((item, index) => {
+            const previous = selected.timeline[index - 1];
+            const startsNewDay = !previous || dayLabel(previous.at) !== dayLabel(item.at);
+            const followsTimeGap = !previous || Date.parse(item.at) - Date.parse(previous.at) >= 10 * 60 * 1000;
+            return <article className={`messenger-message${item.outgoing ? ' messenger-message--outgoing' : ''}`} key={item.key} aria-label={item.outgoing ? 'Your reply' : 'Guest message'}>
+            {startsNewDay && <time className="messenger-message-date">{dayLabel(item.at)}</time>}
+            {(startsNewDay || followsTimeGap) && <time className="messenger-message-time">{timeLabel(item.at)}</time>}
+            <div className="messenger-bubble-row">{!item.outgoing && <Avatar name={selected.name} />}{item.outgoing && <time className="messenger-hover-time" dateTime={item.at}>{timeLabel(item.at)}</time>}{item.type === 'image'
               ? <button className="messenger-photo" type="button" onClick={() => setPreviewPhoto({ src: item.photoUrl, alt: `${selected.name} room photo` })} aria-label="Open room photo"><img src={item.photoUrl} alt="Room sent through Messenger" loading="lazy" /></button>
               : <p className="messenger-bubble">{item.body}</p>}</div>
-            {item.outgoing && <small className="messenger-sent-label">Sent · Automated reply</small>}
-          </article>)}
+            {item.outgoing && <small className="messenger-sent-label">{item.deliveryStatus === 'sending' ? 'Sending' : item.deliveryStatus === 'queued' ? 'Queued' : 'Sent'} · {item.origin === 'staff' ? 'Staff reply' : 'Automated reply'}</small>}
+          </article>})}
         </div>
-        <div className="messenger-composer"><div className="messenger-compose-row"><span className="messenger-compose-icon"><ChatIcon name="chat" /></span><div className="messenger-input-shell"><input aria-label="Reply unavailable" placeholder="Aa" disabled aria-describedby="messenger-reply-note" /><ChatIcon name="smile" /></div><button type="button" className="messenger-icon-button" disabled aria-label="Send message unavailable"><ChatIcon name="send" /></button></div><p id="messenger-reply-note">Replying from this inbox is not available yet.</p></div>
+        <form className="messenger-composer" onSubmit={async event => {
+          event.preventDefault();
+          const body = reply.trim();
+          if (!body || !canReply || busy) return;
+          const localKey = `local:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+          const optimisticReply = { key: localKey, conversationKey: selected.key, body, at: new Date().toISOString(), outgoing: true, origin: 'staff', deliveryStatus: 'sending' };
+          setReply('');
+          setPendingReplies(items => [...items, optimisticReply]);
+          // Let the optimistic bubble paint before the fast local worker can deliver to Meta.
+          await new Promise(resolve => window.requestAnimationFrame(() => resolve()));
+          if (await onSend(selected.latest, body)) {
+            setPendingReplies(items => items.map(item => item.key === localKey ? { ...item, deliveryStatus: 'queued' } : item));
+          } else {
+            setPendingReplies(items => items.filter(item => item.key !== localKey));
+            setReply(current => current || body);
+          }
+        }}><div className="messenger-compose-row"><span className="messenger-compose-icon"><ChatIcon name="chat" /></span><div className="messenger-input-shell"><input aria-label="Reply to this conversation" placeholder="Aa" value={reply} maxLength={2000} disabled={!canReply || busy} aria-describedby="messenger-reply-note" onChange={event => setReply(event.target.value)} /><ChatIcon name="smile" /></div><button type="submit" className="messenger-icon-button" disabled={!canReply || busy || !reply.trim()} aria-label="Send message"><ChatIcon name="send" /></button></div><p id="messenger-reply-note">{!connected ? 'Connect the Facebook webhook before replying.' : selected.latest.source !== 'facebook' ? 'Manual records cannot receive Messenger replies.' : selected.latest.status === 'resolved' ? 'Reopen this inquiry before replying.' : 'Staff replies are sent through your connected Facebook Page.'}</p></form>
       </> : <div className="messenger-placeholder messenger-welcome"><span className="messenger-welcome-icon"><ChatIcon name="chat" /></span><h3>Your conversations, in one place</h3><p>Select a chat to view its recorded messages.</p></div>}
     </section>
     {selected && showDetails && <section id="messenger-details" className="messenger-details" aria-label="Inquiry management"><div className="fb-row"><h3>Inquiry details</h3><button type="button" onClick={() => setShowDetails(false)}>Close details</button></div>{selected.messages.map(item => renderDetails(item))}</section>}

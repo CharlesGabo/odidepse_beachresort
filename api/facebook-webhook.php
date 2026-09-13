@@ -51,7 +51,8 @@ function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
     }
     if (($rules['prepare_replies'] ?? false) && $event['kind'] === 'message') {
         $reply = facebookConversationReply($db, ['id' => $id] + $event, $rules);
-        if ($reply !== '' && facebookQueueReply($db, $id, $reply, true)) {
+        $includeAutomaticNotice = trim($reply) !== trim(facebookConversationPrompt('handoff', $rules));
+        if ($reply !== '' && facebookQueueReply($db, $id, $reply, true, $includeAutomaticNotice)) {
             facebookAudit($db, null, 'automatic_reply_queued', 'event', $id);
             $photoCount = facebookQueueNativeRoomPhotos($db, $id, (string) $event['page_id'], (string) $event['sender_id']);
             if ($photoCount > 0) facebookAudit($db, null, 'suggested_room_photos_queued', 'event', $id);

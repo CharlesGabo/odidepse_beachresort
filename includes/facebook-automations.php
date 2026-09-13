@@ -160,14 +160,16 @@ function facebookPrepareReply(PDO $db, array $event, array $rules, bool $automat
     return facebookQueueReply($db, (int) $event['id'], $body, $automaticDelivery);
 }
 
-function facebookQueueReply(PDO $db, int $eventId, string $body, bool $automaticDelivery = true): bool
+function facebookQueueReply(PDO $db, int $eventId, string $body, bool $automaticDelivery = true, bool $includeAutomaticNotice = true): bool
 {
     $body = trim($body);
-    if ($automaticDelivery) {
+    if ($eventId < 1 || $body === '' || mb_strlen($body) > 4000) return false;
+    if ($automaticDelivery && $includeAutomaticNotice) {
         $notice = facebookAutomaticReplyNotice();
         if (!str_contains($body, $notice)) $body .= "\n\n" . $notice;
+    } elseif ($automaticDelivery) {
+        $body = json_encode(['__facebook_job_type' => 'handoff_reply', 'text' => $body], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
-    if ($eventId < 1 || $body === '' || mb_strlen($body) > 4000) return false;
     $key = 'reply:event:' . $eventId;
     $existing = $db->prepare('SELECT id, status FROM facebook_jobs WHERE dedupe_key = ? FOR UPDATE');
     $existing->execute([$key]);

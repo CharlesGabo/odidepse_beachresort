@@ -63,6 +63,12 @@ try {
     $automaticJob = $query->fetch();
     checkFacebook($automaticJob && $automaticJob['status'] === 'pending', 'Verified webhook reply is ready for delivery');
     checkFacebook(str_contains($automaticJob['payload'], facebookAutomaticReplyNotice()), 'Automatic reply includes system-generated notice');
+    $db->exec("INSERT INTO facebook_events (source,page_id,sender_id,kind,guest_name,body,last_customer_message_at,category) VALUES ('facebook','123','handoff-test','message','Handoff verification','ADMIN',CURRENT_TIMESTAMP,'general')");
+    $handoffEventId = (int) $db->lastInsertId();
+    checkFacebook(facebookQueueReply($db, $handoffEventId, facebookDefaultRules()['guided_replies']['handoff'], true, false), 'Admin handoff reply queueing');
+    $query = $db->prepare('SELECT payload FROM facebook_jobs WHERE event_id = ?'); $query->execute([$handoffEventId]);
+    $handoffPayload = (string) $query->fetchColumn();
+    checkFacebook(str_contains($handoffPayload, 'handoff_reply') && !str_contains($handoffPayload, facebookAutomaticReplyNotice()), 'Admin handoff omits the redundant automatic notice');
     $db->exec("INSERT INTO facebook_events (source,kind,guest_name,body,category,needs_attention) VALUES ('manual','message','Complaint verification','I have a complaint','complaint',1)");
     $complaintId = (int) $db->lastInsertId();
     checkFacebook(facebookPrepareReply($db, ['id' => $complaintId, 'kind' => 'message', 'category' => 'complaint', 'status' => 'new'], facebookDefaultRules()), 'Complaint acknowledgement');

@@ -53,6 +53,8 @@ function workerSendReply(array $job, string $pageId, string $token, string $vers
     try { $jobPayload = json_decode($message, true, 8, JSON_THROW_ON_ERROR); } catch (JsonException) {}
     $isRoomPhoto = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'room_photo';
     $isRoomCaption = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'room_photo_caption';
+    $isStaffReply = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'staff_reply';
+    $isHandoffReply = is_array($jobPayload) && ($jobPayload['__facebook_job_type'] ?? '') === 'handoff_reply';
     if ($isRoomPhoto) {
         try { $photoPath = stayPhotoDeliveryPath((string) ($jobPayload['photo_id'] ?? '')); }
         catch (InvalidArgumentException) { return ['ok' => false, 'status' => 422, 'ambiguous' => false]; }
@@ -63,9 +65,9 @@ function workerSendReply(array $job, string $pageId, string $token, string $vers
             'filedata' => new CURLFile($photoPath, 'image/jpeg', basename($photoPath)),
         ];
     } else {
-        if ($isRoomCaption) $message = trim((string) ($jobPayload['text'] ?? ''));
+        if ($isRoomCaption || $isStaffReply || $isHandoffReply) $message = trim((string) ($jobPayload['text'] ?? ''));
         $notice = facebookAutomaticReplyNotice();
-        if (!$isRoomCaption && !str_contains($message, $notice)) $message .= "\n\n" . $notice;
+        if (!$isRoomCaption && !$isStaffReply && !$isHandoffReply && !str_contains($message, $notice)) $message .= "\n\n" . $notice;
         $postFields = json_encode([
             'recipient' => ['id' => $job['sender_id']],
             'messaging_type' => 'RESPONSE',
@@ -178,7 +180,10 @@ try {
             }
         }
         $db->prepare("UPDATE facebook_events SET status = 'in_progress', revision = revision + 1 WHERE id = ? AND status = 'new'")->execute([(int) $job['event_id']]);
-        facebookAudit($db, null, 'automatic_reply_sent', 'event', (int) $job['event_id']);
+        $sentPayload = null;
+        try { $sentPayload = json_decode((string) $job['payload'], true, 8, JSON_THROW_ON_ERROR); } catch (JsonException) {}
+        $sentByStaff = is_array($sentPayload) && ($sentPayload['__facebook_job_type'] ?? '') === 'staff_reply';
+        facebookAudit($db, null, $sentByStaff ? 'staff_reply_sent' : 'automatic_reply_sent', 'event', (int) $job['event_id']);
         $db->commit();
     }
     echo 'Facebook worker completed. Jobs processed: ' . $processed . PHP_EOL;

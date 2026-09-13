@@ -5,5 +5,5 @@ $worker = Join-Path $PSScriptRoot 'facebook-worker.php'
 
 while ($true) {
     & $phpExecutable $worker *> $null
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 1
 }

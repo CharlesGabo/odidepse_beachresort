@@ -184,7 +184,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       if (response.status === 401) { onLogout(); return false; }
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Could not save changes.');
-      setNotice(payload.action === 'prepare_reply' ? 'Reply prepared for staff review. Only verified Messenger inquiries are sent automatically.' : payload.action === 'approve_draft' ? 'Draft approved. Nothing has been published.' : 'Changes saved.');
+      setNotice(payload.action === 'send_message' ? 'Staff reply queued for Messenger delivery.' : payload.action === 'prepare_reply' ? 'Reply prepared for staff review. Only verified Messenger inquiries are sent automatically.' : payload.action === 'approve_draft' ? 'Draft approved. Nothing has been published.' : 'Changes saved.');
       setRefresh(value => value + 1); return true;
     } catch (exception) { setError(exception.message); return false; }
     finally { setBusy(false); }
@@ -203,7 +203,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
     {notice && <p className="fb-feedback" role="status">{notice}</p>}
     {loading ? <p role="status">Loading workspace…</p> : data && <>
       {section === 'message' && <>
-        <MessengerInbox records={data.records} total={data.total} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />} />
+        <MessengerInbox records={data.records} total={data.total} connected={connected} busy={busy} onSend={(item, body) => mutate({ action: 'send_message', id: Number(item.id), revision: Number(item.revision), body })} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />} />
         <Intake kind="message" mutate={mutate} busy={busy} />
       </>}
       {eventSection && <>{section !== 'alerts' && <Intake key={section} kind={section} mutate={mutate} busy={busy} />}<div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>

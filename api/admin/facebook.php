@@ -53,6 +53,13 @@ try {
                     } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'room_photo_caption') {
                         $caption = $deliveryPayload['text'] ?? '';
                         $reply['body'] = is_string($caption) && trim($caption) !== '' ? trim($caption) : 'Room photos sent.';
+                    } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'staff_reply') {
+                        $staffReply = $deliveryPayload['text'] ?? '';
+                        $reply['body'] = is_string($staffReply) && trim($staffReply) !== '' ? trim($staffReply) : 'Staff reply';
+                        $reply['origin'] = 'staff';
+                    } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'handoff_reply') {
+                        $handoffReply = $deliveryPayload['text'] ?? '';
+                        $reply['body'] = is_string($handoffReply) && trim($handoffReply) !== '' ? trim($handoffReply) : 'An admin will review your concern.';
                     }
                     $reply['sent_at'] = gmdate('Y-m-d\TH:i:s\Z', (int) $reply['sent_epoch']);
                     unset($reply['sent_epoch']);
@@ -92,7 +99,25 @@ try {
     $id = $data['id'] ?? null;
     $revision = $data['revision'] ?? null;
     $db->beginTransaction();
-    if ($action === 'save_rules') {
+    if ($action === 'send_message') {
+        if (!is_int($id) || $id < 1 || !is_int($revision)) throw new FacebookWorkflowError('Invalid conversation.');
+        $body = facebookText($data, 'body', 2000);
+        $query = $db->prepare('SELECT *, TIMESTAMPDIFF(SECOND, last_customer_message_at, CURRENT_TIMESTAMP) AS message_age_seconds FROM facebook_events WHERE id = ? FOR UPDATE');
+        $query->execute([$id]);
+        $event = $query->fetch();
+        if (!$event || (int) $event['revision'] !== $revision) throw new FacebookWorkflowError('This conversation changed. Refresh and try again.', 409);
+        $pageId = (string) getenv('META_PAGE_ID');
+        if ($pageId === '' || $event['source'] !== 'facebook' || $event['kind'] !== 'message' || !is_string($event['sender_id']) || $event['sender_id'] === '' || !is_string($event['page_id']) || !hash_equals($pageId, $event['page_id'])) throw new FacebookWorkflowError('Only verified Facebook Page conversations can receive replies here.');
+        $messageAge = filter_var($event['message_age_seconds'], FILTER_VALIDATE_INT);
+        if ($messageAge === false || $messageAge < 0 || $messageAge > 86400) throw new FacebookWorkflowError('Facebook’s 24-hour reply window has ended for this conversation.');
+        if ($event['status'] === 'resolved') throw new FacebookWorkflowError('Reopen this inquiry before replying.');
+        $payload = json_encode(['__facebook_job_type' => 'staff_reply', 'text' => $body], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $db->prepare("UPDATE facebook_jobs SET status = 'cancelled', error_code = 'staff_reply_superseded' WHERE event_id = ? AND kind = 'reply' AND status IN ('blocked','pending','retry_wait')")->execute([$id]);
+        $dedupeKey = 'staff-reply:event:' . $id . ':' . bin2hex(random_bytes(12));
+        $insert = $db->prepare("INSERT INTO facebook_jobs (event_id, kind, dedupe_key, payload, status) VALUES (?, 'reply', ?, ?, 'pending')");
+        $insert->execute([$id, $dedupeKey, $payload]);
+        facebookAudit($db, $actor, 'staff_reply_queued', 'event', $id);
+    } elseif ($action === 'save_rules') {
         $rules = $data['rules'] ?? null;
         if (!is_array($rules) || !is_int($revision) || $revision < 0) throw new FacebookWorkflowError('Invalid automation settings.');
         $validated = [];
