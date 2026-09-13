@@ -139,7 +139,7 @@ function layoutCalendarWeek(weekDays, bookings, maximumLanes = 3) {
       .map(segment => segment.booking),
   })).filter(item => item.bookings.length > 0);
 
-  return { visible, overflow };
+  return { visible, overflow, laneCount: Math.max(1, visible.reduce((count, segment) => Math.max(count, segment.lane + 1), 0)) };
 }
 
 function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
@@ -147,44 +147,40 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
     key: `${accommodationName.toLowerCase()}-unit-${index + 1}`,
     name: unitCount === 1 ? accommodationName : `${accommodationName.replace(/s?$/i, '')} #${index + 1}`,
     bookings: [],
-    lastCheckout: null,
   }));
   const overflowBookings = [];
   const cancelledBookings = bookings.filter(booking => booking.status === 'cancelled');
+  const activeBookings = bookings.filter(booking => booking.status !== 'cancelled');
+  const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed']);
+  const overlaps = (first, second) => first.check_in <= second.check_out && first.check_out >= second.check_in;
+  const byDate = (first, second) => first.check_in.localeCompare(second.check_in) || first.check_out.localeCompare(second.check_out) || String(first.id).localeCompare(String(second.id));
 
-  bookings.filter(booking => booking.status !== 'cancelled').sort((a, b) => a.check_in.localeCompare(b.check_in) || a.check_out.localeCompare(b.check_out) || String(a.id).localeCompare(String(b.id))).forEach(booking => {
-    const unit = units.find(candidate => !candidate.lastCheckout || candidate.lastCheckout < booking.check_in);
+  activeBookings.filter(booking => blockingStatuses.has(booking.status)).sort(byDate).forEach(booking => {
+    const unit = units.find(candidate => !candidate.bookings.some(existing => overlaps(existing, booking)));
     if (!unit) {
       overflowBookings.push(booking);
       return;
     }
     unit.bookings.push({ ...booking, calendar_unit: unit.name });
-    unit.lastCheckout = booking.check_out;
   });
 
-  return { units: units.map(({ lastCheckout, ...unit }) => unit), overflowBookings, cancelledBookings };
-}
-
-function buildOccupancySegments(days, bookings) {
-  const statusOrder = ['checked_in', 'confirmed', 'pending', 'completed', 'cancelled'];
-  const segments = [];
-
-  days.forEach((date, dayIndex) => {
-    const dateValue = calendarDateKey(date);
-    const activeBookings = bookings.filter(booking => booking.check_in <= dateValue && booking.check_out >= dateValue);
-    if (activeBookings.length === 0) return;
-    const status = statusOrder.find(value => activeBookings.some(booking => booking.status === value)) || activeBookings[0].status;
-    const bookingKey = activeBookings.map(booking => String(booking.id)).sort().join('|');
-    const previous = segments.at(-1);
-
-    if (previous && previous.end === dayIndex - 1 && previous.status === status && previous.bookingKey === bookingKey) {
-      previous.end = dayIndex;
+  activeBookings.filter(booking => !blockingStatuses.has(booking.status)).sort(byDate).forEach(booking => {
+    const eligibleUnits = units.filter(candidate => !candidate.bookings.some(existing => blockingStatuses.has(existing.status) && overlaps(existing, booking)));
+    const unit = eligibleUnits.find(candidate => candidate.bookings.some(existing => existing.status === 'pending' && overlaps(existing, booking)))
+      || eligibleUnits.find(candidate => !candidate.bookings.some(existing => overlaps(existing, booking)))
+      || eligibleUnits.sort((first, second) => first.bookings.length - second.bookings.length)[0];
+    if (!unit) {
+      overflowBookings.push(booking);
       return;
     }
-    segments.push({ start: dayIndex, end: dayIndex, status, bookings: activeBookings, bookingKey });
+    unit.bookings.push({ ...booking, calendar_unit: unit.name });
   });
 
-  return segments;
+  return { units, overflowBookings, cancelledBookings };
+}
+
+function bookingsOverlap(first, second) {
+  return first.check_in <= second.check_out && first.check_out >= second.check_in;
 }
 
 function getBookingNotes(message = '') {
@@ -389,10 +385,6 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const selectBooking = booking => {
     setDialogContent({ type: 'booking', booking });
   };
-  const showOverflow = (date, hiddenBookings) => {
-    setDialogContent({ type: 'more', date, bookings: hiddenBookings });
-  };
-
   const startTimelineDrag = event => {
     if (event.pointerType !== 'mouse' || event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
     const scroller = event.currentTarget;
@@ -433,22 +425,13 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       </div>
       {resources.map(resource => {
         const isExpanded = expandedGroups.has(resource.key);
-        const occupiedUnits = resource.units.filter(unit => unit.bookings.some(booking => booking.status !== 'cancelled' && booking.check_in <= monthEnd && booking.check_out > monthStart)).length;
+        const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed']);
+        const bookingTouchesMonth = booking => booking.check_in <= monthEnd && booking.check_out >= monthStart;
+        const occupiedUnits = resource.units.filter(unit => unit.bookings.some(booking => blockingStatuses.has(booking.status) && bookingTouchesMonth(booking))).length;
+        const pendingRequests = resource.units.reduce((count, unit) => count + unit.bookings.filter(booking => booking.status === 'pending' && bookingTouchesMonth(booking)).length, 0);
         const groupName = resource.name.toLowerCase().endsWith('room') ? `${resource.name}s` : resource.name;
-        const occupiedUnitSummaries = resource.units.map((unit, unitIndex) => ({
-          unit,
-          unitIndex,
-          segments: buildOccupancySegments(displayedDays, unit.bookings),
-        })).filter(summary => summary.segments.length > 0);
-        const conflictSummaries = resource.overflowBookings.map(booking => ({
-          booking,
-          segments: buildOccupancySegments(displayedDays, [booking]),
-        })).filter(summary => summary.segments.length > 0);
-        const cancelledSummaries = resource.cancelledBookings.map(booking => ({
-          booking,
-          segments: buildOccupancySegments(displayedDays, [booking]),
-        })).filter(summary => summary.segments.length > 0);
-        const summaryLaneCount = occupiedUnitSummaries.length + conflictSummaries.length + cancelledSummaries.length;
+        const summaryBookings = [...resource.units.flatMap(unit => unit.bookings), ...resource.overflowBookings, ...resource.cancelledBookings];
+        const { visible: summarySegments, laneCount: summaryLaneCount } = layoutCalendarWeek(displayedDays, summaryBookings, Math.max(1, summaryBookings.length));
         return <div className="reservation-timeline__group-wrap" key={resource.key}>
           <div className="reservation-timeline__group" style={{ '--group-unit-count': Math.max(1, summaryLaneCount), minHeight: `${Math.max(74, summaryLaneCount * 30 + 6)}px` }}>
             <button type="button" className="reservation-timeline__resource reservation-timeline__group-toggle" aria-expanded={isExpanded} onClick={() => setExpandedGroups(current => {
@@ -458,59 +441,45 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
               return next;
             })}>
               <span><i aria-hidden="true">{isExpanded ? '⌄' : '›'}</i><strong>{groupName} ({resource.unitCount} {resource.unitCount === 1 ? 'unit' : 'units'})</strong></span>
-              <small>{occupiedUnits} / {resource.unitCount} occupied</small>
+              <small>{occupiedUnits} / {resource.unitCount} unavailable{pendingRequests ? ` · ${pendingRequests} new ${pendingRequests === 1 ? 'request' : 'requests'}` : ''}</small>
             </button>
             <div className="reservation-timeline__track">
               {dateCells()}
               <div className="reservation-timeline__bars reservation-timeline__group-statuses">
-                {occupiedUnitSummaries.flatMap(({ unit, unitIndex, segments }, laneIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
-                  const segmentDate = displayedDays[start];
-                  const unitLabel = `Room ${unitIndex + 1}`;
-                  const guestLabel = activeBookings.length === 1 ? activeBookings[0].guest_name : `${activeBookings.length} bookings`;
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status}${activeBookings.some(booking => String(booking.id) === String(highlightedBookingId)) ? ' is-booking-highlighted' : ''}`} key={`${unit.key}-${start}-${end}-${status}`}
-                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: laneIndex + 1 }}
-                    data-calendar-booking-id={activeBookings.length === 1 ? activeBookings[0].id : undefined}
-                    aria-label={`${guestLabel}, ${unitLabel}: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
-                    onClick={() => activeBookings.length === 1 ? selectBooking(activeBookings[0]) : showOverflow(segmentDate, activeBookings)}><i aria-hidden="true" /><span>{guestLabel} · {statusLabels[status]}</span></button>;
-                }))}
-                {conflictSummaries.flatMap(({ booking, segments }, conflictIndex) => segments.map(({ start, end, status, bookings: activeBookings }) => {
-                  const segmentDate = displayedDays[start];
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${status} is-conflict${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`conflict-${booking.id}-${start}-${end}`}
-                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictIndex + 1 }}
+                {summarySegments.map(({ booking, start, end, lane }) => {
+                  const conflict = summaryBookings.some(other => String(other.id) !== String(booking.id) && other.status !== 'cancelled' && booking.status !== 'cancelled' && bookingsOverlap(booking, other));
+                  const fromFacebook = Number(booking.is_facebook_booking) === 1;
+                  return <button type="button" className={`booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${booking.status}${fromFacebook ? ' is-facebook-booking' : ''}${conflict ? ' is-conflict' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`summary-${booking.id}-${start}-${end}`}
+                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
                     data-calendar-booking-id={booking.id}
-                    aria-label={`${booking.guest_name}, unassigned overlapping booking: ${statusLabels[status]} from ${formatBookingDate(calendarDateKey(segmentDate))}`}
-                    onClick={() => selectBooking(activeBookings[0])}><i aria-hidden="true" /><span>{booking.guest_name} · {statusLabels[status]}</span></button>;
-                }))}
-                {cancelledSummaries.flatMap(({ booking, segments }, cancelledIndex) => segments.map(({ start, end }) => {
-                  const segmentDate = displayedDays[start];
-                  return <button type="button" className={`booking-calendar__more booking-calendar__occupancy-alert booking-calendar__occupancy-alert--cancelled${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`cancelled-${booking.id}-${start}-${end}`}
-                    style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: occupiedUnitSummaries.length + conflictSummaries.length + cancelledIndex + 1 }}
-                    data-calendar-booking-id={booking.id}
-                    aria-label={`${booking.guest_name}, cancelled booking from ${formatBookingDate(calendarDateKey(segmentDate))}; open booking details`}
-                    onClick={() => selectBooking(booking)}><i aria-hidden="true" /><span>{booking.guest_name} · Cancelled</span></button>;
-                }))}
+                    aria-label={`${booking.guest_name}: ${statusLabels[booking.status]}${fromFacebook ? ', from Facebook Page' : ''} from ${formatBookingDate(booking.check_in)} to ${formatBookingDate(booking.check_out)}; open booking details`}
+                    onClick={() => selectBooking(booking)}><i aria-hidden="true" /><span>{booking.guest_name} · {statusLabels[booking.status]}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span></button>;
+                })}
               </div>
             </div>
           </div>
           {isExpanded && resource.units.map(unit => {
-            const { visible } = layoutCalendarWeek(displayedDays, unit.bookings, 1);
-            const occupied = unit.bookings.some(booking => booking.status !== 'cancelled' && booking.check_in <= monthEnd && booking.check_out > monthStart);
-            return <div className="reservation-timeline__row reservation-timeline__unit" key={unit.key}>
-              <div className="reservation-timeline__resource"><strong>{unit.name}</strong><small className={occupied ? 'is-occupied' : ''}><i />{occupied ? 'Occupied' : 'Available'}</small></div>
+            const { visible, laneCount } = layoutCalendarWeek(displayedDays, unit.bookings, Math.max(1, unit.bookings.length));
+            const occupied = unit.bookings.some(booking => blockingStatuses.has(booking.status) && bookingTouchesMonth(booking));
+            const hasPending = unit.bookings.some(booking => booking.status === 'pending' && bookingTouchesMonth(booking));
+            return <div className="reservation-timeline__row reservation-timeline__unit" key={unit.key} style={{ minHeight: `${Math.max(70, laneCount * 58 + 8)}px` }}>
+              <div className="reservation-timeline__resource"><strong>{unit.name}</strong><small className={occupied ? 'is-occupied' : hasPending ? 'is-pending' : ''}><i />{occupied ? 'Occupied' : hasPending ? 'New requests' : 'Available'}</small></div>
               <div className="reservation-timeline__track">
                 {dateCells()}
-                <div className="reservation-timeline__bars">
-                  {visible.map(({ booking, start, end, startsHere, endsHere }) => {
+                <div className="reservation-timeline__bars reservation-timeline__unit-bars" style={{ '--unit-lane-count': laneCount, minHeight: `${laneCount * 58}px` }}>
+                  {visible.map(({ booking, start, end, startsHere, endsHere, lane }) => {
                     const schedule = getBookingNotes(booking.message);
                     const arrival = formatBookingTime(schedule.arrival) || 'Time not set';
                     const departure = formatBookingTime(schedule.departure) || 'Time not set';
+                    const conflict = unit.bookings.some(other => String(other.id) !== String(booking.id) && other.status !== 'cancelled' && bookingsOverlap(booking, other));
+                    const fromFacebook = Number(booking.is_facebook_booking) === 1;
                     return <button type="button" key={booking.id}
-                      className={`booking-calendar__bar booking-calendar__bar--${booking.status}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`}
-                      style={{ gridColumn: `${start + 1} / ${end + 2}` }}
+                      className={`booking-calendar__bar booking-calendar__bar--${booking.status}${fromFacebook ? ' is-facebook-booking' : ''}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}${conflict ? ' is-conflict' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`}
+                      style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
                       data-calendar-booking-id={booking.id}
-                      aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)} at ${arrival}, check-out ${formatBookingDate(booking.check_out)} at ${departure}, ${statusLabels[booking.status]}`}
+                      aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)} at ${arrival}, check-out ${formatBookingDate(booking.check_out)} at ${departure}, ${statusLabels[booking.status]}${fromFacebook ? ', from Facebook Page' : ''}`}
                       title={`Check-in: ${formatBookingDate(booking.check_in)} at ${arrival} • Check-out: ${formatBookingDate(booking.check_out)} at ${departure}`}
-                      onClick={() => selectBooking(booking)}><span>{booking.guest_name}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} {arrival} – {formatBookingDate(booking.check_out, true)} {departure}</small></button>;
+                      onClick={() => selectBooking(booking)}><span>{booking.guest_name}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} {arrival} – {formatBookingDate(booking.check_out, true)} {departure}</small></button>;
                   })}
                 </div>
               </div>
