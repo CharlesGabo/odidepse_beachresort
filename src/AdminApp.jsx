@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ResortManager from './ResortManager.jsx';
 import FacebookAutomations from './FacebookAutomations.jsx';
 import { dashboardData } from './dashboardData.js';
+import { overlaps, roomPlanning } from './bookingRoomPlanning.js';
 
 const statusLabels = {
   pending: 'New request',
@@ -146,6 +148,18 @@ function layoutCalendarWeek(weekDays, bookings, maximumLanes = 3) {
   return { visible, overflow, laneCount: Math.max(1, visible.reduce((count, segment) => Math.max(count, segment.lane + 1), 0)) };
 }
 
+function layoutCalendarUnitSummary(weekDays, units, overflowBookings = []) {
+  const visible = [];
+  let laneOffset = 0;
+  [...units.map(unit => unit.bookings), overflowBookings].forEach(bookings => {
+    const layout = layoutCalendarWeek(weekDays, bookings, Math.max(1, bookings.length));
+    if (layout.visible.length === 0) return;
+    layout.visible.forEach(segment => visible.push({ ...segment, lane: segment.lane + laneOffset }));
+    laneOffset += layout.laneCount;
+  });
+  return { visible, laneCount: Math.max(1, laneOffset) };
+}
+
 function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
   const units = Array.from({ length: unitCount }, (_, index) => ({
     key: `${accommodationName.toLowerCase()}-unit-${index + 1}`,
@@ -153,6 +167,14 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
     bookings: [],
   }));
   const overflowBookings = [];
+  if (bookings.every(booking => Object.hasOwn(booking, 'calendar_room'))) {
+    bookings.forEach(booking => {
+      const index = Number(booking.calendar_room) - 1;
+      if (!units[index]) overflowBookings.push(booking);
+      else units[index].bookings.push({ ...booking, calendar_unit: units[index].name });
+    });
+    return { units, overflowBookings, cancelledBookings: [] };
+  }
   const cancelledBookings = bookings.filter(booking => booking.status === 'cancelled');
   const activeBookings = bookings.filter(booking => booking.status !== 'cancelled');
   const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed']);
@@ -184,7 +206,7 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
 }
 
 function bookingsOverlap(first, second) {
-  return first.check_in <= second.check_out && first.check_out >= second.check_in;
+  return overlaps(first, second);
 }
 
 function getBookingNotes(message = '') {
@@ -283,7 +305,14 @@ function StatCards({ stats }) {
   </section>;
 }
 
-function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId }) {
+function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId, onMoveBooking, canUndoRoomMove, onUndoRoomMove }) {
+  const [draggedId, setDraggedId] = useState(null);
+  const [floatingCard, setFloatingCard] = useState(null);
+  const [dropRoom, setDropRoom] = useState('');
+  const floatingCardRef = useRef(null);
+  const [moveNotice, setMoveNotice] = useState('');
+  const [moveWarning, setMoveWarning] = useState(null);
+  const [moving, setMoving] = useState(false);
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
@@ -294,8 +323,65 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const [expandedGroups, setExpandedGroups] = useState(() => new Set());
   const dialogRef = useRef(null);
   const landscapeDialogRef = useRef(null);
+  const moveWarningDialogRef = useRef(null);
   const handledCalendarFocusRef = useRef(null);
   const timelineDragRef = useRef(null);
+  const cardDragRef = useRef(null);
+  const suppressCardClickUntilRef = useRef(0);
+
+  const releaseTimelinePointer = useCallback(() => {
+    const drag = timelineDragRef.current;
+    timelineDragRef.current = null;
+    if (!drag) return;
+    drag.scroller.classList.remove('is-dragging');
+    try {
+      if (drag.scroller.hasPointerCapture(drag.pointerId)) drag.scroller.releasePointerCapture(drag.pointerId);
+    } catch { /* The browser may have already cancelled this pointer. */ }
+  }, []);
+  const finishCardDrag = useCallback(() => {
+    const drag = cardDragRef.current;
+    if (drag?.active) suppressCardClickUntilRef.current = Date.now() + 400;
+    cardDragRef.current = null;
+    try {
+      if (drag?.element.hasPointerCapture(drag.pointerId)) drag.element.releasePointerCapture(drag.pointerId);
+    } catch { /* The browser may have already cancelled this pointer. */ }
+    if (floatingCardRef.current?.matches(':popover-open')) floatingCardRef.current.hidePopover();
+    setDraggedId(null);
+    setFloatingCard(null);
+    setDropRoom('');
+    releaseTimelinePointer();
+  }, [releaseTimelinePointer]);
+  useEffect(() => {
+    const recoverStaleCapture = () => {
+      if (timelineDragRef.current || cardDragRef.current) finishCardDrag();
+    };
+    const releaseForSelection = () => {
+      if (timelineDragRef.current && !window.getSelection()?.isCollapsed) releaseTimelinePointer();
+    };
+    window.addEventListener('blur', finishCardDrag);
+    window.addEventListener('pointerup', finishCardDrag);
+    window.addEventListener('pointercancel', finishCardDrag);
+    window.addEventListener('mouseup', finishCardDrag);
+    window.addEventListener('dragend', finishCardDrag);
+    window.addEventListener('pointerdown', recoverStaleCapture, true);
+    document.addEventListener('selectionchange', releaseForSelection);
+    const escape = event => { if (event.key === 'Escape') finishCardDrag(); };
+    window.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('blur', finishCardDrag);
+      window.removeEventListener('pointerup', finishCardDrag);
+      window.removeEventListener('pointercancel', finishCardDrag);
+      window.removeEventListener('mouseup', finishCardDrag);
+      window.removeEventListener('dragend', finishCardDrag);
+      window.removeEventListener('pointerdown', recoverStaleCapture, true);
+      document.removeEventListener('selectionchange', releaseForSelection);
+      window.removeEventListener('keydown', escape);
+      releaseTimelinePointer();
+    };
+  }, [finishCardDrag, releaseTimelinePointer]);
+  useEffect(() => {
+    if (floatingCard) floatingCardRef.current?.showPopover?.();
+  }, [floatingCard]);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const calendarBookings = useMemo(() => bookings.filter(booking => (
     calendarFilteredOnlyStatuses.includes(statusFilter)
@@ -325,9 +411,15 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         return (booking.stay_type || '').toLowerCase() === key;
       });
       const allocation = allocateBookingsToUnits(matchingBookings, unitCount, name);
-      return { key, name, unitCount, bookings: matchingBookings, ...allocation };
+      const activeBookings = bookings.filter(booking => ['pending', 'confirmed', 'checked_in'].includes(booking.status)
+        && ((catalogStay && Number(booking.stay_id) === Number(catalogStay.id)) || (booking.stay_type || '').toLowerCase() === key));
+      const planningAllocation = allocateBookingsToUnits(activeBookings, unitCount, name);
+      const planning = roomPlanning(planningAllocation.units, planningAllocation.overflowBookings);
+      const suggestions = planning.suggestions.filter(item => matchingBookings.some(booking => String(booking.id) === String(item.booking.id)))
+        .map(item => ({ ...item, unit: allocation.units.find(unit => unit.key === item.unit.key) }));
+      return { key, name, stayId: catalogStay?.id, unitCount, bookings: matchingBookings, ...allocation, priorities: planning.priorities, suggestions };
     });
-  }, [calendarBookings, accommodations]);
+  }, [calendarBookings, accommodations, bookings]);
   const monthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(visibleMonth);
 
   useEffect(() => {
@@ -367,12 +459,20 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (dialogContent && dialog && !dialog.open) dialog.showModal();
+    if (!dialog) return;
+    if (dialogContent && !dialog.open && !cardDragRef.current) dialog.showModal();
+    if (!dialogContent && dialog.open) dialog.close();
   }, [dialogContent]);
+  useEffect(() => {
+    const dialog = moveWarningDialogRef.current;
+    if (!dialog) return;
+    if (moveWarning && !dialog.open) dialog.showModal();
+    if (!moveWarning && dialog.open) dialog.close();
+  }, [moveWarning]);
 
   const closeDialog = () => {
     if (dialogRef.current?.open) dialogRef.current.close();
-    else setDialogContent(null);
+    setDialogContent(null);
   };
 
   const closeLandscape = () => {
@@ -387,12 +487,98 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
 
   const moveMonth = amount => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + amount, 1, 12));
   const selectBooking = booking => {
+    if (cardDragRef.current || Date.now() < suppressCardClickUntilRef.current) return;
     setDialogContent({ type: 'booking', booking });
   };
+  const moveBooking = async (booking, resource, unit, confirmWarnings = false) => {
+    if (moving || !resource.stayId) return;
+    setMoving(true);
+    setMoveNotice('Saving room assignment…');
+    try {
+      const result = await onMoveBooking(booking, resource.stayId, resource.units.indexOf(unit) + 1, confirmWarnings);
+      if (result?.requires_confirmation) {
+        setMoveWarning({ booking, resource, unit, warnings: result.warnings || [result.message], canProceed: result.can_proceed !== false });
+        setMoveNotice('');
+        return;
+      }
+      setMoveNotice(`${booking.guest_name} moved to ${unit.name}.`);
+      setMoveWarning(null);
+      closeDialog();
+    } catch (error) {
+      setMoveNotice('');
+      setMoveWarning({ booking, resource, unit, warnings: error.moveWarnings || [error.message], canProceed: false });
+    }
+    finally { setMoving(false); setDraggedId(null); }
+  };
+  const undoRoomMove = async () => {
+    if (moving || !canUndoRoomMove) return;
+    setMoving(true);
+    setMoveNotice('Restoring the previous room…');
+    try {
+      const result = await onUndoRoomMove();
+      setMoveNotice(`${result.reference} returned to ${result.restored_room}.`);
+      closeDialog();
+    } catch (error) { setMoveNotice(error.message); }
+    finally { setMoving(false); finishCardDrag(); }
+  };
+  const dragProps = booking => ({
+    draggable: false,
+    'data-room-draggable': !moving && ['pending', 'confirmed', 'checked_in'].includes(booking.status) ? 'true' : undefined,
+    'data-room-dragging': draggedId === String(booking.id) ? 'true' : undefined,
+    onDragStart: event => event.preventDefault(),
+    onPointerDown: event => {
+      event.stopPropagation();
+      if (moving || !event.isPrimary || event.button !== 0 || !['pending', 'confirmed', 'checked_in'].includes(booking.status)) return;
+      releaseTimelinePointer();
+      cardDragRef.current = { booking, element: event.currentTarget, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    onPointerMove: event => {
+      const drag = cardDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      event.stopPropagation();
+      if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
+      event.preventDefault();
+      if (!drag.active) {
+        drag.active = true;
+        setDraggedId(String(booking.id));
+        setFloatingCard({ booking, x: event.clientX + 16, y: event.clientY + 16 });
+      }
+      if (floatingCardRef.current) {
+        floatingCardRef.current.style.left = `${Math.min(event.clientX + 16, window.innerWidth - 290)}px`;
+        floatingCardRef.current.style.top = `${Math.min(event.clientY + 16, window.innerHeight - 90)}px`;
+      }
+      const hit = document.elementFromPoint(event.clientX, event.clientY);
+      setDropRoom(hit?.closest('[data-drop-room]')?.dataset.dropRoom || '');
+      const group = hit?.closest('[data-drop-group]')?.dataset.dropGroup;
+      if (group && !expandedGroups.has(group)) setExpandedGroups(current => new Set(current).add(group));
+      const scroller = drag.element.closest('.reservation-timeline-scroll');
+      if (scroller) {
+        const bounds = scroller.getBoundingClientRect();
+        if (event.clientX > bounds.right - 35) scroller.scrollLeft += 16;
+        if (event.clientX < bounds.left + 35) scroller.scrollLeft -= 16;
+      }
+      if (event.clientY > window.innerHeight - 45) window.scrollBy(0, 16);
+      if (event.clientY < 45) window.scrollBy(0, -16);
+    },
+    onPointerUp: event => {
+      const drag = cardDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      event.stopPropagation();
+      const target = drag.active ? document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-drop-room]')?.dataset.dropRoom : null;
+      const resource = resources.find(item => item.units.some(unit => unit.key === target));
+      finishCardDrag();
+      if (resource) moveBooking(drag.booking, resource, resource.units.find(unit => unit.key === target));
+    },
+    onPointerCancel: finishCardDrag,
+    onLostPointerCapture: finishCardDrag,
+  });
   const startTimelineDrag = event => {
     if (event.pointerType !== 'mouse' || event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
     const scroller = event.currentTarget;
-    timelineDragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: scroller.scrollLeft };
+    timelineDragRef.current = { scroller, pointerId: event.pointerId, startX: event.clientX, scrollLeft: scroller.scrollLeft };
     scroller.setPointerCapture(event.pointerId);
     scroller.classList.add('is-dragging');
   };
@@ -407,9 +593,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const stopTimelineDrag = event => {
     const drag = timelineDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    timelineDragRef.current = null;
-    event.currentTarget.classList.remove('is-dragging');
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    releaseTimelinePointer();
   };
 
   const renderCalendarGrid = (labelSuffix = '', isLandscape = false) => {
@@ -418,7 +602,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
     const monthStart = calendarDateKey(days[0]);
     const monthEnd = calendarDateKey(days.at(-1));
     const dateCells = () => <div className="reservation-timeline__cells" aria-hidden="true">{displayedDays.map(date => <div key={calendarDateKey(date)} className={calendarDateKey(date) === calendarDateKey(today) ? 'is-today' : ''} />)}</div>;
-    return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`} onPointerDown={startTimelineDrag} onPointerMove={moveTimelineDrag} onPointerUp={stopTimelineDrag} onPointerCancel={stopTimelineDrag}>
+    return <div className="booking-calendar__scroll reservation-timeline-scroll" tabIndex="0" aria-label={`${monthLabel} accommodation timeline${labelSuffix}`} onPointerDown={startTimelineDrag} onPointerMove={moveTimelineDrag} onPointerUp={stopTimelineDrag} onPointerCancel={stopTimelineDrag} onLostPointerCapture={stopTimelineDrag}>
     <div className="reservation-timeline" style={{ '--timeline-days': displayedDays.length, '--resource-count': Math.max(1, renderedRowCount) }}>
       <div className="reservation-timeline__header">
         <strong className="reservation-timeline__resource">Accommodation</strong>
@@ -429,15 +613,15 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       </div>
       {resources.map(resource => {
         const isExpanded = expandedGroups.has(resource.key);
-        const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed']);
+        const blockingStatuses = new Set(['confirmed', 'checked_in']);
         const bookingTouchesMonth = booking => booking.check_in <= monthEnd && booking.check_out >= monthStart;
         const occupiedUnits = resource.units.filter(unit => unit.bookings.some(booking => blockingStatuses.has(booking.status) && bookingTouchesMonth(booking))).length;
         const pendingRequests = resource.units.reduce((count, unit) => count + unit.bookings.filter(booking => booking.status === 'pending' && bookingTouchesMonth(booking)).length, 0);
         const groupName = resource.name.toLowerCase().endsWith('room') ? `${resource.name}s` : resource.name;
         const summaryBookings = [...resource.units.flatMap(unit => unit.bookings), ...resource.overflowBookings, ...resource.cancelledBookings];
-        const { visible: summarySegments, laneCount: summaryLaneCount } = layoutCalendarWeek(displayedDays, summaryBookings, Math.max(1, summaryBookings.length));
+        const { visible: summarySegments, laneCount: summaryLaneCount } = layoutCalendarUnitSummary(displayedDays, resource.units, [...resource.overflowBookings, ...resource.cancelledBookings]);
         return <div className="reservation-timeline__group-wrap" key={resource.key}>
-          <div className="reservation-timeline__group" style={{ '--group-unit-count': Math.max(1, summaryLaneCount), minHeight: `${Math.max(74, summaryLaneCount * 30 + 6)}px` }}>
+          <div className="reservation-timeline__group" data-drop-group={resource.key} style={{ '--group-unit-count': Math.max(1, summaryLaneCount), minHeight: `${Math.max(74, summaryLaneCount * 30 + 6)}px` }}>
             <button type="button" className="reservation-timeline__resource reservation-timeline__group-toggle" aria-expanded={isExpanded} onClick={() => setExpandedGroups(current => {
               const next = new Set(current);
               if (next.has(resource.key)) next.delete(resource.key);
@@ -451,22 +635,30 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
               {dateCells()}
               <div className="reservation-timeline__bars reservation-timeline__group-statuses">
                 {summarySegments.map(({ booking, start, end, lane }) => {
-                  const conflict = summaryBookings.some(other => String(other.id) !== String(booking.id) && other.status !== 'cancelled' && booking.status !== 'cancelled' && bookingsOverlap(booking, other));
+                  const conflict = ['pending', 'confirmed', 'checked_in'].includes(booking.status) && summaryBookings.some(other => String(other.id) !== String(booking.id)
+                    && ['pending', 'confirmed', 'checked_in'].includes(other.status) && (!booking.calendar_room || booking.calendar_room === other.calendar_room) && bookingsOverlap(booking, other));
                   const fromFacebook = Number(booking.is_facebook_booking) === 1;
                   return <button type="button" className={`booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${booking.status}${fromFacebook ? ' is-facebook-booking' : ''}${conflict ? ' is-conflict' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`summary-${booking.id}-${start}-${end}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
                     data-calendar-booking-id={booking.id}
+                    {...dragProps(booking)}
                     aria-label={`${booking.guest_name}: ${statusLabels[booking.status]}${fromFacebook ? ', from Facebook Page' : ''} from ${formatBookingDate(booking.check_in)} to ${formatBookingDate(booking.check_out)}; open booking details`}
-                    onClick={() => selectBooking(booking)}><i aria-hidden="true" /><span>{booking.guest_name} · {statusLabels[booking.status]}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span></button>;
+                    onClick={() => selectBooking(booking)}><i aria-hidden="true" /><span>{resource.priorities.has(String(booking.id)) && <strong className="booking-calendar__priority" title="Request order: oldest first">#{resource.priorities.get(String(booking.id))}</strong>}{booking.guest_name} · {statusLabels[booking.status]}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span></button>;
                 })}
               </div>
             </div>
           </div>
           {isExpanded && resource.units.map(unit => {
             const { visible, laneCount } = layoutCalendarWeek(displayedDays, unit.bookings, Math.max(1, unit.bookings.length));
+            const unitSuggestions = resource.suggestions.filter(suggestion => suggestion.unit?.key === unit.key).flatMap(suggestion => {
+              const checkIn = parseCalendarDate(suggestion.booking.check_in);
+              const checkOut = parseCalendarDate(suggestion.booking.check_out);
+              if (!checkIn || !checkOut || checkOut < days[0] || checkIn > days.at(-1)) return [];
+              return [{ ...suggestion, start: Math.max(0, calendarDayDifference(days[0], checkIn)), end: Math.min(days.length - 1, calendarDayDifference(days[0], checkOut)) }];
+            });
             const occupied = unit.bookings.some(booking => blockingStatuses.has(booking.status) && bookingTouchesMonth(booking));
             const hasPending = unit.bookings.some(booking => booking.status === 'pending' && bookingTouchesMonth(booking));
-            return <div className="reservation-timeline__row reservation-timeline__unit" key={unit.key} style={{ minHeight: `${Math.max(70, laneCount * 58 + 8)}px` }}>
+            return <div className={`reservation-timeline__row reservation-timeline__unit${dropRoom === unit.key ? ' is-drop-target' : ''}`} data-drop-room={unit.key} key={unit.key} style={{ minHeight: `${Math.max(70, laneCount * 58 + 8)}px` }}>
               <div className="reservation-timeline__resource"><strong>{unit.name}</strong><small className={occupied ? 'is-occupied' : hasPending ? 'is-pending' : ''}><i />{occupied ? 'Occupied' : hasPending ? 'New requests' : 'Available'}</small></div>
               <div className="reservation-timeline__track">
                 {dateCells()}
@@ -477,14 +669,25 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
                     const departure = formatBookingTime(schedule.departure) || 'Time not set';
                     const conflict = unit.bookings.some(other => String(other.id) !== String(booking.id) && other.status !== 'cancelled' && bookingsOverlap(booking, other));
                     const fromFacebook = Number(booking.is_facebook_booking) === 1;
-                    return <button type="button" key={booking.id}
+                    const suggestion = resource.suggestions.find(item => String(item.booking.id) === String(booking.id));
+                    return <div role="button" tabIndex="0" key={booking.id}
                       className={`booking-calendar__bar booking-calendar__bar--${booking.status}${fromFacebook ? ' is-facebook-booking' : ''}${startsHere ? ' is-check-in' : ''}${endsHere ? ' is-check-out' : ''}${conflict ? ' is-conflict' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`}
                       style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
                       data-calendar-booking-id={booking.id}
+                      {...dragProps(booking)}
                       aria-label={`${booking.guest_name}, ${unit.name}, check-in ${formatBookingDate(booking.check_in)} at ${arrival}, check-out ${formatBookingDate(booking.check_out)} at ${departure}, ${statusLabels[booking.status]}${fromFacebook ? ', from Facebook Page' : ''}`}
                       title={`Check-in: ${formatBookingDate(booking.check_in)} at ${arrival} • Check-out: ${formatBookingDate(booking.check_out)} at ${departure}`}
-                      onClick={() => selectBooking(booking)}><span>{booking.guest_name}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span><small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} {arrival} – {formatBookingDate(booking.check_out, true)} {departure}</small></button>;
+                      onClick={() => selectBooking(booking)}
+                      onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectBooking(booking); } }}>
+                      <span>{resource.priorities.has(String(booking.id)) && <strong className="booking-calendar__priority" title="Request order: oldest first">#{resource.priorities.get(String(booking.id))}</strong>}{booking.guest_name}{fromFacebook && <strong className="booking-calendar__source">Facebook</strong>}</span>
+                      <small>{statusLabels[booking.status]} · {formatBookingDate(booking.check_in, true)} {arrival} – {formatBookingDate(booking.check_out, true)} {departure}</small>
+                      {suggestion && <button type="button" className="booking-calendar__suggestion-move" disabled={moving} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); moveBooking(booking, resource, suggestion.unit); }}>Move to {suggestion.unit.name}</button>}
+                    </div>;
                   })}
+                  {unitSuggestions.map(({ booking, unit: suggestedUnit, start, end }) => <div className="booking-calendar__suggestion-preview" key={`suggestion-${booking.id}-${unit.key}`} style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: 1 }}>
+                    <span>Suggested: #{resource.priorities.get(String(booking.id)) || 1} {booking.guest_name}</span>
+                    <button type="button" disabled={moving} onClick={() => moveBooking(booking, resource, suggestedUnit)}>Move here</button>
+                  </div>)}
                 </div>
               </div>
             </div>;
@@ -498,6 +701,11 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const resourceSummary = <p className="timeline-resource-summary">6 accommodation types · {resources.reduce((total, resource) => total + resource.unitCount, 0)} physical units</p>;
   return <>
     <section className="booking-calendar admin-view" aria-labelledby="booking-calendar-heading">
+      {floatingCard && createPortal(<div ref={floatingCardRef} popover="manual" className="calendar-floating-card" aria-hidden="true" style={{ left: floatingCard.x, top: floatingCard.y }}>
+        <strong>{floatingCard.booking.guest_name}</strong>
+        <span>{formatBookingDate(floatingCard.booking.check_in, true)}–{formatBookingDate(floatingCard.booking.check_out, true)}</span>
+        <small>{dropRoom ? 'Release to move to this room' : 'Drag onto a room row'}</small>
+      </div>, document.body)}
       <div className="booking-calendar__header">
         <div>
           <span className="admin-kicker">Reservation schedule</span>
@@ -519,6 +727,11 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         <button type="button" className="booking-calendar__landscape-button" title="Open fullscreen landscape calendar" aria-label="Open fullscreen landscape calendar" onClick={openLandscape}><AdminIcon name="landscape" /></button>
       </div>
       {resourceSummary}
+      <div className="calendar-move-tools">
+        <p className="calendar-move-help">Drag a card onto a room row to move it, or open the card to choose a room. Overlapping requests: #1 is the oldest.</p>
+        <button type="button" className="calendar-undo-move" disabled={!canUndoRoomMove || moving} onClick={undoRoomMove} title="Temporary testing control">↶ Undo last move</button>
+      </div>
+      {moveNotice && <p className="admin-notice" role="status">{moveNotice}</p>}
       {renderCalendarGrid()}
     </section>
 
@@ -534,6 +747,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       </div>
       {resourceSummary}
       {renderCalendarGrid(' in landscape view', true)}
+      {moveNotice && <p className="admin-notice" role="status">{moveNotice}</p>}
     </dialog>
 
     <dialog ref={dialogRef} className={`booking-calendar-dialog${landscapeOpen ? ' is-landscape' : ''}`} aria-labelledby="booking-calendar-dialog-title" onClose={() => setDialogContent(null)} onCancel={() => setDialogContent(null)}>
@@ -570,6 +784,21 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
           </button>)}
         </div>
       </>}
+    </dialog>
+
+    <dialog ref={moveWarningDialogRef} className="calendar-move-warning" aria-labelledby="calendar-move-warning-title" onClose={() => setMoveWarning(null)} onCancel={() => setMoveWarning(null)}>
+      {moveWarning && <form method="dialog" onSubmit={event => event.preventDefault()}>
+        <div className="calendar-move-warning__head">
+          <div><span className="admin-kicker">Room move warning</span><h3 id="calendar-move-warning-title">Review before moving</h3></div>
+          <button type="button" onClick={() => setMoveWarning(null)} aria-label="Close warning">×</button>
+        </div>
+        <p><strong>{moveWarning.booking.guest_name}</strong> → {moveWarning.unit.name}</p>
+        <ul>{moveWarning.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+        <div className="calendar-move-warning__actions">
+          <button type="button" onClick={() => setMoveWarning(null)}>Cancel</button>
+          {moveWarning.canProceed && <button type="button" className="is-primary" disabled={moving} onClick={() => moveBooking(moveWarning.booking, moveWarning.resource, moveWarning.unit, true)}>{moving ? 'Moving…' : 'Proceed anyway'}</button>}
+        </div>
+      </form>}
     </dialog>
   </>;
 }
@@ -633,7 +862,34 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   </dialog>;
 }
 
-function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent }) {
+function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent, canUndoRoomMove }) {
+  const moveBooking = async (booking, stayId, roomIndex, confirmWarnings = false) => {
+    const response = await fetch('/api/admin/bookings.php', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ action: 'move_room', id: Number(booking.id), stay_id: Number(stayId), room_index: roomIndex, expected_updated_at: booking.updated_at, confirm_warnings: confirmWarnings }),
+    });
+    const data = await response.json();
+    if (!response.ok && data.requires_confirmation) return data;
+    if (!response.ok) {
+      const error = new Error(data.message || 'Could not move this booking.');
+      error.moveWarnings = Array.isArray(data.warnings) ? data.warnings : [error.message];
+      throw error;
+    }
+    await onBookingSaved(data);
+    return data;
+  };
+  const undoRoomMove = async () => {
+    const response = await fetch('/api/admin/bookings.php', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ action: 'undo_room_move' }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not undo the room move.');
+    await onBookingSaved(data);
+    return data;
+  };
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
@@ -699,7 +955,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   };
 
   return <>
-    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} />
+    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} onMoveBooking={moveBooking} canUndoRoomMove={canUndoRoomMove} onUndoRoomMove={undoRoomMove} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
@@ -815,6 +1071,7 @@ function OperationsDashboard({ bookings, notice, setNotice, onOpenBookings }) {
 function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [bookings, setBookings] = useState([]);
   const [accommodations, setAccommodations] = useState([]);
+  const [canUndoRoomMove, setCanUndoRoomMove] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
   const [navigationIntent, setNavigationIntent] = useState(null);
   const [notice, setNotice] = useState('');
@@ -828,6 +1085,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       if (!response.ok) throw new Error(data.message || 'Could not load bookings.');
       setBookings(data.bookings);
       setAccommodations(data.accommodations || []);
+      setCanUndoRoomMove(Boolean(data.can_undo_room_move));
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -847,7 +1105,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Update failed.');
-      setBookings(current => current.map(item => Number(item.id) === Number(id) ? { ...item, status } : item));
+      await load();
       setNotice(`Booking ${data.reference} updated.`);
     } catch (error) {
       setNotice(error.message);
@@ -877,7 +1135,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
-        {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} onBookingSaved={data => { setNotice(`Booking ${data.reference} saved.`); load(); }} />}
+        {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
         {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} onBookingSaved={load} onOpenBooking={id => {

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { roomPlanning } from '../src/bookingRoomPlanning.js';
+const booking = (id, created_at) => ({ id, created_at, status: 'pending', check_in: '2026-09-15', check_out: '2026-09-20' });
+const units = [{ key: '1', bookings: [booking(3, '2026-09-03'), booking(2, '2026-09-02'), booking(1, '2026-09-01')] }, { key: '2', bookings: [] }];
+const result = roomPlanning(units);
+assert.equal(result.priorities.get('1'), 1);
+assert.equal(result.priorities.get('3'), 3);
+assert.equal(result.suggestions.length, 1);
+assert.equal(result.suggestions[0].booking.id, 1);
+assert.equal(result.suggestions[0].unit.key, '2');
+units[1].bookings.push({ ...booking(4, '2026-09-04'), status: 'confirmed' });
+assert.equal(roomPlanning(units).suggestions.length, 0);
+console.log('Passed oldest-first numbering, suggestion priority and blocked-room checks.');
