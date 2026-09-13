@@ -56,6 +56,10 @@
 @keyframes bookingCalendarTarget { 0%,35% { background:#edf7f2; box-shadow:0 0 0 5px rgba(35,116,95,.24),0 14px 34px rgba(12,44,39,.14); } 100% { background:#fbfbf8; box-shadow:0 0 0 0 rgba(35,116,95,0),0 8px 24px rgba(12,44,39,.045); } }
 .booking-card__top,.booking-card__guest,.booking-card__stay,.booking-card__dates,.booking-card__actions { display: flex; align-items: center; }
 .booking-card__top { justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.booking-card__reference { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.booking-source { display:inline-flex; align-items:center; width:max-content; padding:5px 8px; border-radius:999px; font-size:9px; font-weight:800; letter-spacing:.03em; line-height:1; text-transform:none; }
+.booking-source--facebook { color:#1558a6; background:#e4effc; border:1px solid #bfd6f2; }
+.admin-request-modal__head .booking-source,.booking-calendar-dialog__header .booking-source { margin:8px 0 0; }
 .booking-status { display: inline-flex; align-items: center; gap: 7px; width: max-content; padding: 6px 9px; border-radius: 999px; color: #55635f; background: #e9eeeb; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .booking-status::before { width: 7px; height: 7px; border-radius: 50%; background: currentColor; content: ''; }
 .booking-status--pending { color: #8a5c18; background: #f8edcf; }

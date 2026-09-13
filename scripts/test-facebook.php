@@ -23,6 +23,7 @@ try {
     checkFacebook(facebookCategory('Is there availability?', false) === 'general', 'Disabled classification');
     checkFacebook(facebookProfileName(['name' => '  Maria   Santos  ']) === 'Maria Santos', 'Messenger profile name normalization');
     checkFacebook(facebookProfileName(['name' => '']) === null, 'Empty Messenger profile name fallback');
+    checkFacebook(str_starts_with(facebookStaffTakeoverNotice(), 'You are now chatting with a staff member.'), 'Staff takeover notice is available as a separate message');
     checkFacebook(facebookWebhookMessageBody(['text' => 'Hello 😊'])['body'] === 'Hello 😊', 'Unicode emoji text is preserved');
     checkFacebook(facebookWebhookMessageBody(['sticker_id' => 1])['body'] === '👍', 'Messenger quick-like sticker is displayed without triggering a reply');
     $photoMessage = facebookWebhookMessageBody(['attachments' => [['type' => 'image', 'payload' => ['url' => 'https://scontent.example.test/photo.jpg']]]]);

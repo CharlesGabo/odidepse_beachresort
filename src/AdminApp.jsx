@@ -566,7 +566,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         const schedule = getBookingNotes(booking.message);
         return <>
           <div className="booking-calendar-dialog__header">
-            <div><span className="admin-kicker">{booking.reference_code}</span><h3 id="booking-calendar-dialog-title">{booking.guest_name}</h3></div>
+            <div><span className="admin-kicker">{booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}<h3 id="booking-calendar-dialog-title">{booking.guest_name}</h3></div>
             <button type="button" onClick={closeDialog} aria-label="Close calendar booking details">×</button>
           </div>
           <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
@@ -611,7 +611,7 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   const request = getBookingNotes(booking.message);
   return <dialog ref={dialogRef} className="admin-request-modal" aria-labelledby="request-modal-title" onClose={onClose} onCancel={onClose}>
     <div className="admin-request-modal__head">
-      <div><span className="admin-kicker">Reservation · {booking.reference_code}</span><h2 id="request-modal-title">View &amp; manage</h2></div>
+      <div><span className="admin-kicker">Reservation · {booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}<h2 id="request-modal-title">View &amp; manage</h2></div>
       <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
     </div>
     <div className={`admin-request-modal__guest admin-request-modal__guest--${booking.status}`}>
@@ -736,7 +736,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
           onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking.id); }}
           onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking.id); } }}>
           <div className="booking-card__top">
-            <span>{booking.reference_code}</span>
+            <div className="booking-card__reference"><span>{booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}</div>
             <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
           </div>
           <div className="booking-card__guest">

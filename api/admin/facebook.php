@@ -19,7 +19,9 @@ try {
         $records = [];
         $total = 0;
         if (in_array($section, ['message', 'comment', 'lead', 'alerts'], true)) {
-            $where = $section === 'alerts' ? 'e.needs_attention = 1' : 'e.kind = ?';
+            $where = $section === 'alerts'
+                ? "e.source = 'facebook' AND e.booking_id IS NOT NULL AND e.id = (SELECT MAX(latest_event.id) FROM facebook_events latest_event WHERE latest_event.source = 'facebook' AND latest_event.booking_id = e.booking_id)"
+                : 'e.kind = ?';
             $params = $section === 'alerts' ? [] : [$section];
             $query = $db->prepare('SELECT e.*, UNIX_TIMESTAMP(e.received_at) AS received_epoch,
                 b.reference_code,
@@ -58,6 +60,9 @@ try {
                         $staffReply = $deliveryPayload['text'] ?? '';
                         $reply['body'] = is_string($staffReply) && trim($staffReply) !== '' ? trim($staffReply) : 'Staff reply';
                         $reply['origin'] = 'staff';
+                    } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'takeover_notice') {
+                        $reply['body'] = facebookStaffTakeoverNotice();
+                        $reply['origin'] = 'system';
                     } elseif (is_array($deliveryPayload) && ($deliveryPayload['__facebook_job_type'] ?? '') === 'handoff_reply') {
                         $handoffReply = $deliveryPayload['text'] ?? '';
                         $reply['body'] = is_string($handoffReply) && trim($handoffReply) !== '' ? trim($handoffReply) : 'An admin will review your concern.';
@@ -98,7 +103,8 @@ try {
             $records = $db->query('SELECT * FROM ' . $table . ' ORDER BY id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset)->fetchAll();
             $total = (int) $db->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn();
         }
-        $counts = $db->query("SELECT SUM(kind = 'message' AND status <> 'resolved') AS inquiries, SUM(needs_attention = 1) AS alerts, SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
+        $counts = $db->query("SELECT SUM(kind = 'message' AND status <> 'resolved') AS inquiries, SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
+        $counts['alerts'] = (int) $db->query("SELECT COUNT(DISTINCT booking_id) FROM facebook_events WHERE source = 'facebook' AND booking_id IS NOT NULL")->fetchColumn();
         $counts['drafts'] = (int) $db->query("SELECT COUNT(*) FROM facebook_drafts WHERE status = 'pending'")->fetchColumn();
         $configured = true;
         foreach (['META_APP_ID', 'META_APP_SECRET', 'META_PAGE_ID', 'META_PAGE_ACCESS_TOKEN', 'META_WEBHOOK_VERIFY_TOKEN', 'META_GRAPH_API_VERSION'] as $name) {
@@ -127,11 +133,24 @@ try {
         $messageAge = filter_var($event['message_age_seconds'], FILTER_VALIDATE_INT);
         if ($messageAge === false || $messageAge < 0 || $messageAge > 86400) throw new FacebookWorkflowError('Facebook’s 24-hour reply window has ended for this conversation.');
         if ($event['status'] === 'resolved') throw new FacebookWorkflowError('Reopen this inquiry before replying.');
+        $conversationQuery = $db->prepare('SELECT data_json FROM facebook_conversations WHERE page_id = ? AND sender_id = ? LIMIT 1');
+        $conversationQuery->execute([$event['page_id'], $event['sender_id']]);
+        $conversationData = json_decode((string) ($conversationQuery->fetchColumn() ?: '{}'), true, 32, JSON_THROW_ON_ERROR);
+        $takeoverUntil = is_array($conversationData) ? filter_var($conversationData['human_takeover_until'] ?? null, FILTER_VALIDATE_INT) : false;
+        $pendingStaffQuery = $db->prepare("SELECT COUNT(*) FROM facebook_jobs j INNER JOIN facebook_events e ON e.id = j.event_id WHERE e.page_id = ? AND e.sender_id = ? AND j.kind = 'reply' AND j.status IN ('blocked','pending','processing','retry_wait') AND j.payload LIKE '%\"__facebook_job_type\":\"staff_reply\"%'");
+        $pendingStaffQuery->execute([$event['page_id'], $event['sender_id']]);
+        $announceTakeover = ($takeoverUntil === false || $takeoverUntil <= time()) && (int) $pendingStaffQuery->fetchColumn() === 0;
+        $suffix = bin2hex(random_bytes(12));
+        $dedupeKey = 'staff-reply:event:' . $id . ':' . $suffix;
         $payload = json_encode(['__facebook_job_type' => 'staff_reply', 'text' => $body], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        $db->prepare("UPDATE facebook_jobs j INNER JOIN facebook_events e ON e.id = j.event_id SET j.status = 'cancelled', j.error_code = 'staff_reply_superseded' WHERE e.page_id = ? AND e.sender_id = ? AND j.kind = 'reply' AND j.status IN ('blocked','pending','retry_wait')")->execute([$event['page_id'], $event['sender_id']]);
-        $dedupeKey = 'staff-reply:event:' . $id . ':' . bin2hex(random_bytes(12));
-        $insert = $db->prepare("INSERT INTO facebook_jobs (event_id, kind, dedupe_key, payload, status) VALUES (?, 'reply', ?, ?, 'pending')");
-        $insert->execute([$id, $dedupeKey, $payload]);
+        $db->prepare("UPDATE facebook_jobs j INNER JOIN facebook_events e ON e.id = j.event_id SET j.status = 'cancelled', j.error_code = 'staff_reply_superseded' WHERE e.page_id = ? AND e.sender_id = ? AND j.kind = 'reply' AND j.status IN ('blocked','pending','retry_wait') AND j.payload NOT LIKE '%\"__facebook_job_type\":\"staff_reply\"%' AND j.payload NOT LIKE '%\"__facebook_job_type\":\"takeover_notice\"%'")->execute([$event['page_id'], $event['sender_id']]);
+        if ($announceTakeover) {
+            $noticePayload = json_encode(['__facebook_job_type' => 'takeover_notice', 'text' => facebookStaffTakeoverNotice(), 'release_dedupe_key' => $dedupeKey], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            $noticeInsert = $db->prepare("INSERT INTO facebook_jobs (event_id, kind, dedupe_key, payload, status) VALUES (?, 'reply', ?, ?, 'pending')");
+            $noticeInsert->execute([$id, 'takeover-notice:event:' . $id . ':' . $suffix, $noticePayload]);
+        }
+        $insert = $db->prepare("INSERT INTO facebook_jobs (event_id, kind, dedupe_key, payload, status, error_code) VALUES (?, 'reply', ?, ?, ?, ?)");
+        $insert->execute([$id, $dedupeKey, $payload, $announceTakeover ? 'blocked' : 'pending', $announceTakeover ? 'awaiting_takeover_notice' : null]);
         facebookAudit($db, $actor, 'staff_reply_queued', 'event', $id);
     } elseif ($action === 'save_rules') {
         $rules = $data['rules'] ?? null;

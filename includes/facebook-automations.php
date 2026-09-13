@@ -152,6 +152,11 @@ function facebookAutomaticReplyNotice(): string
     return 'Automated reply • Reply ADMIN for staff assistance.';
 }
 
+function facebookStaffTakeoverNotice(): string
+{
+    return 'You are now chatting with a staff member. Automated replies are paused while our team assists you.';
+}
+
 function facebookWebhookMessageBody(array $message): array
 {
     $text = is_string($message['text'] ?? null) ? trim($message['text']) : '';

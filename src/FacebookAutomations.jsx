@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import MessengerInbox from './MessengerInbox.jsx';
 import './facebook-automations.css';
 
-const sections = [['message', 'Messenger'], ['comment', 'Comments'], ['alerts', 'Staff alerts'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
+const sections = [['message', 'Messenger'], ['alerts', 'Booking Requests'], ['comment', 'Comments'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
 const categories = ['booking', 'rates', 'amenities', 'location', 'complaint', 'general'];
 const guidedReplies = [
   ['start', 'Booking flow introduction'], ['restart', 'Restart message'], ['ask_dates', 'Ask for dates'], ['confirm_dates', 'Confirm interpreted dates'],
@@ -18,6 +18,21 @@ const MESSENGER_REFRESH_MS = 1000;
 const VISIBLE_REFRESH_MS = 15000;
 const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
+const bookingStatusLabels = { pending: 'New request', confirmed: 'Confirmed', checked_in: 'Checked in', completed: 'Completed', cancelled: 'Cancelled' };
+
+function formatBookingDate(value) {
+  if (!value) return 'Not set';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(date);
+}
+
+function getBookingNights(item) {
+  const checkIn = new Date(`${item.booking_check_in}T12:00:00`);
+  const checkOut = new Date(`${item.booking_check_out}T12:00:00`);
+  const nights = Math.round((checkOut - checkIn) / 86400000);
+  return Number.isFinite(nights) && nights > 0 ? nights : null;
+}
 const stamp = value => value ? value.replace('T', ' ').slice(0, 19) : '—';
 
 const bookingAlertDetails = item => [
@@ -78,6 +93,33 @@ function EventCard({ item, mutate, busy, onConvert, onBooking, showBookingSummar
         {item.kind === 'lead' && <button type="button" className="fb-primary" disabled={busy} onClick={() => onConvert(item)}>Create booking from lead</button>}
       </div>
     </>}
+  </article>;
+}
+
+function FacebookBookingCard({ item, onBooking }) {
+  const nights = getBookingNights(item);
+  const status = item.booking_status || 'pending';
+  const contact = item.booking_email || item.booking_phone || 'No contact provided';
+  return <article className="booking-card">
+    <div className="booking-card__top">
+      <span>{item.reference_code}</span>
+      <span className={`booking-status booking-status--${status}`}>{bookingStatusLabels[status] || label(status)}</span>
+    </div>
+    <div className="booking-card__guest">
+      <div><strong>{item.booking_guest_name || item.guest_name || 'Facebook customer'}</strong><small>{contact}</small></div>
+    </div>
+    <div className="booking-card__stay">
+      <div><span>Stay</span><strong>{item.booking_stay_type || 'Flexible stay'}</strong></div>
+      <div><span>Party</span><strong>{item.booking_guests ? `${item.booking_guests} pax` : 'Not provided'}</strong></div>
+    </div>
+    <div className="booking-card__footer">
+      <div className="booking-card__dates">
+        <div><span>Check-in</span><strong>{formatBookingDate(item.booking_check_in)}</strong></div>
+        <div className="booking-card__route"><span>{nights ? `${nights + 1}D · ${nights}N` : '→'}</span></div>
+        <div><span>Check-out</span><strong>{formatBookingDate(item.booking_check_out)}</strong></div>
+      </div>
+      <div className="booking-card__actions"><button className="booking-manage-button" type="button" onClick={() => onBooking(item.booking_id)}>View &amp; manage</button></div>
+    </div>
   </article>;
 }
 
@@ -194,13 +236,13 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   };
   const navigate = value => { setSection(value); setPage(1); setNotice(''); setError(''); setDraft(null); };
   const finishEdit = () => { setDraft(null); setEditorKey(value => value + 1); };
-  const eventSection = ['comment', 'lead', 'alerts'].includes(section);
+  const eventSection = ['comment', 'lead'].includes(section);
   const connected = data?.connection === 'connected';
 
   return <section className="fb-workspace admin-view" aria-labelledby="facebook-heading">
     <div className="fb-row fb-heading"><div><span className="fb-eyebrow">Page operations</span><h1 id="facebook-heading">Facebook Automations</h1><p>One workspace for conversations, leads, and content.</p></div><button type="button" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
     <div className="fb-connection"><span className="fb-badge fb-badge--strong">{loading ? 'Checking' : connected ? 'Connected' : 'Not connected'}</span><div><strong>{loading ? 'Checking the Facebook connection…' : connected ? 'Facebook webhook verified.' : 'Your workspace is ready for setup.'}</strong><p>{connected ? 'Meta successfully verified this callback. Keep the active callback URL online and run the delivery worker for automatic replies.' : 'Complete Meta webhook verification to enable live Page activity.'}</p></div></div>
-    <div className="fb-stats">{[['message', 'Open inquiries', 'inquiries'], ['alerts', 'Staff alerts', 'alerts'], ['lead', 'Unconverted leads', 'leads'], ['drafts', 'Awaiting approval', 'drafts']].map(([target, title, key]) => <button type="button" disabled={busy} key={key} onClick={() => navigate(target)}><span>{title}</span><strong>{data ? Number(data.counts[key] || 0) : '—'}</strong></button>)}</div>
+    <div className="fb-stats">{[['message', 'Open inquiries', 'inquiries'], ['alerts', 'Booking Requests', 'alerts'], ['lead', 'Unconverted leads', 'leads'], ['drafts', 'Awaiting approval', 'drafts']].map(([target, title, key]) => <button type="button" disabled={busy} key={key} onClick={() => navigate(target)}><span>{title}</span><strong>{data ? Number(data.counts[key] || 0) : '—'}</strong></button>)}</div>
     <nav className="fb-tabs" aria-label="Facebook automation sections">{sections.map(([key, title]) => <button type="button" key={key} disabled={busy} aria-current={section === key ? 'page' : undefined} className={section === key ? 'active' : ''} onClick={() => navigate(key)}>{title}</button>)}</nav>
     {error && <p className="fb-feedback fb-feedback--error" role="alert">{error}</p>}
     {notice && <p className="fb-feedback" role="status">{notice}</p>}
@@ -209,9 +251,14 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
         <MessengerInbox records={data.records} total={data.total} connected={connected} busy={busy} onSend={(item, body) => mutate({ action: 'send_message', id: Number(item.id), revision: Number(item.revision), body })} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />} />
         <Intake kind="message" mutate={mutate} busy={busy} />
       </>}
-      {eventSection && <>{section !== 'alerts' && <Intake key={section} kind={section} mutate={mutate} busy={busy} />}<div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
+      {section === 'alerts' && <><div className="fb-row"><div><h2>Booking Requests</h2><p>Booking requests created through your connected Facebook Page.</p></div><small>{data.total} {data.total === 1 ? 'request' : 'requests'}</small></div>
+        <div className="booking-table booking-card-grid fb-booking-requests">
+          {data.records.map(item => <FacebookBookingCard key={item.booking_id} item={item} onBooking={onOpenBooking} />)}
+        </div>
+      </>}
+      {eventSection && <><Intake key={section} kind={section} mutate={mutate} busy={busy} /><div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
         {section === 'comment' && <p>New comments appear here with staff attention flags. Acknowledge one by clearing its attention checkbox. Refresh to check for new items.</p>}
-        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} showBookingSummary={section === 'alerts'} />)}
+        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />)}
       </>}
       {section === 'rules' && <Rules key={data.settings.revision} settings={data.settings} mutate={mutate} busy={busy} />}
       {section === 'drafts' && <><DraftEditor key={draft ? `edit-${draft.id}` : `new-${editorKey}`} draft={draft} mutate={mutate} busy={busy} onDone={finishEdit} />
@@ -225,7 +272,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
           {['blocked', 'pending', 'retry_wait'].includes(item.status) && <div className="fb-actions"><button type="button" disabled={busy} onClick={() => mutate({ action: 'cancel_job', id: Number(item.id) })}>Cancel delivery</button></div>}</article>)}
       </>}
       {section === 'audit' && <><h2>Audit log</h2><p>Records changes and processing outcomes without copying private conversations or credentials into the log.</p><div className="fb-panel">{data.records.map(item => <div className="fb-audit-row" key={item.id}><strong>{label(item.action)}</strong><span>{item.entity_type} #{item.entity_id} · {item.actor_id ? `Admin #${item.actor_id}` : 'System'}</span><small>{stamp(item.created_at)}</small></div>)}</div></>}
-      {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
+      {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{section === 'alerts' ? 'New booking requests from your connected Facebook Page will appear here.' : eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
       {section !== 'rules' && data.total > data.page_size && <div className="fb-pagination"><button type="button" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {Math.ceil(data.total / data.page_size)}</span><button type="button" disabled={busy || page * data.page_size >= data.total} onClick={() => setPage(value => value + 1)}>Next</button></div>}
     </>}
     {lead && <ManualBookingModal key={lead.id} open onClose={() => setLead(null)} csrfToken={csrfToken}

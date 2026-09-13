@@ -124,7 +124,7 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
               : item.type === 'image' || item.type === 'sticker'
               ? <button className={`messenger-photo${item.type === 'sticker' ? ' messenger-sticker' : ''}`} type="button" onClick={() => openPreview([{ src: item.photoUrl, alt: item.type === 'sticker' ? `${selected.name} sticker` : `${selected.name} room photo` }])} aria-label={item.type === 'sticker' ? 'Open sticker' : 'Open room photo'}><img src={item.photoUrl} alt={item.type === 'sticker' ? 'Sticker sent through Messenger' : 'Room sent through Messenger'} loading="lazy" /></button>
               : <p className="messenger-bubble">{item.body}</p>}</div>
-            {item.outgoing && <small className="messenger-sent-label">{item.deliveryStatus === 'sending' ? 'Sending' : item.deliveryStatus === 'queued' ? 'Queued' : 'Sent'} · {item.origin === 'staff' ? 'Staff reply' : 'Automated reply'}</small>}
+            {item.outgoing && <small className="messenger-sent-label">{item.deliveryStatus === 'sending' ? 'Sending' : item.deliveryStatus === 'queued' ? 'Queued' : 'Sent'} · {item.origin === 'staff' ? 'Staff reply' : item.origin === 'system' ? 'System notice' : 'Automated reply'}</small>}
           </article>})}
         </div>
         <form className="messenger-composer" onSubmit={async event => {
