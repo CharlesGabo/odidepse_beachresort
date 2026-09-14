@@ -169,9 +169,6 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     if (in_array($chat['state'], ['idle', 'completed'], true)) { $chat['data'] = []; $chat['state'] = $category === 'rates' ? 'rates' : 'booking'; }
     $data =& $chat['data'];
     $details = facebookConversationDetails($body);
-    // Messenger accepts either contact, so its parser stops after email. Website needs both.
-    $phoneContact = facebookConversationContact(preg_replace('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', '', $body) ?? '') ?? [];
-    if (!empty($phoneContact['phone'])) $details['phone'] = $phoneContact['phone'];
     if ($details['dates']) {
         [$data['check_in'], $data['check_out']] = $details['dates']; unset($chat['draft']);
         if ($data['check_in'] <= (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) unset($data['check_in'], $data['check_out']);
@@ -179,8 +176,13 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     foreach (['guests', 'check_in_time', 'check_out_time', 'email', 'phone'] as $field) {
         if ($details[$field] !== null && $details[$field] !== '') { $data[$field] = $details[$field]; unset($chat['draft']); }
     }
-    // Names must be labelled or provided alongside contact details; room/activity text is not a name.
-    if ($details['guest_name'] !== '' && (preg_match('/\b(?:name|pangalan|ako si|i am|my name)\b/iu', $body) || $details['email'] !== '' || $details['phone'] !== '')) $data['guest_name'] = $details['guest_name'];
+    // Accept a safe standalone name when that is the remaining booking detail.
+    $standaloneName = ($data['guest_name'] ?? '') === ''
+        && preg_match('/\A\s*[\p{L}\p{M} .\'\-]{2,100}\s*\z/u', $body) === 1;
+    if ($details['guest_name'] !== '' && ($standaloneName || preg_match('/\b(?:name|pangalan|ako si|i am|my name)\b/iu', $body) || $details['email'] !== '' || $details['phone'] !== '')) {
+        $data['guest_name'] = $details['guest_name'];
+        unset($chat['draft']);
+    }
     if (!isset($data['guests']) && preg_match('/\A\d{1,3}\z/', trim($body))) $data['guests'] = facebookConversationGuests($body);
     if (isset($data['phone'])) $data['phone'] = websiteChatPhone($data['phone']);
     $services = resortEntities($db, 'services', false);
@@ -192,12 +194,7 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     $data['activities'] = array_values(array_unique($data['activities'] ?? []));
     if (preg_match('/(?:notes?|message)\s*:\s*([^\r\n]+)/iu', $body, $match)) $data['notes'] = mb_substr(trim($match[1]), 0, 650);
     $ratesOnly = $chat['state'] === 'rates' && empty($data['guest_name']) && !preg_match('/\b(?:book|booking|reserve|reservation|magbook|mag-book)\b/iu', $body);
-    $missing = facebookConversationMissingDetails($data, $ratesOnly);
-    if (!$ratesOnly) {
-        $missing = array_values(array_diff($missing, ['email or mobile number']));
-        if (!filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL)) $missing[] = 'email';
-        if (($data['phone'] ?? '') === '') $missing[] = 'Philippine mobile number';
-    }
+    $missing = facebookConversationMissingDetails($data, $ratesOnly, !$ratesOnly);
     if (isset($data['check_in'], $data['check_out'], $data['guests'])) {
         $options = facebookConversationStayOptions($db, $data['guests'], $data['check_in'], $data['check_out'], null, 100);
         $data['options'] = $options;
@@ -216,11 +213,28 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
         if ($ratesOnly) return $reply(facebookConversationOptionsText($options, $rules) . "\n\n" . facebookGuidedReply($rules, 'book_from_rates') . "\n" . facebookGuidedReply($rules, 'website_contact'));
     }
     $chat['state'] = $ratesOnly ? 'rates' : 'booking';
-    if ($missing !== []) return $reply(facebookGuidedReply($rules, $ratesOnly ? 'ask_rate_details' : 'ask_booking_details') . "\n\n" . facebookConversationDetailsChecklist($data, $missing, $ratesOnly) . ($ratesOnly ? '' : "\n\n" . facebookGuidedReply($rules, 'website_contact')));
+    if ($missing !== []) {
+        $contactMissing = array_intersect($missing, ['email', 'Philippine mobile number']) !== [];
+        return $reply(facebookConversationDetailsChecklist($data, $missing, $ratesOnly, !$ratesOnly)
+            . ($contactMissing ? "\n\n" . facebookGuidedReply($rules, 'website_contact') : ''));
+    }
     $chat['state'] = 'review';
     unset($chat['draft']);
-    $summary = facebookGuidedReply($rules, 'summary_intro') . "\n" . $data['stay_name'] . "\nRate: " . ($data['rate'] ?: 'Staff will provide the rate') . "\n" . $data['check_in'] . ' ' . $data['check_in_time'] . ' to ' . $data['check_out'] . ' ' . $data['check_out_time']
-        . "\nGuests: " . $data['guests'] . "\n" . $data['guest_name'] . "\n" . $data['email'] . "\n" . $data['phone'];
     $activityNames = array_column(array_filter($services, static fn(array $item): bool => in_array((int) $item['id'], $data['activities'], true)), 'name');
-    return $reply($summary . "\nActivities: " . (implode(', ', $activityNames) ?: 'None') . "\nNotes: " . ($data['notes'] ?? 'None') . "\n\n" . facebookGuidedReply($rules, 'ask_confirmation') . "\nOn this website, CONFIRM opens the filled booking form. Submit that form to send your request. Pending requests do not reserve a room; staff approval is required.");
+    return $reply(facebookConversationSummary($data, $rules, [
+        'show_both_contacts' => true,
+        'hide_room_photos' => true,
+        'extra_lines' => [
+            'Rate: ' . ($data['rate'] ?: 'Staff will provide the rate'),
+            'Activities: ' . (implode(', ', $activityNames) ?: 'None'),
+            'Notes: ' . ($data['notes'] ?? 'None'),
+        ],
+        'confirmation' => facebookGuidedReply($rules, 'ask_confirmation')
+            . "\n\nWebsite booking process:"
+            . "\n• CONFIRM opens your filled booking form."
+            . "\n• Review or edit the details, then submit the form."
+            . "\n• BACK lets you change your booking details."
+            . "\n• CANCEL stops the booking process."
+            . "\n\nYour request remains pending until staff approves it. A pending request does not reserve a room.",
+    ]));
 }

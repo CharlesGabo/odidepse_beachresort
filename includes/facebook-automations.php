@@ -712,7 +712,7 @@ function facebookConversationDetails(string $body): array
     return ['dates' => facebookConversationDates($body), 'check_in_time' => $times['check_in_time'], 'check_out_time' => $times['check_out_time'], 'guests' => $guests, 'guest_name' => $name, 'email' => $identity['email'], 'phone' => $identity['phone']];
 }
 
-function facebookConversationMissingDetails(array $data, bool $ratesOnly = false): array
+function facebookConversationMissingDetails(array $data, bool $ratesOnly = false, bool $requireBothContacts = false): array
 {
     $missing = [];
     if (($data['check_in'] ?? '') === '' || ($data['check_out'] ?? '') === '') $missing[] = 'dates';
@@ -721,12 +721,17 @@ function facebookConversationMissingDetails(array $data, bool $ratesOnly = false
         if (($data['check_in_time'] ?? '') === '') $missing[] = 'check-in time';
         if (($data['check_out_time'] ?? '') === '') $missing[] = 'check-out time';
         if (($data['guest_name'] ?? '') === '') $missing[] = 'full name';
-        if (($data['email'] ?? '') === '' && ($data['phone'] ?? '') === '') $missing[] = 'email or mobile number';
+        if ($requireBothContacts) {
+            if (!filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL)) $missing[] = 'email';
+            if (($data['phone'] ?? '') === '') $missing[] = 'Philippine mobile number';
+        } elseif (($data['email'] ?? '') === '' && ($data['phone'] ?? '') === '') {
+            $missing[] = 'email or mobile number';
+        }
     }
     return $missing;
 }
 
-function facebookConversationDetailsChecklist(array $data, array $missing, bool $ratesOnly = false): string
+function facebookConversationDetailsChecklist(array $data, array $missing, bool $ratesOnly = false, bool $showBothContacts = false): string
 {
     $hasDates = ($data['check_in'] ?? '') !== '' && ($data['check_out'] ?? '') !== '';
     $dates = $hasDates
@@ -745,7 +750,12 @@ function facebookConversationDetailsChecklist(array $data, array $missing, bool 
     if (!$ratesOnly) {
         $lines[] = '🏠 Room: ' . $room;
         $lines[] = ($data['guest_name'] ?? '') !== '' ? '✅ Name: ' . $data['guest_name'] : '❓ Name: Needed';
-        $lines[] = $contact !== 'Needed' ? '✅ Contact: ' . $contact : '❓ Contact: Needed';
+        if ($showBothContacts) {
+            $lines[] = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL) ? '✅ Email: ' . $data['email'] : '❓ Email: Needed';
+            $lines[] = ($data['phone'] ?? '') !== '' ? '✅ Mobile: ' . $data['phone'] : '❓ Mobile: Needed';
+        } else {
+            $lines[] = $contact !== 'Needed' ? '✅ Contact: ' . $contact : '❓ Contact: Needed';
+        }
     }
     $labels = array_map(static fn(string $item): string => match ($item) {
         'dates' => 'stay dates',
@@ -808,20 +818,22 @@ function facebookQueueNativeRoomPhotos(PDO $db, int $eventId, string $pageId, st
 
 function facebookConversationContact(string $body): ?array
 {
+    $email = '';
     if (preg_match('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', $body, $match) === 1 && filter_var($match[0], FILTER_VALIDATE_EMAIL)) {
-        return ['email' => mb_strtolower($match[0], 'UTF-8'), 'phone' => ''];
+        $email = mb_strtolower($match[0], 'UTF-8');
+        $body = str_ireplace($match[0], ' ', $body);
     }
+    $phone = '';
     if (preg_match('/\b(?:phone|mobile|cellphone|contact|cp|tel)(?:\s*(?:number|no\.?))?\s*[:=-]?\s*((?:\+|0)\d[\d()\- \t]{5,}\d)/iu', $body, $match) === 1) {
         $phone = trim($match[1]);
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
-        if (strlen($digits) >= 7 && strlen($digits) <= 15 && strlen($phone) <= 30) return ['email' => '', 'phone' => $phone];
-    }
-    if (preg_match('/(?<![\d-])(?:\+|0)\d[\d()\- \t]{5,}\d(?![\d-])/u', $body, $match) === 1) {
+        if (strlen($digits) < 7 || strlen($digits) > 15 || strlen($phone) > 30) $phone = '';
+    } elseif (preg_match('/(?<![\d-])(?:\+|0)\d[\d()\- \t]{5,}\d(?![\d-])/u', $body, $match) === 1) {
         $phone = trim($match[0]);
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
-        if (strlen($digits) >= 7 && strlen($digits) <= 15 && strlen($phone) <= 30) return ['email' => '', 'phone' => $phone];
+        if (strlen($digits) < 7 || strlen($digits) > 15 || strlen($phone) > 30) $phone = '';
     }
-    return null;
+    return $email !== '' || $phone !== '' ? ['email' => $email, 'phone' => $phone] : null;
 }
 
 function facebookConversationIdentityContact(string $body): array
@@ -837,24 +849,32 @@ function facebookConversationIdentityContact(string $body): array
     return ['guest_name' => $name, 'email' => $contact['email'], 'phone' => $contact['phone']];
 }
 
-function facebookConversationSummary(array $data, array $rules): string
+function facebookConversationSummary(array $data, array $rules, array $presentation = []): string
 {
     $contact = ($data['email'] ?? '') !== '' ? $data['email'] : ($data['phone'] ?? '');
     $start = (new DateTimeImmutable($data['check_in']))->format('M j');
     $end = (new DateTimeImmutable($data['check_out']))->format('M j, Y');
     $roomLabel = !empty($data['stay_suggested']) ? 'Suggested room: ' : 'Room: ';
+    $contactLines = !empty($presentation['show_both_contacts'])
+        ? "\n📧 " . ($data['email'] ?? '') . "\n📞 " . ($data['phone'] ?? '')
+        : "\n📞 {$contact}";
+    $extraLines = '';
+    foreach (($presentation['extra_lines'] ?? []) as $line) {
+        if (is_string($line) && trim($line) !== '') $extraLines .= "\n" . trim($line);
+    }
+    $confirmation = (string) ($presentation['confirmation'] ?? "Reply CONFIRM to submit.\nReply BACK to edit or CANCEL to stop.");
     return facebookGuidedReply($rules, 'summary_intro')
         . "\n\n📅 {$start}–{$end}"
         . "\n🕒 Check-in " . facebookConversationTimeLabel($data['check_in_time']) . ' · Check-out ' . facebookConversationTimeLabel($data['check_out_time'])
         . "\n👥 {$data['guests']} guests"
         . "\n🏠 {$roomLabel}{$data['stay_name']}"
         . "\n👤 {$data['guest_name']}"
-        . "\n📞 {$contact}"
+        . $contactLines
+        . $extraLines
         . "\n\nStatus: PENDING staff approval"
         . (!empty($data['stay_suggested']) ? "\nSuggested based on your group size and availability." : '')
-        . (!empty($data['room_photos']) ? "\nRoom photos will follow." : '')
-        . "\n\nReply CONFIRM to submit."
-        . "\nReply BACK to edit or CANCEL to stop.";
+        . (!empty($data['room_photos']) && empty($presentation['hide_room_photos']) ? "\nRoom photos will follow." : '')
+        . "\n\n" . $confirmation;
 }
 
 function facebookConversationSave(PDO $db, int $id, string $state, array $data, int $eventId, ?int $bookingId = null): void

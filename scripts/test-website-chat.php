@@ -15,6 +15,16 @@ try {
     chatCheck(websiteChatReply($db, $chat, 'Hello', $rules, static fn() => 'Hello po')['source'] === 'ai', 'AI routing');
     $start = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+500 days');
     $end = $start->modify('+2 days');
+    $sameMessage = "8 pax\n" . $start->format('Y-m-d') . ' to ' . $end->format('Y-m-d') . "\n2 PM\n11 AM\n09171234567 maria@example.test";
+    $sharedDetails = facebookConversationDetails($sameMessage);
+    chatCheck($sharedDetails['email'] === 'maria@example.test' && $sharedDetails['phone'] === '09171234567', 'Shared parser captures both contacts');
+    $comparisonChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'comparison'];
+    $comparisonReply = websiteChatReply($db, $comparisonChat, $sameMessage, $rules)['reply'];
+    chatCheck(str_contains($comparisonReply, 'Name: Needed') && str_contains($comparisonReply, 'Email: maria@example.test') && str_contains($comparisonReply, 'Mobile: +639171234567'), 'Website reports only unavailable channel identity');
+    chatCheck(!str_contains($comparisonReply, facebookGuidedReply($rules, 'ask_booking_details')), 'Partial reply uses shared checklist without repeating instructions');
+    $nameReply = websiteChatReply($db, $comparisonChat, 'Charles Martinez', $rules)['reply'];
+    chatCheck($comparisonChat['state'] === 'review' && ($comparisonChat['data']['guest_name'] ?? '') === 'Charles Martinez', 'Standalone name completes website draft');
+    chatCheck(str_contains($nameReply, 'Charles Martinez'), 'Accepted standalone name appears in review');
     websiteChatReply($db, $chat, 'Rates', $rules);
     chatCheck($chat['state'] === 'rates', 'Partial rate state');
     websiteChatReply($db, $chat, $start->format('Y-m-d') . ' to ' . $end->format('Y-m-d') . ', 5 guests', $rules);
