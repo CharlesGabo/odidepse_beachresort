@@ -5,7 +5,8 @@ import './facebook-automations.css';
 const sections = [['message', 'Messenger'], ['alerts', 'Booking Requests'], ['comment', 'Comments'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
 const categories = ['booking', 'rates', 'amenities', 'location', 'complaint', 'general'];
 const guidedReplies = [
-  ['start', 'Booking flow introduction'], ['restart', 'Restart message'], ['ask_dates', 'Ask for dates'], ['confirm_dates', 'Confirm interpreted dates'],
+  ['website_contact', 'Website booking contact details (email and phone)'],
+  ['start', 'Booking flow introduction'], ['ask_dates', 'Ask for dates'], ['confirm_dates', 'Confirm interpreted dates'],
   ['ask_guests', 'Ask for guest count'], ['options_intro', 'Room suggestions introduction'], ['ask_stay', 'Ask for room choice'],
   ['ask_contact', 'Ask for name and contact'], ['ask_booking_details', 'All booking details request'], ['ask_rate_details', 'Rate details request'], ['book_from_rates', 'Continue from rates to booking'], ['missing_name', 'Contact received, name missing'], ['missing_contact', 'Name received, contact missing'], ['summary_intro', 'Booking summary introduction'],
   ['ask_confirmation', 'Ask for confirmation'], ['confirm_only', 'Confirmation reminder'], ['pending_created', 'Pending request created'],
@@ -136,7 +137,7 @@ function Rules({ settings, mutate, busy }) {
       keywords: Object.fromEntries(categories.map(category => [category, String(data[`keywords_${category}`] || '').split(/[,\n]/).map(value => value.trim()).filter(Boolean)])),
       guided_replies: Object.fromEntries(guidedReplies.map(([key]) => [key, data[`guided_${key}`] || ''])),
     } });
-  }}><fieldset disabled={busy}><h2>Automation rules</h2><p>Rules apply to new items. Review existing inquiries individually after changing these settings.</p>
+  }}><fieldset disabled={busy}><h2>Automation rules</h2><p>Keywords, templates and guided replies are shared by Messenger and Website Chat. Saved changes apply to the next message. Website Chat stays available independently of Messenger delivery settings.</p>
     <div className="fb-toggles">
       <label className="fb-check"><input type="checkbox" name="categorize" defaultChecked={rules.categorize} /><span>Automatically categorize inquiries <small>Recognizes common English and Filipino keywords. Unmatched inquiries go to General.</small></span></label>
       <label className="fb-check"><input type="checkbox" name="prepare_replies" defaultChecked={rules.prepare_replies} /><span>Automatically answer new Messenger inquiries <small>Uses templates for questions and a guided, stateful flow for bookings. Complaints are handed to staff.</small></span></label>
@@ -167,7 +168,7 @@ function DraftEditor({ draft, mutate, busy, onDone }) {
   </fieldset></form>;
 }
 
-export default function FacebookAutomations({ csrfToken, onLogout, ManualBookingModal, BookingRequestModal, bookings, updateStatus, onBookingSaved, onOpenBooking }) {
+export default function FacebookAutomations({ csrfToken, onLogout, ManualBookingModal, BookingRequestModal, bookings, updateStatus, updateDates, onBookingSaved, onOpenBooking }) {
   const [section, setSection] = useState('message');
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
@@ -283,6 +284,6 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       facebookLeadId={Number(lead.id)} initialGuest={lead}
       initialMessage={`Facebook lead #${lead.id}${lead.external_id ? ` (${lead.external_id})` : ''}: ${lead.body}`.slice(0, 650)}
       onSaved={result => { setLead(null); setNotice(`Lead converted to booking ${result.reference}.`); setRefresh(value => value + 1); onBookingSaved(); }} />}
-    <BookingRequestModal booking={bookings.find(item => Number(item.id) === Number(selectedBookingId)) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
+    <BookingRequestModal booking={bookings.find(item => Number(item.id) === Number(selectedBookingId)) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} updateDates={updateDates} />
   </section>;
 }

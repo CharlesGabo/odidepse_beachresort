@@ -9,6 +9,15 @@ require_once dirname(__DIR__) . '/includes/resort.php';
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
 $data = readJsonBody();
+$chatToken = $data['chat_draft_token'] ?? null;
+if ($chatToken !== null) {
+    require_once dirname(__DIR__) . '/includes/website-chat.php';
+    websiteChatStart();
+    websiteChatCsrf();
+    if ($manualBooking || !websiteChatDraftValid($_SESSION['chat'], $chatToken)) {
+        jsonResponse(['status' => 'error', 'message' => 'This chat draft has expired or was already submitted. Reopen it from chat.'], 409);
+    }
+}
 $facebookLeadId = $manualBooking ? ($data['facebook_lead_id'] ?? null) : null;
 if ($facebookLeadId !== null && (!is_int($facebookLeadId) || $facebookLeadId < 1)) {
     jsonResponse(['status' => 'error', 'message' => 'Choose a valid Facebook lead.'], 422);
@@ -76,6 +85,20 @@ try {
         $stayRecord = $query->fetch();
         if (!$stayRecord) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This stay is no longer listed. Refresh and choose another stay.'], 422); }
     }
+    if ($chatToken !== null) {
+        if (!$stayRecord || websiteChatPhone($phone) === '') {
+            $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Choose an accommodation and enter a valid Philippine mobile number.'], 422);
+        }
+        $query = $db->prepare('SELECT details, availability FROM resort_stays WHERE id = ?');
+        $query->execute([$stayRecord['id']]); $current = $query->fetch();
+        $details = json_decode($current['details'], true, 32, JSON_THROW_ON_ERROR);
+        if ($current['availability'] === 'unavailable' || $guests < ($details['min_guests'] ?? 1) || $guests > ($details['max_guests'] ?? 100)
+            || facebookConversationAvailableUnits($db, (int) $stayRecord['id'], $stayRecord['name'], $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), (int) ($details['room_count'] ?? 0), ($details['style'] ?? '') === 'exclusive') < 1) {
+            $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This room no longer fits your dates or group. Please review your selection.'], 409);
+        }
+        $message = "Website chat request.\n" . $message;
+        if (mb_strlen($message) > 1000) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Please shorten the additional information.'], 422); }
+    }
     $serviceRecord = null;
     if ($serviceId !== null) {
         $query = $db->prepare('SELECT id, name FROM resort_services WHERE enabled = 1 AND archived = 0 AND id = ?');
@@ -84,6 +107,8 @@ try {
     }
     if (!$manualBooking) $db->prepare('INSERT INTO request_attempts (identifier_hash, attempted_at) VALUES (?, NOW())')->execute([$identifier]);
     $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
+    // A stable unique reference prevents duplicate insertion even if PHP stops after commit but before saving the session.
+    if ($chatToken !== null) $reference = 'OD-W-' . strtoupper(substr(hash('sha256', $chatToken), 0, 18));
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayRecord['name'] ?? null, $message ?: null, $stayRecord['id'] ?? null, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
     if ($facebookLeadId !== null) {
@@ -91,7 +116,15 @@ try {
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);
         facebookAudit($db, (int) $_SESSION['admin_user']['id'], 'lead_converted', 'event', $facebookLeadId);
     }
+    $chatSuccessReply = $chatToken !== null ? facebookGuidedReply(facebookSettings($db)['rules'], 'pending_created', ['reference' => $reference]) . ' This request is pending staff approval.' : '';
     $db->commit();
+    if ($chatToken !== null) {
+        unset($_SESSION['chat']['draft']);
+        $_SESSION['chat']['state'] = 'completed';
+        $_SESSION['chat']['reference'] = $reference;
+        websiteChatRecord($_SESSION['chat'], 'assistant', $chatSuccessReply);
+        session_write_close();
+    }
     jsonResponse(['status' => 'success', 'reference' => $reference], 201);
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();

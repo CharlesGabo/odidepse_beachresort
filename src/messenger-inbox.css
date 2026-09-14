@@ -30,7 +30,11 @@
 .fb-workspace .messenger-icon-button { display:grid; place-items:center; flex:0 0 40px; width:40px; height:40px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--lagoon); }
 .fb-workspace .messenger-icon-button:hover { background:#eef2e9; }
 .fb-workspace .messenger-back { display:none; }
-.messenger-messages { flex:1; min-height:0; overflow-y:auto; padding:22px; overscroll-behavior:contain; }
+.messenger-message-stage { position:relative; display:flex; flex:1; min-height:0; }
+.messenger-messages { flex:1; min-width:0; min-height:0; overflow-y:auto; padding:22px; overscroll-behavior:contain; }
+.fb-workspace .scroll-to-top.messenger-scroll-down { position:absolute; right:auto; bottom:14px; left:50%; z-index:5; width:38px; height:38px; cursor:pointer; transform:translate(-50%,0) scale(1); }
+.fb-workspace .scroll-to-top.messenger-scroll-down svg { width:17px; height:17px; transform:none; }
+@media(hover:hover) { .fb-workspace .scroll-to-top.messenger-scroll-down:hover { transform:translate(-50%,-3px); } }
 .messenger-history-note { margin:0 auto 24px; max-width:360px; text-align:center; color:var(--muted); font-size:11px; line-height:1.7; }
 .messenger-message { margin:0 0 18px; }
 .messenger-message--outgoing .messenger-bubble-row { justify-content:flex-end; }
@@ -85,6 +89,7 @@
   .fb-workspace .messenger-back { display:grid; }
   .messenger-thread-header { gap:8px; padding:12px 10px; }
   .messenger-messages { padding:14px 12px; }
+  .fb-workspace .scroll-to-top.messenger-scroll-down { right:auto; bottom:10px; left:50%; transform:translate(-50%,0) scale(1); }
   .messenger-composer { padding:12px 10px 8px; }
   .messenger-compose-icon { display:none; }
   .fb-workspace .messenger-bubble { max-width:88%; }

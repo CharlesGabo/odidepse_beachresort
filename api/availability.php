@@ -68,8 +68,8 @@ try {
         }
         $peakOccupied = max($peakOccupied, $occupied);
         $peakPending = max($peakPending, $pending);
-        $minimumAvailable = min($minimumAvailable, max(0, $capacity - $occupied - $pending));
-        $days[$key] = max(0, $capacity - $occupied - $pending);
+        $minimumAvailable = min($minimumAvailable, max(0, $capacity - $occupied));
+        $days[$key] = max(0, $capacity - $occupied);
     }
 
     jsonResponse([

@@ -57,6 +57,12 @@ try {
     checkFacebook(facebookConversationCommand('Can I talk to an admin please?') === 'staff', 'Natural staff request');
     $identity = facebookConversationIdentityContact('Name: Maria Santos, phone no: 0917 123 4567');
     checkFacebook($identity['guest_name'] === 'Maria Santos' && $identity['phone'] !== '', 'Combined loose identity and contact parsing');
+    checkFacebook(facebookConversationDetails('good afternoon po, maga-ask lang po how much po rate 2 pax for 3 days and 2 nights?')['guest_name'] === '', 'Greeting is not inferred as a customer name');
+    checkFacebook(facebookConversationIdentityContact('good afternoon po, charles@gmail.com')['guest_name'] === '', 'Greeting beside contact information is not inferred as a name');
+    checkFacebook(facebookConversationDetails("Name: Good Afternoon\nContact: charles@gmail.com")['guest_name'] === '', 'Explicit greeting text is not accepted as a name');
+    checkFacebook(facebookConversationDetails('Kate Beltrano po name ko')['guest_name'] === 'Kate Beltrano', 'Tagalog name suffix is removed from the customer name');
+    checkFacebook(facebookConversationDetails('Ako po si Kate Beltrano')['guest_name'] === 'Kate Beltrano', 'Tagalog name introduction is removed from the customer name');
+    checkFacebook(facebookConversationNameCandidate('Kate Beltrano po ko') === 'Kate Beltrano', 'Previously saved conversational name suffix is normalized');
     checkFacebook(facebookRetryDecision(1, 429, false, false, 300)['delay'] === 300, 'Retry-After honored');
     checkFacebook(facebookRetryDecision(2, 503, false)['delay'] === 120, 'Exponential backoff');
     checkFacebook(facebookRetryDecision(5, 503, true)['status'] === 'failed', 'Retry limit');
@@ -65,6 +71,30 @@ try {
     if (!in_array(requireEnvironment('DB_HOST'), ['127.0.0.1', 'localhost'], true) || requireEnvironment('DB_NAME') !== 'odidepse_db') throw new RuntimeException('Local database required.');
     $db = database();
     $db->beginTransaction();
+    $availabilityStart = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+420 days');
+    $availabilityEnd = $availabilityStart->modify('+3 days');
+    $eligibleRows = [];
+    foreach ($db->query("SELECT id,name,details FROM resort_stays WHERE enabled=1 AND archived=0 AND availability <> 'unavailable' ORDER BY sort_order,id")->fetchAll() as $stayRow) {
+        $stayDetails = json_decode($stayRow['details'], true, 32, JSON_THROW_ON_ERROR);
+        if (5 >= (int) ($stayDetails['min_guests'] ?? 1) && 5 <= (int) ($stayDetails['max_guests'] ?? 0) && ($stayDetails['style'] ?? 'standard') === 'standard') {
+            $eligibleRows[] = $stayRow + ['max_guests' => (int) $stayDetails['max_guests'], 'room_count' => (int) ($stayDetails['room_count'] ?? 1)];
+        }
+    }
+    usort($eligibleRows, static fn(array $a, array $b): int => [$a['max_guests'], $a['id']] <=> [$b['max_guests'], $b['id']]);
+    $bestFit = $eligibleRows[0] ?? null;
+    checkFacebook($bestFit !== null, 'A best-fit accommodation exists for availability testing');
+    $blockingInsert = $db->prepare("INSERT INTO bookings (reference_code,guest_name,email,phone,check_in,check_out,guests,stay_type,stay_id,message,status) VALUES (?,?,?,?,?,?,?,?,?,?,'confirmed')");
+    for ($room = 1; $room <= max(1, $bestFit['room_count']); $room++) {
+        $blockingInsert->execute(['FB-BLOCK-' . bin2hex(random_bytes(4)), 'Availability verification', 'verify@example.test', '', $availabilityStart->format('Y-m-d'), $availabilityEnd->format('Y-m-d'), 5, $bestFit['name'], $bestFit['id'], 'Availability test']);
+    }
+    $alternatives = facebookConversationUnavailableAlternatives($db, 5, $availabilityStart->format('Y-m-d'), $availabilityEnd->format('Y-m-d'));
+    checkFacebook($alternatives !== null && (int) $alternatives['unavailable']['id'] === (int) $bestFit['id'], 'Confirmed bookings make the best-fit accommodation unavailable');
+    checkFacebook(($alternatives['options'][0]['alternative_type'] ?? '') === 'custom_dates', 'Unavailable response first accepts customer-proposed replacement dates');
+    checkFacebook(count(array_filter($alternatives['options'], static fn(array $option): bool => $option['alternative_type'] === 'dates')) >= 1, 'Unavailable best-fit room offers nearby dates');
+    checkFacebook(count(array_filter($alternatives['options'], static fn(array $option): bool => $option['alternative_type'] === 'upgrade' && $option['max_guests'] >= 5)) >= 1, 'Unavailable best-fit room offers a capacity-safe upgrade');
+    $unavailableText = facebookConversationUnavailableText($alternatives, $availabilityStart->format('Y-m-d'), $availabilityEnd->format('Y-m-d'));
+    checkFacebook(str_contains($unavailableText, 'Hi! Thank you for choosing to stay with us. 😊') && str_contains($unavailableText, 'simply send your preferred new dates'), 'Unavailable response uses the requested friendly format and accepts natural date replies');
+    checkFacebook(array_filter(facebookConversationStayOptions($db, 8, $availabilityStart->format('Y-m-d'), $availabilityEnd->format('Y-m-d')), static fn(array $option): bool => $option['max_guests'] < 8) === [], 'Room suggestions never fall below the requested pax');
     $db->exec("INSERT INTO facebook_events (source,kind,guest_name,body,category) VALUES ('manual','message','Automation verification','Is a room available?','booking')");
     $id = (int) $db->lastInsertId();
     $event = ['id' => $id, 'kind' => 'message', 'category' => 'booking', 'status' => 'new'];
@@ -120,6 +150,16 @@ try {
     $query = $db->prepare('SELECT payload, status, error_code FROM facebook_jobs WHERE event_id = ? ORDER BY id'); $query->execute([$photoEventId]);
     $photoJobs = $query->fetchAll();
     checkFacebook(count($photoJobs) === 4 && str_contains($photoJobs[1]['payload'], 'room_photo') && $photoJobs[1]['status'] === 'pending' && $photoJobs[2]['status'] === 'blocked' && $photoJobs[2]['error_code'] === 'awaiting_previous_photo' && str_contains($photoJobs[3]['payload'], 'room_photo_caption') && str_contains($photoJobs[3]['payload'], 'suggested 8-guest room for your group of 8 guests') && str_contains($photoJobs[3]['payload'], 'Reply CONFIRM to submit') && str_contains($photoJobs[3]['payload'], 'Reply BACK to edit or CANCEL to stop') && !str_contains($photoJobs[3]['payload'], facebookAutomaticReplyNotice()) && $photoJobs[3]['status'] === 'blocked', 'Native room photos are ordered before a clean dependent contextual caption with confirmation controls');
+
+    $restartSender = 'restart-test-' . bin2hex(random_bytes(4));
+    $db->prepare("INSERT INTO facebook_conversations (page_id,sender_id,state,data_json) VALUES ('conversation-page',?,'awaiting_booking_details','{}')")->execute([$restartSender]);
+    $restartEvent = $db->prepare("INSERT INTO facebook_events (source,page_id,sender_id,kind,guest_name,body,last_customer_message_at,category) VALUES ('facebook','conversation-page',?,'message','Messenger guest','RESTART',CURRENT_TIMESTAMP,'general')");
+    $restartEvent->execute([$restartSender]);
+    $restartReply = facebookConversationReply($db, ['id' => (int) $db->lastInsertId(), 'page_id' => 'conversation-page', 'sender_id' => $restartSender, 'guest_name' => 'Messenger guest', 'body' => 'RESTART', 'category' => 'general'], facebookDefaultRules());
+    checkFacebook($restartReply === facebookDefaultRules()['templates']['general'], 'Restart resets the flow and sends the general response');
+    $restartState = $db->prepare('SELECT state FROM facebook_conversations WHERE page_id = ? AND sender_id = ?');
+    $restartState->execute(['conversation-page', $restartSender]);
+    checkFacebook($restartState->fetchColumn() === 'idle', 'Restart returns the conversation to a fresh inquiry state');
 
     $sender = 'conversation-test-' . bin2hex(random_bytes(4));
     $page = 'conversation-page';

@@ -34,6 +34,17 @@ function webhookTimestamp(mixed $milliseconds): string
 
 function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
 {
+    if (($event['kind'] ?? '') === 'message' && is_string($event['page_id'] ?? null) && is_string($event['sender_id'] ?? null) && $event['sender_id'] !== '') {
+        $knownProfile = $db->prepare('SELECT data_json FROM facebook_conversations WHERE page_id = ? AND sender_id = ? LIMIT 1');
+        $knownProfile->execute([$event['page_id'], $event['sender_id']]);
+        $knownData = $knownProfile->fetchColumn();
+        if (is_string($knownData)) {
+            try { $knownData = json_decode($knownData, true, 16, JSON_THROW_ON_ERROR); }
+            catch (JsonException) { $knownData = []; }
+            $knownName = is_array($knownData) ? facebookProfileName(['name' => $knownData['facebook_profile_name'] ?? '']) : null;
+            if ($knownName !== null) $event['guest_name'] = $knownName;
+        }
+    }
     $query = $db->prepare("INSERT IGNORE INTO facebook_events (source, external_id, page_id, sender_id, kind, guest_name, email, phone, body, attachment_type, attachment_url, attachments_json, last_customer_message_at, category, needs_attention, received_at) VALUES ('facebook', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $query->execute([
         $event['external_id'], $event['page_id'], $event['sender_id'], $event['kind'], $event['guest_name'],

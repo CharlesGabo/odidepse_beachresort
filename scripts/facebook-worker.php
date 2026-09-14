@@ -24,7 +24,7 @@ function workerClaimReply(PDO $db): ?array
 {
     $db->beginTransaction();
     try {
-        $query = $db->query("SELECT j.*, e.source, e.page_id, e.sender_id, e.guest_name, e.category, e.status AS event_status,
+        $query = $db->query("SELECT j.*, e.source, e.page_id, e.sender_id, e.guest_name, e.body, e.category, e.status AS event_status,
                 TIMESTAMPDIFF(SECOND, e.last_customer_message_at, CURRENT_TIMESTAMP) AS message_age_seconds
             FROM facebook_jobs j
             INNER JOIN facebook_events e ON e.id = j.event_id
@@ -149,9 +149,56 @@ try {
             }
             $db->beginTransaction();
             if ($profile['name'] !== null) {
-                $query = $db->prepare("UPDATE facebook_events SET guest_name = ?, revision = revision + 1 WHERE id = ? AND guest_name = 'Messenger guest'");
-                $query->execute([$profile['name'], (int) $job['event_id']]);
-                if ($query->rowCount()) facebookAudit($db, null, 'sender_name_resolved', 'event', (int) $job['event_id']);
+                $query = $db->prepare("UPDATE facebook_events SET guest_name = ?, revision = revision + 1 WHERE page_id = ? AND sender_id = ? AND kind = 'message' AND guest_name <> ?");
+                $query->execute([$profile['name'], $job['page_id'], $job['sender_id'], $profile['name']]);
+                $conversationQuery = $db->prepare('SELECT id, data_json, booking_id FROM facebook_conversations WHERE page_id = ? AND sender_id = ? FOR UPDATE');
+                $conversationQuery->execute([$job['page_id'], $job['sender_id']]);
+                $conversation = $conversationQuery->fetch();
+                if ($conversation) {
+                    try { $conversationData = json_decode((string) $conversation['data_json'], true, 32, JSON_THROW_ON_ERROR); }
+                    catch (JsonException) { $conversationData = []; }
+                    if (!is_array($conversationData)) $conversationData = [];
+                    $previousName = is_string($conversationData['guest_name'] ?? null) ? trim($conversationData['guest_name']) : '';
+                    $customerProvidedName = ($conversationData['guest_name_source'] ?? '') === 'customer' && $previousName !== '';
+                    if (!$customerProvidedName) {
+                        $conversationData['guest_name'] = $profile['name'];
+                        $conversationData['guest_name_source'] = 'facebook_profile';
+                    }
+                    $conversationData['facebook_profile_name'] = $profile['name'];
+                    $encodedData = json_encode($conversationData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+                    $db->prepare('UPDATE facebook_conversations SET data_json = ?, revision = revision + 1 WHERE id = ?')->execute([$encodedData, $conversation['id']]);
+                    if ($conversation['booking_id'] !== null) {
+                        $bookingName = $customerProvidedName ? $previousName : $profile['name'];
+                        $db->prepare("UPDATE bookings SET guest_name = ? WHERE id = ? AND status = 'pending'")->execute([$bookingName, $conversation['booking_id']]);
+                    }
+                }
+                $pendingReply = $db->prepare("SELECT id, payload FROM facebook_jobs WHERE event_id = ? AND kind = 'reply' AND dedupe_key = ? AND status IN ('pending','retry_wait') LIMIT 1 FOR UPDATE");
+                $pendingReply->execute([(int) $job['event_id'], 'reply:event:' . (int) $job['event_id']]);
+                $pendingReplyJob = $pendingReply->fetch();
+                if ($pendingReplyJob && str_contains((string) $pendingReplyJob['payload'], 'Name: Needed')) {
+                    $pendingReplyId = (int) $pendingReplyJob['id'];
+                    $rules = facebookSettings($db)['rules'];
+                    $reply = facebookConversationReply($db, [
+                        'id' => (int) $job['event_id'],
+                        'page_id' => $job['page_id'],
+                        'sender_id' => $job['sender_id'],
+                        'guest_name' => $profile['name'],
+                        'body' => $job['body'],
+                        'category' => $job['category'],
+                    ], $rules);
+                    if ($reply === '') {
+                        $db->prepare("UPDATE facebook_jobs SET status = 'cancelled', error_code = 'reply_no_longer_needed' WHERE id = ?")->execute([$pendingReplyId]);
+                    } else {
+                        $includeAutomaticNotice = trim($reply) !== trim(facebookConversationPrompt('handoff', $rules));
+                        $payload = $includeAutomaticNotice
+                            ? trim($reply) . (str_contains($reply, facebookAutomaticReplyNotice()) ? '' : "\n\n" . facebookAutomaticReplyNotice())
+                            : json_encode(['__facebook_job_type' => 'handoff_reply', 'text' => trim($reply)], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                        $db->prepare("UPDATE facebook_jobs SET payload = ?, status = 'pending', attempts = 0, next_attempt_at = NULL, error_code = NULL WHERE id = ?")->execute([$payload, $pendingReplyId]);
+                        $photoCount = facebookQueueNativeRoomPhotos($db, (int) $job['event_id'], (string) $job['page_id'], (string) $job['sender_id']);
+                        if ($photoCount > 0) facebookAudit($db, null, 'suggested_room_photos_queued', 'event', (int) $job['event_id']);
+                    }
+                }
+                facebookAudit($db, null, 'sender_name_resolved', 'event', (int) $job['event_id']);
             }
             $db->prepare("UPDATE facebook_jobs SET status = 'succeeded', error_code = NULL WHERE id = ? AND status = 'processing'")->execute([(int) $job['id']]);
             $db->commit();

@@ -1,0 +1,64 @@
+<?php
+declare(strict_types=1);
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+require_once dirname(__DIR__) . '/includes/website-chat.php';
+function chatCheck(bool $condition, string $label): void { if (!$condition) throw new RuntimeException($label); }
+try {
+    $db = database(); $db->beginTransaction();
+    $before = (int) $db->query('SELECT COUNT(*) FROM bookings')->fetchColumn();
+    $rules = facebookSettings($db)['rules'];
+    $chat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'test'];
+    $rules['templates']['location'] = 'Shared location test';
+    chatCheck(websiteChatReply($db, $chat, 'Location', $rules)['reply'] === 'Shared location test', 'Shared category template');
+    $rules['templates']['general'] = 'Shared fallback';
+    chatCheck(websiteChatReply($db, $chat, 'Hello', $rules, static fn() => null)['reply'] === 'Shared fallback', 'AI failure fallback');
+    chatCheck(websiteChatReply($db, $chat, 'Hello', $rules, static fn() => 'Hello po')['source'] === 'ai', 'AI routing');
+    $start = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+500 days');
+    $end = $start->modify('+2 days');
+    websiteChatReply($db, $chat, 'Rates', $rules);
+    chatCheck($chat['state'] === 'rates', 'Partial rate state');
+    websiteChatReply($db, $chat, $start->format('Y-m-d') . ' to ' . $end->format('Y-m-d') . ', 5 guests', $rules);
+    chatCheck($chat['state'] === 'rates' && !empty($chat['data']['options']), 'Rate options');
+    $rules['guided_replies']['website_contact'] = 'WEBSITE CONTACT RULE';
+    $answer = websiteChatReply($db, $chat, 'Booking', $rules);
+    chatCheck(str_contains($answer['reply'], 'WEBSITE CONTACT RULE'), 'Editable website contact');
+    $answer = websiteChatReply($db, $chat, 'Name: Maria Santos, email: maria@example.test, phone: 09171234567, check in 2:15pm check out 11:30am', $rules);
+    chatCheck($chat['state'] === 'review', 'Complete booking review: ' . json_encode($chat['data']));
+    $answer = websiteChatReply($db, $chat, 'CONFIRM', $rules);
+    chatCheck(($answer['action'] ?? '') === 'open_booking' && $answer['draft']['email'] === 'maria@example.test' && $answer['draft']['phone'] === '+639171234567', 'Complete modal draft');
+    chatCheck($answer['draft']['arrivalTime'] === '14:15' && $answer['draft']['departureTime'] === '11:30', 'Exact time prefill');
+    $again = websiteChatReply($db, $chat, 'CONFIRM', $rules);
+    chatCheck($again['draft']['token'] === $answer['draft']['token'], 'Repeated confirmation reuses draft');
+    chatCheck(websiteChatDraftValid($chat, $answer['draft']['token']), 'Valid session-bound draft');
+    chatCheck(!websiteChatDraftValid($chat, 'different'), 'Wrong draft token');
+    $expired = $chat; $expired['draft']['expires'] = time() - 1;
+    chatCheck(!websiteChatDraftValid($expired, $answer['draft']['token']), 'Expired draft token');
+    $used = $chat; unset($used['draft']);
+    chatCheck(!websiteChatDraftValid($used, $answer['draft']['token']), 'Consumed draft token');
+    chatCheck((int) $db->query('SELECT COUNT(*) FROM bookings')->fetchColumn() === $before, 'Chat confirmation never inserts booking');
+    websiteChatReply($db, $chat, 'ADMIN', $rules);
+    chatCheck($chat['state'] === 'handoff' && !isset($chat['draft']), 'Staff handoff invalidates draft');
+    $redacted = websiteChatRedact('maria@example.test +63 917 123 4567 OD-W-ABC123');
+    chatCheck(!str_contains($redacted, 'example.test') && !str_contains($redacted, '917') && !str_contains($redacted, 'ABC123'), 'PII redaction');
+    $payload = websiteChatGeminiPayload(resortSnapshot($db), 'Hello');
+    chatCheck(!str_contains(json_encode($payload), 'maria@example.test'), 'Booking identity excluded from AI');
+    chatCheck(websiteChatGeminiText(['promptFeedback' => ['blockReason' => 'SAFETY']]) === null, 'Safety fallback');
+    chatCheck(websiteChatGeminiText(['candidates' => [['finishReason' => 'MAX_TOKENS']]]) === null, 'Truncated response fallback');
+    chatCheck(websiteChatGeminiText(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => 'Welcome']]]]]]) === 'Welcome', 'Valid provider response');
+    $stayId = $answer['draft']['stayId'];
+    $stayQuery = $db->prepare('SELECT name, details FROM resort_stays WHERE id = ?'); $stayQuery->execute([$stayId]); $stay = $stayQuery->fetch();
+    $stayDetails = json_decode($stay['details'], true);
+    $available = static fn(): int => facebookConversationAvailableUnits($db, $stayId, $stay['name'], $start->format('Y-m-d'), $end->format('Y-m-d'), (int) $stayDetails['room_count'], ($stayDetails['style'] ?? '') === 'exclusive');
+    $initialUnits = $available();
+    $insert = $db->prepare("INSERT INTO bookings (reference_code,guest_name,email,phone,check_in,check_out,guests,stay_type,stay_id,status) VALUES (?, 'Chat test', 'chat@example.test', '', ?, ?, 5, ?, ?, 'pending')");
+    $insert->execute(['CHAT-TEST-' . bin2hex(random_bytes(4)), $start->format('Y-m-d'), $end->format('Y-m-d'), $stay['name'], $stayId]);
+    $id = (int) $db->lastInsertId();
+    chatCheck($available() === $initialUnits, 'Pending request does not block');
+    $db->prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?")->execute([$id]);
+    chatCheck($available() === max(0, $initialUnits - 1), 'Confirmed booking blocks capacity');
+    $db->rollBack();
+    echo "Passed website chat routing, shared replies, rate/booking states, modal draft, repeat confirmation, handoff and AI boundary tests. No bookings created.\n";
+} catch (Throwable $error) {
+    if (isset($db) && $db->inTransaction()) $db->rollBack();
+    fwrite(STDERR, 'Website chat test failed: ' . $error->getMessage() . "\n"); exit(1);
+}

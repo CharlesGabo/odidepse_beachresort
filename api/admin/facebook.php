@@ -20,7 +20,7 @@ try {
         $total = 0;
         if (in_array($section, ['message', 'comment', 'lead', 'alerts'], true)) {
             $where = $section === 'alerts'
-                ? "e.source = 'facebook' AND e.booking_id IS NOT NULL AND e.id = (SELECT MAX(latest_event.id) FROM facebook_events latest_event WHERE latest_event.source = 'facebook' AND latest_event.booking_id = e.booking_id)"
+                ? "e.source = 'facebook' AND e.booking_id IS NOT NULL AND EXISTS (SELECT 1 FROM bookings request_booking WHERE request_booking.id = e.booking_id AND request_booking.status = 'pending') AND e.id = (SELECT MAX(latest_event.id) FROM facebook_events latest_event WHERE latest_event.source = 'facebook' AND latest_event.booking_id = e.booking_id)"
                 : 'e.kind = ?';
             $params = $section === 'alerts' ? [] : [$section];
             $query = $db->prepare('SELECT e.*, UNIX_TIMESTAMP(e.received_at) AS received_epoch,
@@ -103,8 +103,20 @@ try {
             $records = $db->query('SELECT * FROM ' . $table . ' ORDER BY id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset)->fetchAll();
             $total = (int) $db->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn();
         }
-        $counts = $db->query("SELECT SUM(kind = 'message' AND status <> 'resolved') AS inquiries, SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
-        $counts['alerts'] = (int) $db->query("SELECT COUNT(DISTINCT booking_id) FROM facebook_events WHERE source = 'facebook' AND booking_id IS NOT NULL")->fetchColumn();
+        $counts = $db->query("SELECT SUM(kind = 'lead' AND booking_id IS NULL) AS leads FROM facebook_events")->fetch();
+        // Match the Messenger inbox grouping: one open inquiry per active Page/sender conversation,
+        // while manually recorded inquiries remain independent records.
+        $counts['inquiries'] = (int) $db->query("SELECT COUNT(*) FROM facebook_events e
+            WHERE e.kind = 'message' AND e.status <> 'resolved'
+            AND (
+                e.source <> 'facebook' OR e.page_id IS NULL OR e.sender_id IS NULL
+                OR e.id = (
+                    SELECT MAX(latest.id) FROM facebook_events latest
+                    WHERE latest.kind = 'message' AND latest.source = 'facebook'
+                    AND latest.page_id = e.page_id AND latest.sender_id = e.sender_id
+                )
+            )")->fetchColumn();
+        $counts['alerts'] = (int) $db->query("SELECT COUNT(DISTINCT e.booking_id) FROM facebook_events e WHERE e.source = 'facebook' AND e.booking_id IS NOT NULL AND EXISTS (SELECT 1 FROM bookings request_booking WHERE request_booking.id = e.booking_id AND request_booking.status = 'pending')")->fetchColumn();
         $counts['drafts'] = (int) $db->query("SELECT COUNT(*) FROM facebook_drafts WHERE status = 'pending'")->fetchColumn();
         $configured = true;
         foreach (['META_APP_ID', 'META_APP_SECRET', 'META_PAGE_ID', 'META_PAGE_ACCESS_TOKEN', 'META_WEBHOOK_VERIFY_TOKEN', 'META_GRAPH_API_VERSION'] as $name) {
@@ -164,6 +176,7 @@ try {
         foreach (facebookCategories() as $category) $validated['templates'][$category] = facebookText($rules['templates'], $category, 1000, false);
         if (!is_array($rules['guided_replies'] ?? null)) throw new FacebookWorkflowError('Guided booking replies are required.');
         foreach (facebookGuidedReplyKeys() as $key) $validated['guided_replies'][$key] = facebookText($rules['guided_replies'], $key, 1000);
+        $validated['guided_replies']['website_contact'] = facebookText(['website_contact' => $rules['guided_replies']['website_contact'] ?? facebookSettings($db)['rules']['guided_replies']['website_contact']], 'website_contact', 1000);
         if (!str_contains($validated['guided_replies']['confirm_dates'], '{dates}')) throw new FacebookWorkflowError('The date confirmation reply must include {dates}.');
         if (!str_contains($validated['guided_replies']['pending_created'], '{reference}')) throw new FacebookWorkflowError('The pending booking reply must include {reference}.');
         if (!str_contains($validated['guided_replies']['pending_updated'], '{reference}')) throw new FacebookWorkflowError('The pending booking update reply must include {reference}.');

@@ -1,0 +1,23 @@
+# Website Chat
+
+The public floating assistant uses the current `facebook_settings.rules_json` on every message. Keywords, category templates, and guided replies are shared with Messenger. The website contact prompt is edited in Facebook Automations → Reply rules. Messenger delivery switches do not disable website chat. Blank website category replies use General, then a fixed contact reply.
+
+The website reuses Facebook's parsing, command, room suggestion, availability, checklist, and template functions. Its session orchestration is separate because its final action opens the existing booking form instead of creating a Messenger booking. Facebook wrappers and existing transport behavior remain intact. CONFIRM opens a form containing both dates, exact times, room, guests, full name, email, Philippine mobile number, activities and notes. Optional fields default to none. Visitors can write `Activities: ATV` and `Notes: Family celebration`. They submit the form themselves; only then is a pending request saved. Current catalog and availability are checked again on submission. The booking reference is deterministically derived from the random draft token, backed by the existing unique reference constraint, to prevent duplicates even after a process crash.
+
+Only confirmed and checked-in bookings reduce availability in the assistant and public calendar. Pending requests are not room holds. Physical room assignment and staff approval remain the existing admin workflow. Published saved prices are used by the assistant; the existing form estimate remains explicitly labelled as preview/mock pricing.
+
+Chat uses a separate HttpOnly, SameSite=Strict session cookie with no persistent lifetime. Session access expires after two hours without activity. At most 30 messages are kept in PHP session storage; no transcript table or browser storage is added. PHP's session garbage collector handles expired storage. Reset clears conversation data and invalidates outstanding drafts. Drafts expire after 30 minutes. Chat mutation and chat-origin form submissions require a session CSRF header. Chat submissions are serialized by the PHP session lock, and an IP-scoped database lock protects message rate counting across sessions (6/minute, 30/hour). The existing 5/hour public booking limit also applies. Reverse proxy deployments may aggregate IPs under REMOTE_ADDR; do not trust arbitrary forwarded-IP headers to bypass this limit.
+
+Handoff offers existing email, Facebook and booking-form contacts. Website transcripts are not in the admin inbox. No staff live-chat delivery is implied; customized shared handoff text should reflect the resort's actual support process. Website requests appear in normal booking administration.
+
+## Gemini configuration
+
+Set `GEMINI_API_KEY` in your untracked local `.env` and separately in the production environment. `GEMINI_MODEL` defaults to `gemini-3.8-flash`; select a supported model available to your Google project. Do not put these values in `VITE_*` configuration. A missing key keeps the rule-based assistant usable.
+
+PHP calls the fixed Google HTTPS generateContent endpoint using cURL with TLS verification, a 3-second connection timeout, 10-second total timeout, and bounded request/output context. Enable PHP cURL and outbound HTTPS on Z.com. No browser dependency, worker or public tunnel is required. Deploy the compiled frontend plus updated API/includes files together. No schema migration is needed.
+
+Only unmatched general questions are eligible for AI. Active booking flows and recognized categories use rules. Gemini receives selected public database facts and a redacted current question, never booking transcripts, contact records, booking references or arbitrary SQL tools. Questions containing detected contact information or explicit identity introductions bypass AI. No earlier chat history is sent to the provider. Provider failures, blocked/empty/truncated responses and missing credentials fall back to General. Responses use plain text. Review Google API data-use terms for the account tier before enabling real visitor use; user-entered free text may contain information that automated detection cannot identify. Avoid entering sensitive personal details in general questions.
+
+## Verification
+
+Run `C:\xampp\php\php.exe scripts/test-website-chat.php` and the existing `scripts/test-facebook.php`. Tests use the local application account with rollback and do not call Gemini. Run PHP syntax checks and `npm run build`. Manually check keyboard/mobile layout and the final booking modal submission before release. Gemini integration requires a separately configured key for an actual provider smoke test.

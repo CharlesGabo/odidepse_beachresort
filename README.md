@@ -65,3 +65,7 @@ Deploy the contents of `dist/` with `api/`, `includes/`, and production Apache/e
 - `SKILL.md` — optional visual design language
 
 Complete `TEMPLATE_CHECKLIST.md` before using a copy for another project. Never copy `.git`, `.env`, `node_modules`, `dist`, private uploads, logs, or database backups.
+
+# Website booking assistant
+
+The homepage chat shares Facebook Automations reply rules and opens a prefilled booking form for visitor review. Configure optional server-side Gemini using [Website Chat setup](scripts/website-chat.md).

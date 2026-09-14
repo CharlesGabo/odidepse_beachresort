@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AdminApp from './AdminApp.jsx';
+import WebsiteChat from './WebsiteChat.jsx';
 import StayCapacityCard from './StayCapacityCard.jsx';
 import { stayPhotoSource } from './StayPhotos.jsx';
 import ResortGallery, { GuestStories } from './ResortGallery.jsx';
@@ -118,13 +119,17 @@ function CompactTimePicker({ label, value, onChange }) {
     <span>{label}</span>
     <div className="booking-time-picker" role="group" aria-label={label}>
       <select value={hour12} onChange={event => update(event.target.value)} aria-label={`${label} hour`}>{Array.from({ length: 12 }, (_, index) => String(index + 1)).map(hour => <option value={hour} key={hour}>{hour.padStart(2, '0')}</option>)}</select>
-      <select value={minute} onChange={event => update(hour12, event.target.value)} aria-label={`${label} minutes`}><option value="00">00</option><option value="30">30</option></select>
+      <select value={minute} onChange={event => update(hour12, event.target.value)} aria-label={`${label} minutes`}>{Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')).map(item => <option key={item} value={item}>{item}</option>)}</select>
       <select value={period} onChange={event => update(hour12, minute, event.target.value)} aria-label={`${label} AM or PM`}><option value="AM">AM</option><option value="PM">PM</option></select>
     </div>
   </div>;
 }
 
-function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved, initialGuest = null, facebookLeadId = null }) {
+function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved, initialGuest = null, facebookLeadId = null, chatDraft = null }) {
+  if (chatDraft) {
+    initialStay = chatDraft.stayId; initialDate = chatDraft.checkIn; initialMessage = chatDraft.message;
+    initialGuest = { guest_name: chatDraft.guestName, email: chatDraft.email, phone: chatDraft.phone };
+  }
   const { copy, stays, services, roomPhotos } = useResort();
   const dialogRef = useRef(null);
   const leadPhoneDigits = String(initialGuest?.phone || '').replace(/\D/g, '').replace(/^(?:63|0)(?=\d{10}$)/, '');
@@ -165,12 +170,12 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const dialog = dialogRef.current;
     if (open && dialog && !dialog.open) {
       setSelectedStay(String(initialStay));
-      setSelectedActivities(initialService ? [String(initialService)] : []);
+      setSelectedActivities(chatDraft ? chatDraft.activityIds.map(String) : initialService ? [String(initialService)] : []);
       setCheckInDate(initialDate);
-      setCheckOutDate('');
+      setCheckOutDate(chatDraft?.checkOut || '');
       setAvailability({ type: 'idle' });
-      setArrivalTime('14:00');
-      setDepartureTime('12:00');
+      setArrivalTime(chatDraft?.arrivalTime || '14:00');
+      setDepartureTime(chatDraft?.departureTime || '12:00');
       setCalendarMonth((initialDate || tomorrow).slice(0, 7));
       dialog.showModal();
     }
@@ -283,12 +288,13 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       return;
     }
     body.guests = Number(body.guests);
+    if (chatDraft) body.chat_draft_token = chatDraft.token;
     if (manual && facebookLeadId) body.facebook_lead_id = facebookLeadId;
     body.stay_id = selectedStay ? Number(selectedStay) : null;
     const soleActivityId = selectedActivities.length === 1 ? Number(selectedActivities[0]) : null;
     body.service_id = Number.isInteger(soleActivityId) ? soleActivityId : null;
     try {
-      const response = await fetch(manual ? '/api/admin/create-booking.php' : '/api/bookings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(manual ? { 'X-CSRF-Token': csrfToken } : {}) }, body: JSON.stringify(body) });
+      const response = await fetch(manual ? '/api/admin/create-booking.php' : '/api/bookings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(manual ? { 'X-CSRF-Token': csrfToken } : {}), ...(chatDraft ? { 'X-Chat-CSRF': chatDraft.csrf } : {}) }, body: JSON.stringify(body) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'We could not send your request.');
       form.reset();
@@ -385,7 +391,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" defaultValue={initialGuest?.guest_name || ''} autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
             <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" defaultValue={initialGuest?.email || ''} autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
             <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" defaultValue={/^\d{10}$/.test(leadPhoneDigits) ? leadPhoneDigits : ''} autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
-            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={selectedStayDetails?.guests ?? 2} /></div>
+            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={chatDraft?.guests ?? selectedStayDetails?.guests ?? 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>
         </section>
@@ -410,6 +416,8 @@ function ManualBookingModal(props) {
 }
 
 function PublicSite({ onHeroReady }) {
+  const [chatDraft, setChatDraft] = useState(null);
+  const [chatRefresh, setChatRefresh] = useState(0);
   const { copy, stays, highlights, amenityGroups, occasions, roomPhotos, services: experiences, revision } = useResort();
   const [menuOpen, setMenuOpen] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
@@ -457,7 +465,7 @@ function PublicSite({ onHeroReady }) {
     return () => removeEventListener('pointermove', move);
   }, []);
 
-  const openBooking = (stay = '', date = '', message = '', service = '') => { setSelectedService(service); setSelectedStay(stay); setSelectedDate(date); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
+  const openBooking = (stay = '', date = '', message = '', service = '') => { setChatDraft(null); setSelectedService(service); setSelectedStay(stay); setSelectedDate(date); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
   return <div className="site-shell" id="top">
@@ -526,7 +534,8 @@ function PublicSite({ onHeroReady }) {
     </main>
     <button type="button" className={`scroll-to-top${headerScrolled ? ' is-visible' : ''}`} aria-label="Scroll to top" aria-hidden={!headerScrolled} tabIndex={headerScrolled ? 0 : -1} onClick={scrollToTop}><Icon name="arrow" size={20} /></button>
     <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.instagram} aria-label="Instagram"><Icon name="instagram" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
-    <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
+    <WebsiteChat refresh={chatRefresh} onBook={() => openBooking()} onDraft={draft => { setChatDraft(draft); setBookingOpen(true); }} />
+    <BookingModal key={chatDraft?.token || 'regular'} chatDraft={chatDraft} open={bookingOpen} onClose={() => setBookingOpen(false)} onSaved={() => setChatRefresh(value => value + 1)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
   </div>;
 }
 

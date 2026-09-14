@@ -8,6 +8,7 @@ function ChatIcon({ name }) {
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7v1" /></>,
     chat: <path d="M21 11.5a9 9 0 0 1-9 9 10 10 0 0 1-4-.9L3 21l1.4-4.6A9 9 0 1 1 21 11.5Z M7 11h10M7 15h6" />,
     send: <path d="m3 3 19 9-19 9 4-9-4-9Zm4 9h15" />,
+    down: <path d="m6 9 6 6 6-6" />,
     smile: <><circle cx="12" cy="12" r="9" /><path d="M8 14s1 3 4 3 4-3 4-3M8 8v2M16 8v2" /></>,
   };
   return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
@@ -32,6 +33,7 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const [reply, setReply] = useState('');
   const [pendingReplies, setPendingReplies] = useState([]);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const scrollRef = useRef(null);
   const backRef = useRef(null);
   const listRef = useRef(null);
@@ -62,6 +64,7 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    setShowScrollDown(false);
   }, [selected?.key, lastId, messageCount]);
 
   useEffect(() => { setReply(''); }, [selected?.key]);
@@ -110,7 +113,11 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
           <Avatar name={selected.name} /><div className="messenger-person"><h3>{selected.name}</h3><small>{selected.latest.source === 'manual' ? 'Manually recorded inquiry' : 'Facebook Page conversation'}</small></div>
           <button className="messenger-icon-button" type="button" aria-label="Conversation details" aria-expanded={showDetails} aria-controls="messenger-details" onClick={() => setShowDetails(value => !value)}><ChatIcon name="info" /></button>
         </header>
-        <div className="messenger-messages" ref={scrollRef} tabIndex={0} aria-label="Recorded conversation messages">
+        <div className="messenger-message-stage">
+        <div className="messenger-messages" ref={scrollRef} tabIndex={0} aria-label="Recorded conversation messages" onScroll={event => {
+          const panel = event.currentTarget;
+          setShowScrollDown(panel.scrollHeight - panel.scrollTop - panel.clientHeight > 2);
+        }}>
           <div className="messenger-history-note">Recorded messages and sent automated replies. Replies made directly in Facebook and full history are not synced yet.</div>
           {selected.timeline.map((item, index) => {
             const previous = selected.timeline[index - 1];
@@ -126,6 +133,10 @@ export default function MessengerInbox({ records, total, renderDetails, connecte
               : <p className="messenger-bubble">{item.body}</p>}</div>
             {item.outgoing && <small className="messenger-sent-label">{item.deliveryStatus === 'sending' ? 'Sending' : item.deliveryStatus === 'queued' ? 'Queued' : 'Sent'} · {item.origin === 'staff' ? 'Staff reply' : item.origin === 'system' ? 'System notice' : 'Automated reply'}</small>}
           </article>})}
+        </div>
+        {showScrollDown && <button type="button" className="scroll-to-top is-visible messenger-scroll-down" aria-label="Scroll to newest message" title="Scroll to newest message" onClick={() => {
+          scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        }}><ChatIcon name="down" /></button>}
         </div>
         <form className="messenger-composer" onSubmit={async event => {
           event.preventDefault();

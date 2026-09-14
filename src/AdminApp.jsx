@@ -305,7 +305,7 @@ function StatCards({ stats }) {
   </section>;
 }
 
-function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId, onMoveBooking, canUndoRoomMove, onUndoRoomMove }) {
+function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId, onMoveBooking, canUndoRoomMove, onUndoRoomMove, onSaveRoomMoves }) {
   const [draggedId, setDraggedId] = useState(null);
   const [floatingCard, setFloatingCard] = useState(null);
   const [dropRoom, setDropRoom] = useState('');
@@ -521,6 +521,17 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
     } catch (error) { setMoveNotice(error.message); }
     finally { setMoving(false); finishCardDrag(); }
   };
+  const saveRoomMoves = async () => {
+    if (moving || !canUndoRoomMove) return;
+    setMoving(true);
+    setMoveNotice('Saving room changes...');
+    try {
+      const result = await onSaveRoomMoves();
+      const count = Number(result.saved_moves || 0);
+      setMoveNotice(`${count} room ${count === 1 ? 'change' : 'changes'} saved.`);
+    } catch (error) { setMoveNotice(error.message); }
+    finally { setMoving(false); finishCardDrag(); }
+  };
   const dragProps = booking => ({
     draggable: false,
     'data-room-draggable': !moving && ['pending', 'confirmed', 'checked_in'].includes(booking.status) ? 'true' : undefined,
@@ -729,7 +740,10 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       {resourceSummary}
       <div className="calendar-move-tools">
         <p className="calendar-move-help">Drag a card onto a room row to move it, or open the card to choose a room. Overlapping requests: #1 is the oldest.</p>
-        <button type="button" className="calendar-undo-move" disabled={!canUndoRoomMove || moving} onClick={undoRoomMove} title="Temporary testing control">↶ Undo last move</button>
+        <div className="calendar-move-actions">
+          <button type="button" className="calendar-undo-move" disabled={!canUndoRoomMove || moving} onClick={undoRoomMove} title="Temporary testing control">↶ Undo last move</button>
+          <button type="button" className="calendar-save-moves" disabled={!canUndoRoomMove || moving} onClick={saveRoomMoves}>Save room changes</button>
+        </div>
       </div>
       {moveNotice && <p className="admin-notice" role="status">{moveNotice}</p>}
       {renderCalendarGrid()}
@@ -792,28 +806,52 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
           <div><span className="admin-kicker">Room move warning</span><h3 id="calendar-move-warning-title">Review before moving</h3></div>
           <button type="button" onClick={() => setMoveWarning(null)} aria-label="Close warning">×</button>
         </div>
-        <p><strong>{moveWarning.booking.guest_name}</strong> → {moveWarning.unit.name}</p>
+        <p><strong>{moveWarning.booking.guest_name}</strong>: {moveWarning.booking.calendar_unit || moveWarning.booking.stay_type || 'Current room'} → {moveWarning.unit.name}</p>
         <ul>{moveWarning.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
         <div className="calendar-move-warning__actions">
           <button type="button" onClick={() => setMoveWarning(null)}>Cancel</button>
-          {moveWarning.canProceed && <button type="button" className="is-primary" disabled={moving} onClick={() => moveBooking(moveWarning.booking, moveWarning.resource, moveWarning.unit, true)}>{moving ? 'Moving…' : 'Proceed anyway'}</button>}
+          {moveWarning.canProceed && <button type="button" className="is-primary" disabled={moving} onClick={() => moveBooking(moveWarning.booking, moveWarning.resource, moveWarning.unit, true)}>{moving ? 'Moving…' : 'Confirm move'}</button>}
         </div>
       </form>}
     </dialog>
   </>;
 }
 
-function BookingRequestModal({ booking, onClose, updateStatus }) {
+function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
   const dialogRef = useRef(null);
+  const [dates, setDates] = useState({ checkIn: '', checkOut: '' });
+  const [dateSaving, setDateSaving] = useState(false);
+  const [dateError, setDateError] = useState('');
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (booking && dialog && !dialog.open) dialog.showModal();
   }, [booking]);
+  useEffect(() => {
+    setDates({ checkIn: booking?.check_in || '', checkOut: booking?.check_out || '' });
+    setDateError('');
+  }, [booking?.id, booking?.check_in, booking?.check_out]);
 
   if (!booking) return null;
-  const nights = getBookingNights(booking);
+  const nights = getBookingNights({ check_in: dates.checkIn, check_out: dates.checkOut });
   const request = getBookingNotes(booking.message);
+  const datesChanged = dates.checkIn !== booking.check_in || dates.checkOut !== booking.check_out;
+  const saveDates = async event => {
+    event.preventDefault();
+    if (!dates.checkIn || !dates.checkOut || dates.checkOut <= dates.checkIn) {
+      setDateError('Check-out must be after check-in.');
+      return;
+    }
+    setDateSaving(true);
+    setDateError('');
+    try {
+      await updateDates(booking, dates.checkIn, dates.checkOut);
+    } catch (error) {
+      setDateError(error.message);
+    } finally {
+      setDateSaving(false);
+    }
+  };
   return <dialog ref={dialogRef} className="admin-request-modal" aria-labelledby="request-modal-title" onClose={onClose} onCancel={onClose}>
     <div className="admin-request-modal__head">
       <div><span className="admin-kicker">Reservation · {booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}<h2 id="request-modal-title">View &amp; manage</h2></div>
@@ -825,19 +863,23 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
     </div>
     <div className="admin-request-modal__layout">
       <div className="admin-request-modal__main">
-        <section className="request-panel request-panel--stay" aria-labelledby="stay-summary-title">
+        <form className="request-panel request-panel--stay" aria-labelledby="stay-summary-title" onSubmit={saveDates}>
           <div className="request-panel__heading"><span>Stay summary</span><strong id="stay-summary-title">{booking.stay_type || 'Flexible stay'}</strong></div>
           <div className="request-date-route">
-            <div><span>Check-in</span><strong>{formatBookingDate(booking.check_in)}</strong></div>
+            <label><span>Check-in</span><input type="date" value={dates.checkIn} onChange={event => setDates(current => ({ ...current, checkIn: event.target.value }))} required /></label>
             <div className="request-date-route__line"><span>{nights ? `${nights + 1} ${nights + 1 === 1 ? 'day' : 'days'} · ${nights} ${nights === 1 ? 'night' : 'nights'}` : 'Stay'}</span></div>
-            <div><span>Check-out</span><strong>{formatBookingDate(booking.check_out)}</strong></div>
+            <label><span>Check-out</span><input type="date" min={dates.checkIn || undefined} value={dates.checkOut} onChange={event => setDates(current => ({ ...current, checkOut: event.target.value }))} required /></label>
+          </div>
+          <div className="request-date-editor__actions">
+            {dateError && <span role="alert">{dateError}</span>}
+            <button type="submit" disabled={!datesChanged || dateSaving}>{dateSaving ? 'Saving…' : 'Save dates'}</button>
           </div>
           {(request.arrival || request.departure) && <div className="request-times">
             <AdminIcon name="clock" />
             <span>Arrival <strong>{formatBookingTime(request.arrival) || 'Not set'}</strong></span>
             <span>Departure <strong>{formatBookingTime(request.departure) || 'Not set'}</strong></span>
           </div>}
-        </section>
+        </form>
         <section className="request-panel">
           <div className="request-panel__heading"><span>Request details</span><strong>Guest preferences</strong></div>
           <dl className="request-facts">
@@ -862,7 +904,7 @@ function BookingRequestModal({ booking, onClose, updateStatus }) {
   </dialog>;
 }
 
-function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent, canUndoRoomMove }) {
+function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, updateDates, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent, canUndoRoomMove }) {
   const moveBooking = async (booking, stayId, roomIndex, confirmWarnings = false) => {
     const response = await fetch('/api/admin/bookings.php', {
       method: 'PATCH',
@@ -876,6 +918,17 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       error.moveWarnings = Array.isArray(data.warnings) ? data.warnings : [error.message];
       throw error;
     }
+    await onBookingSaved(data);
+    return data;
+  };
+  const saveRoomMoves = async () => {
+    const response = await fetch('/api/admin/bookings.php', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ action: 'save_room_moves' }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not save the room changes.');
     await onBookingSaved(data);
     return data;
   };
@@ -955,7 +1008,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   };
 
   return <>
-    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} onMoveBooking={moveBooking} canUndoRoomMove={canUndoRoomMove} onUndoRoomMove={undoRoomMove} />
+    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} onMoveBooking={moveBooking} canUndoRoomMove={canUndoRoomMove} onUndoRoomMove={undoRoomMove} onSaveRoomMoves={saveRoomMoves} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
@@ -999,7 +1052,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       })}
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
-    <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} />
+    <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} updateDates={updateDates} />
     {manualBookingOpen && <ManualBookingModal open onClose={() => setManualBookingOpen(false)} csrfToken={csrfToken} onSaved={data => { setFilter('pending'); setQuery(''); onBookingSaved(data); }} />}
     </section>
   </>;
@@ -1112,6 +1165,18 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
     }
   };
 
+  const updateDates = async (booking, checkIn, checkOut) => {
+    const response = await fetch('/api/admin/bookings.php', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ action: 'update_dates', id: Number(booking.id), check_in: checkIn, check_out: checkOut, expected_updated_at: booking.updated_at }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not update the booking dates.');
+    await load();
+    setNotice(`Booking ${data.reference} dates updated.`);
+  };
+
   const logout = async () => {
     await fetch('/api/admin/logout.php', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken, Accept: 'application/json' } });
     onLogout();
@@ -1135,10 +1200,10 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
-        {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
+        {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
-        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} onBookingSaved={load} onOpenBooking={id => {
+        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} updateDates={updateDates} onBookingSaved={load} onOpenBooking={id => {
           const booking = bookings.find(item => Number(item.id) === Number(id));
           navigate('bookings');
           setNavigationIntent({ bookingId: id, focus: 'calendar', status: ['no_show', 'cancelled'].includes(booking?.status) ? booking.status : 'all' });
