@@ -45,6 +45,9 @@ try {
     checkFacebook(facebookConversationGuests('October 10 to 12 for 5 guests', true) === 5, 'Guest count embedded with dates');
     checkFacebook(facebookConversationGuests('October 10 to 12', true) === null, 'Date numbers are not mistaken for guests');
     checkFacebook(facebookConversationTimes('check in 2pm check out 11am') === ['check_in_time' => '14:00', 'check_out_time' => '11:00'], 'Informal AM/PM times');
+    checkFacebook(facebookConversationTimes('check out time is 3pm')['check_out_time'] === '15:00', 'Natural checkout sentence');
+    checkFacebook(facebookConversationTimes('11am checkin')['check_in_time'] === '11:00', 'Time before check-in label');
+    checkFacebook(facebookConversationTimes("sep 15-19\n11am checkin\n09763395956")['check_in_time'] === '11:00', 'Time-first check-in survives surrounding booking lines');
     checkFacebook(facebookConversationTimes('in: 2:30 p.m. out: 11 a.m.') === ['check_in_time' => '14:30', 'check_out_time' => '11:00'], 'Punctuated shorthand times');
     checkFacebook(facebookConversationTimes('arrival 1400 departure 1100') === ['check_in_time' => '14:00', 'check_out_time' => '11:00'], 'Military times');
     checkFacebook(facebookConversationTimes('dating alas dos ng hapon, alis alas onse ng umaga') === ['check_in_time' => '14:00', 'check_out_time' => '11:00'], 'Tagalog written times');
@@ -61,6 +64,7 @@ try {
     checkFacebook(facebookConversationIdentityContact('good afternoon po, charles@gmail.com')['guest_name'] === '', 'Greeting beside contact information is not inferred as a name');
     checkFacebook(facebookConversationDetails("Name: Good Afternoon\nContact: charles@gmail.com")['guest_name'] === '', 'Explicit greeting text is not accepted as a name');
     checkFacebook(facebookConversationDetails('Kate Beltrano po name ko')['guest_name'] === 'Kate Beltrano', 'Tagalog name suffix is removed from the customer name');
+    checkFacebook(facebookConversationDetails('book it under the name Kate Beltrano, b.k.y.a@gmail.com')['guest_name'] === 'Kate Beltrano', 'Natural booking-name phrase');
     checkFacebook(facebookConversationDetails('Ako po si Kate Beltrano')['guest_name'] === 'Kate Beltrano', 'Tagalog name introduction is removed from the customer name');
     checkFacebook(facebookConversationNameCandidate('Kate Beltrano po ko') === 'Kate Beltrano', 'Previously saved conversational name suffix is normalized');
     checkFacebook(facebookRetryDecision(1, 429, false, false, 300)['delay'] === 300, 'Retry-After honored');
@@ -160,6 +164,23 @@ try {
     $restartState = $db->prepare('SELECT state FROM facebook_conversations WHERE page_id = ? AND sender_id = ?');
     $restartState->execute(['conversation-page', $restartSender]);
     checkFacebook($restartState->fetchColumn() === 'idle', 'Restart returns the conversation to a fresh inquiry state');
+
+    $overrideSender = 'name-override-' . bin2hex(random_bytes(4));
+    $overrideData = json_encode(['guest_name' => 'Gabriel Martinez', 'guest_name_source' => 'facebook_profile', 'facebook_profile_name' => 'Gabriel Martinez'], JSON_THROW_ON_ERROR);
+    $db->prepare("INSERT INTO facebook_conversations (page_id,sender_id,state,data_json) VALUES ('conversation-page',?,'awaiting_booking_details',?)")->execute([$overrideSender, $overrideData]);
+    $overrideBody = 'check out time is 3pm, book it under the name Kate Beltrano, b.k.y.a@gmail.com, 0912345678';
+    $overrideEvent = $db->prepare("INSERT INTO facebook_events (source,page_id,sender_id,kind,guest_name,body,last_customer_message_at,category) VALUES ('facebook','conversation-page',?,'message','Gabriel Martinez',?,CURRENT_TIMESTAMP,'booking')");
+    $overrideEvent->execute([$overrideSender, $overrideBody]);
+    $overrideReply = facebookConversationReply($db, ['id' => (int) $db->lastInsertId(), 'page_id' => 'conversation-page', 'sender_id' => $overrideSender, 'guest_name' => 'Gabriel Martinez', 'body' => $overrideBody, 'category' => 'booking'], facebookDefaultRules());
+    checkFacebook(str_contains($overrideReply, 'Check-out time: 3:00 PM') && str_contains($overrideReply, 'Name: Kate Beltrano'), 'Customer booking name and natural checkout override Facebook profile data');
+    $overrideState = $db->prepare('SELECT data_json FROM facebook_conversations WHERE page_id = ? AND sender_id = ?');
+    $overrideState->execute(['conversation-page', $overrideSender]);
+    $savedOverride = json_decode((string) $overrideState->fetchColumn(), true, 32, JSON_THROW_ON_ERROR);
+    checkFacebook(($savedOverride['guest_name'] ?? '') === 'Kate Beltrano' && ($savedOverride['guest_name_source'] ?? '') === 'customer', 'Explicit customer name remains authoritative over profile name');
+    $timeFirstEvent = $db->prepare("INSERT INTO facebook_events (source,page_id,sender_id,kind,guest_name,body,last_customer_message_at,category) VALUES ('facebook','conversation-page',?,'message','Gabriel Martinez','11am checkin',CURRENT_TIMESTAMP,'general')");
+    $timeFirstEvent->execute([$overrideSender]);
+    $timeFirstReply = facebookConversationReply($db, ['id' => (int) $db->lastInsertId(), 'page_id' => 'conversation-page', 'sender_id' => $overrideSender, 'guest_name' => 'Gabriel Martinez', 'body' => '11am checkin', 'category' => 'general'], facebookDefaultRules());
+    checkFacebook(str_contains($timeFirstReply, 'Check-in time: 11:00 AM'), 'Messenger flow accepts time before check-in label');
 
     $sender = 'conversation-test-' . bin2hex(random_bytes(4));
     $page = 'conversation-page';

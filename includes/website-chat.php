@@ -184,7 +184,12 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
         unset($chat['draft']);
     }
     if (!isset($data['guests']) && preg_match('/\A\d{1,3}\z/', trim($body))) $data['guests'] = facebookConversationGuests($body);
-    if (isset($data['phone'])) $data['phone'] = websiteChatPhone($data['phone']);
+    if (isset($data['phone'])) {
+        $submittedPhone = $data['phone'];
+        $data['phone'] = websiteChatPhone($submittedPhone);
+        if ($data['phone'] === '' && $submittedPhone !== '') $data['phone_invalid'] = true;
+        else unset($data['phone_invalid']);
+    }
     $services = resortEntities($db, 'services', false);
     if (preg_match('/\b(?:no activities|none|walang activities)\b/iu', $body)) $data['activities'] = [];
     else foreach ($services as $service) {

@@ -445,7 +445,11 @@ function facebookConversationTimes(string $body): array
         'check_out_time' => '(?:check\s*[-]?\s*out|chek\s*[-]?\s*out|departure|depart|alis|uwi)',
     ];
     foreach ($labels as $key => $labelPattern) {
-        if (preg_match('/\b' . $labelPattern . '(?:\s*time)?\s*[:=\-]?\s*(' . $token . ')/iu', $body, $match) === 1) {
+        if (preg_match('/\b' . $labelPattern . '(?:\s*time)?(?:\s*(?:is|at|ay))?\s*[:=\-]?\s*(' . $token . ')/iu', $body, $match) === 1) {
+            $normalized = facebookConversationNormalizeTime($match[1], $key === 'check_in_time' ? 'check_in' : 'check_out');
+            if ($normalized !== null) $result[$key] = $normalized;
+        }
+        if ($result[$key] === null && preg_match('/\b(' . $token . ')\s*(?:is\s+|at\s+|for\s+)?' . $labelPattern . '\b/iu', $body, $match) === 1) {
             $result[$key] = facebookConversationNormalizeTime($match[1], $key === 'check_in_time' ? 'check_in' : 'check_out');
         }
     }
@@ -699,7 +703,11 @@ function facebookConversationDetails(string $body): array
         }
     }
     $name = '';
-    if (preg_match('/(?:^|[\n,;])\s*(?:name|pangalan)\s*[:=-]?\s*([\p{L}\p{M} .\'\-]{2,100})(?=$|[\n,;])/iu', $body, $match) === 1) $name = facebookConversationNameCandidate($match[1], true);
+    if (preg_match('/\b(?:book(?:ing)?\s+(?:it\s+)?under|reserve(?:\s+it)?\s+under|under)\s+(?:the\s+)?name(?:\s+of)?\s*[:=-]?\s*([\p{L}\p{M} .\'\-]{2,100})(?=$|[\n,;])/iu', $body, $match) === 1) {
+        $name = facebookConversationNameCandidate($match[1], true);
+    } elseif (preg_match('/(?:^|[\n,;])\s*(?:name|pangalan)\s*[:=-]?\s*([\p{L}\p{M} .\'\-]{2,100})(?=$|[\n,;])/iu', $body, $match) === 1) {
+        $name = facebookConversationNameCandidate($match[1], true);
+    }
     if ($name === '') {
         foreach (preg_split('/[\n,;]+/u', $body) ?: [] as $part) {
             $part = trim($part);
@@ -752,7 +760,9 @@ function facebookConversationDetailsChecklist(array $data, array $missing, bool 
         $lines[] = ($data['guest_name'] ?? '') !== '' ? '✅ Name: ' . $data['guest_name'] : '❓ Name: Needed';
         if ($showBothContacts) {
             $lines[] = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL) ? '✅ Email: ' . $data['email'] : '❓ Email: Needed';
-            $lines[] = ($data['phone'] ?? '') !== '' ? '✅ Mobile: ' . $data['phone'] : '❓ Mobile: Needed';
+            $lines[] = ($data['phone'] ?? '') !== ''
+                ? '✅ Mobile: ' . $data['phone']
+                : (!empty($data['phone_invalid']) ? '❌ Mobile: Invalid — use an 11-digit number beginning with 09' : '❓ Mobile: Needed');
         } else {
             $lines[] = $contact !== 'Needed' ? '✅ Contact: ' . $contact : '❓ Contact: Needed';
         }

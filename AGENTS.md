@@ -81,6 +81,16 @@ For every task:
 
 Do not add offline functionality, commit/push changes, deploy, modify production, or perform destructive database operations without explicit authorization.
 
+## Shared chatbot behavior
+
+The public website chatbot and Facebook Messenger automation share one deterministic, rule-based booking system. Treat changes to classification, parsing, validation, availability, guided replies, templates, and booking summaries as cross-channel changes unless the user explicitly limits the request to one channel.
+
+- Implement shared behavior in `includes/facebook-automations.php` or another reusable server module instead of maintaining separate copies.
+- Apply every rule-based fix requested for either chatbot to both the website and Facebook paths automatically.
+- Preserve only necessary channel differences: Messenger may use Facebook profile identity and can create a pending request after confirmation; website chat requires its booking-form fields and opens the prefilled booking modal after confirmation.
+- After a shared behavior change, run targeted coverage for both `scripts/test-facebook.php` and `scripts/test-website-chat.php` so the channels do not drift.
+- Clearly report any intentional difference between the two channels rather than silently implementing divergent behavior.
+
 ## SEO workflow
 
 Complete and stabilize the public system, content, routes, business details, and production domain before performing the final SEO optimization pass. SEO must nevertheless be completed and verified before the production launch.

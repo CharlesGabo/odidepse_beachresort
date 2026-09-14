@@ -25,6 +25,12 @@ try {
     $nameReply = websiteChatReply($db, $comparisonChat, 'Charles Martinez', $rules)['reply'];
     chatCheck($comparisonChat['state'] === 'review' && ($comparisonChat['data']['guest_name'] ?? '') === 'Charles Martinez', 'Standalone name completes website draft');
     chatCheck(str_contains($nameReply, 'Charles Martinez'), 'Accepted standalone name appears in review');
+    $naturalChat = ['state' => 'booking', 'data' => [], 'history' => [], 'csrf' => 'natural'];
+    $naturalReply = websiteChatReply($db, $naturalChat, 'check out time is 3pm, book it under the name Kate Beltrano, b.k.y.a@gmail.com, 0912345678', $rules)['reply'];
+    chatCheck(($naturalChat['data']['check_out_time'] ?? '') === '15:00' && ($naturalChat['data']['guest_name'] ?? '') === 'Kate Beltrano' && ($naturalChat['data']['email'] ?? '') === 'b.k.y.a@gmail.com', 'Natural combined booking details are retained');
+    chatCheck(!empty($naturalChat['data']['phone_invalid']) && str_contains($naturalReply, '11-digit number'), 'Invalid Philippine mobile number is explained');
+    websiteChatReply($db, $naturalChat, '11am checkin', $rules);
+    chatCheck(($naturalChat['data']['check_in_time'] ?? '') === '11:00', 'Website accepts time before check-in label');
     websiteChatReply($db, $chat, 'Rates', $rules);
     chatCheck($chat['state'] === 'rates', 'Partial rate state');
     websiteChatReply($db, $chat, $start->format('Y-m-d') . ' to ' . $end->format('Y-m-d') . ', 5 guests', $rules);

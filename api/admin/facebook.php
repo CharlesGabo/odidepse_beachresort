@@ -14,7 +14,7 @@ try {
         $section = (string) ($_GET['section'] ?? 'message');
         $page = filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100000]]);
         if ($page === false || !in_array($section, ['message', 'comment', 'lead', 'alerts', 'drafts', 'jobs', 'audit', 'rules'], true)) throw new FacebookWorkflowError('Choose a valid section and page.');
-        $pageSize = $section === 'message' ? 100 : 25;
+        $pageSize = 25;
         $offset = ($page - 1) * $pageSize;
         $records = [];
         $total = 0;
@@ -35,7 +35,7 @@ try {
                 b.status AS booking_status
                 FROM facebook_events e
                 LEFT JOIN bookings b ON b.id = e.booking_id
-                WHERE ' . $where . ' ORDER BY e.id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset);
+                WHERE ' . $where . ' ORDER BY e.id DESC' . ($section === 'message' ? '' : ' LIMIT ' . $pageSize . ' OFFSET ' . $offset));
             $query->execute($params); $records = $query->fetchAll();
             if ($section === 'message' && $records !== []) {
                 $ids = array_column($records, 'id');
@@ -124,7 +124,7 @@ try {
         }
         $verifiedAt = $db->query('SELECT verified_at FROM facebook_webhook_state WHERE id = 1')->fetchColumn();
         $connection = $configured && is_string($verifiedAt) ? 'connected' : 'not_connected';
-        jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+        jsonResponse(['status' => 'success', 'connection' => $connection, 'webhook_verified_at' => $verifiedAt ?: null, 'settings' => $settings, 'counts' => $counts, 'records' => $records, 'total' => $total, 'page' => $page, 'page_size' => $section === 'message' ? max(1, $total) : $pageSize]);
     }
 
     $data = readJsonBody(65536);

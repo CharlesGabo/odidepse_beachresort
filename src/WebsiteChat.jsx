@@ -29,7 +29,9 @@ export default function WebsiteChat({ onDraft, onBook, refresh }) {
     }).catch(err => { if (err.name !== 'AbortError') setError('Chat is unavailable. Please use the booking form.'); });
     return () => controller.abort();
   }, [open, refresh]);
-  useEffect(() => { if (open) input.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (open && window.matchMedia('(min-width: 769px) and (pointer: fine)').matches) input.current?.focus();
+  }, [open]);
   useEffect(() => {
     if (!input.current) return;
     input.current.style.height = '';

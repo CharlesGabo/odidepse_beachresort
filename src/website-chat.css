@@ -30,5 +30,6 @@
 @media(max-width:768px) {
   .website-chat { right:16px; bottom:max(16px,env(safe-area-inset-bottom)); }
   .website-chat-panel { position:fixed; inset:12px 12px 0; width:auto; height:auto; padding-bottom:env(safe-area-inset-bottom); border-bottom:0; border-radius:20px 20px 0 0; z-index:81; }
+  .website-chat textarea { font-size:16px; }
 }
 .website-chat-panel.is-fullscreen { position:fixed; inset:0; width:100vw; height:100dvh; padding-bottom:env(safe-area-inset-bottom); border:0; border-radius:0; z-index:1000; }

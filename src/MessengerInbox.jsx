@@ -8,7 +8,7 @@ function ChatIcon({ name }) {
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7v1" /></>,
     chat: <path d="M21 11.5a9 9 0 0 1-9 9 10 10 0 0 1-4-.9L3 21l1.4-4.6A9 9 0 1 1 21 11.5Z M7 11h10M7 15h6" />,
     send: <path d="m3 3 19 9-19 9 4-9-4-9Zm4 9h15" />,
-    down: <path d="m6 9 6 6 6-6" />,
+    down: <><path d="M12 5v14" /><path d="m6 13 6 6 6-6" /></>,
     smile: <><circle cx="12" cy="12" r="9" /><path d="M8 14s1 3 4 3 4-3 4-3M8 8v2M16 8v2" /></>,
   };
   return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
