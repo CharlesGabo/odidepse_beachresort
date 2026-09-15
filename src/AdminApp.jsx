@@ -951,6 +951,8 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const [highlightedCalendarBookingId, setHighlightedCalendarBookingId] = useState(null);
   const highlightTimerRef = useRef(null);
   const calendarHighlightTimerRef = useRef(null);
+  const calendarModalTimerRef = useRef(null);
+  const calendarScrollEndRef = useRef(null);
   useEffect(() => {
     if (!navigationIntent) return;
     setFilter(navigationIntent.status || 'all');
@@ -988,6 +990,8 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   useEffect(() => () => {
     window.clearTimeout(highlightTimerRef.current);
     window.clearTimeout(calendarHighlightTimerRef.current);
+    window.clearTimeout(calendarModalTimerRef.current);
+    if (calendarScrollEndRef.current) window.removeEventListener('scrollend', calendarScrollEndRef.current);
   }, []);
 
   const viewBookingFromCalendar = bookingId => {
@@ -996,8 +1000,31 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     setHighlightedBookingId(String(bookingId));
     window.clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
+    window.clearTimeout(calendarModalTimerRef.current);
+    if (calendarScrollEndRef.current) window.removeEventListener('scrollend', calendarScrollEndRef.current);
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      document.getElementById(`booking-${bookingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const target = document.getElementById(`booking-${bookingId}`);
+      const openBookingModal = () => {
+        window.clearTimeout(calendarModalTimerRef.current);
+        if (calendarScrollEndRef.current) window.removeEventListener('scrollend', calendarScrollEndRef.current);
+        calendarScrollEndRef.current = null;
+        setSelectedBookingId(bookingId);
+      };
+      if (!target) {
+        openBookingModal();
+        return;
+      }
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const targetTop = target.getBoundingClientRect().top + window.scrollY - (window.innerHeight - target.offsetHeight) / 2;
+      if (reducedMotion || Math.abs(window.scrollY - targetTop) < 2) {
+        target.scrollIntoView({ behavior: 'auto', block: 'center' });
+        openBookingModal();
+        return;
+      }
+      calendarScrollEndRef.current = openBookingModal;
+      window.addEventListener('scrollend', openBookingModal, { once: true });
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      calendarModalTimerRef.current = window.setTimeout(openBookingModal, 1200);
     }));
   };
 

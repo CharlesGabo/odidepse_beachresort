@@ -140,7 +140,7 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     if ($command === 'menu') return $reply(facebookGuidedReply($rules, 'menu'));
     if ($command === 'back') {
         $chat['state'] = 'booking'; unset($chat['draft']);
-        return $reply(facebookGuidedReply($rules, 'ask_booking_details') . "\n\n" . facebookGuidedReply($rules, 'website_contact'));
+        return $reply(facebookGuidedReply($rules, 'ask_booking_details'));
     }
     if ($chat['state'] === 'completed' && $command === 'confirm') return $reply('Your request ' . ($chat['reference'] ?? '') . ' is pending staff approval. Type RESTART for another request.');
     if (in_array($category, ['amenities', 'location'], true) && !preg_match('/(?:activities|notes?|message)\s*:/iu', $body)) return $reply(websiteChatFallback($rules, $category));
@@ -190,14 +190,7 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
         if ($data['phone'] === '' && $submittedPhone !== '') $data['phone_invalid'] = true;
         else unset($data['phone_invalid']);
     }
-    $services = resortEntities($db, 'services', false);
-    if (preg_match('/\b(?:no activities|none|walang activities)\b/iu', $body)) $data['activities'] = [];
-    else foreach ($services as $service) {
-        $activityName = trim(preg_replace('/\b(?:rental|rentals|ride|rides)\b/iu', '', $service['name']) ?? $service['name']);
-        if ($activityName !== '' && mb_stripos($body, $activityName) !== false) $data['activities'][] = (int) $service['id'];
-    }
-    $data['activities'] = array_values(array_unique($data['activities'] ?? []));
-    if (preg_match('/(?:notes?|message)\s*:\s*([^\r\n]+)/iu', $body, $match)) $data['notes'] = mb_substr(trim($match[1]), 0, 650);
+    facebookConversationApplyOptionalDetails($db, $data, $body);
     $ratesOnly = $chat['state'] === 'rates' && empty($data['guest_name']) && !preg_match('/\b(?:book|booking|reserve|reservation|magbook|mag-book)\b/iu', $body);
     $missing = facebookConversationMissingDetails($data, $ratesOnly, !$ratesOnly);
     if (isset($data['check_in'], $data['check_out'], $data['guests'])) {
@@ -215,24 +208,22 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
         if (!$selected && isset($data['stay_id'])) foreach ($options as $option) if ($option['id'] === $data['stay_id']) $selected = $option;
         $selected ??= $options[0];
         $data['stay_id'] = $selected['id']; $data['stay_name'] = $selected['name']; $data['rate'] = $selected['rate'];
-        if ($ratesOnly) return $reply(facebookConversationOptionsText($options, $rules) . "\n\n" . facebookGuidedReply($rules, 'book_from_rates') . "\n" . facebookGuidedReply($rules, 'website_contact'));
+        if ($ratesOnly) return $reply(facebookConversationOptionsText($options, $rules) . "\n\n" . facebookGuidedReply($rules, 'book_from_rates'));
     }
     $chat['state'] = $ratesOnly ? 'rates' : 'booking';
     if ($missing !== []) {
-        $contactMissing = array_intersect($missing, ['email', 'Philippine mobile number']) !== [];
-        return $reply(facebookConversationDetailsChecklist($data, $missing, $ratesOnly, !$ratesOnly)
-            . ($contactMissing ? "\n\n" . facebookGuidedReply($rules, 'website_contact') : ''));
+        if (!$ratesOnly && !facebookConversationHasProvidedDetails($details)) {
+            return $reply(facebookGuidedReply($rules, 'start') . "\n\n" . facebookGuidedReply($rules, 'ask_booking_details'));
+        }
+        return $reply(facebookConversationDetailsChecklist($data, $missing, $ratesOnly, !$ratesOnly));
     }
     $chat['state'] = 'review';
     unset($chat['draft']);
-    $activityNames = array_column(array_filter($services, static fn(array $item): bool => in_array((int) $item['id'], $data['activities'], true)), 'name');
     return $reply(facebookConversationSummary($data, $rules, [
         'show_both_contacts' => true,
         'hide_room_photos' => true,
         'extra_lines' => [
             'Rate: ' . ($data['rate'] ?: 'Staff will provide the rate'),
-            'Activities: ' . (implode(', ', $activityNames) ?: 'None'),
-            'Notes: ' . ($data['notes'] ?? 'None'),
         ],
         'confirmation' => facebookGuidedReply($rules, 'ask_confirmation')
             . "\n\nWebsite booking process:"
