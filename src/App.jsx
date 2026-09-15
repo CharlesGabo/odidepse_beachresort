@@ -152,7 +152,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   }];
   const combinationRooms = selectedStayPlan.map(component => ({ ...component, stay: stays.find(stay => Number(stay.id) === Number(component.stay_id)) })).filter(component => component.stay);
   const selectedStayDetails = selectedStayPlan.length
-    ? { name: chatDraft?.stayName || combinationRooms.map(item => `${item.quantity} × ${item.stay.name}`).join(' + '), min_guests: 1, max_guests: combinationRooms.reduce((total, item) => total + Number(item.capacity || item.stay.capacity) * Number(item.quantity), 0), guests: chatDraft?.guests }
+    ? { name: combinationRooms.map(item => `${item.quantity} × ${item.stay.name}`).join(' + '), min_guests: 1, max_guests: combinationRooms.reduce((total, item) => total + Number(item.capacity || item.stay.capacity) * Number(item.quantity), 0), guests: chatDraft?.guests }
     : stays.find(stay => String(stay.id) === selectedStay);
   const selectedActivityDetails = bookingActivities.filter(service => selectedActivities.includes(String(service.id)));
   const [calendarYear, calendarMonthNumber] = calendarMonth.split('-').map(Number);
@@ -171,6 +171,44 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const staySubtotal = stayRate * nightCount;
   const activitySubtotal = selectedActivityDetails.reduce((total, activity) => total + mockActivityRate(activity), 0);
   const mockTotal = staySubtotal + activitySubtotal;
+
+  const changeStayQuantity = (stay, requestedQuantity) => {
+    const stayId = Number(stay.id);
+    const maximum = Math.max(1, stayInventoryCount(stay));
+    const quantity = Math.max(0, Math.min(maximum, Number(requestedQuantity) || 0));
+    const isWholeProperty = ['group', 'exclusive'].includes(stay.style);
+    let nextPlan = selectedStayPlan.map(item => ({ ...item }));
+
+    if (selectedStay && !nextPlan.some(item => Number(item.stay_id) === Number(selectedStay))) {
+      const previousStay = stays.find(item => String(item.id) === selectedStay);
+      if (previousStay) nextPlan.push({ stay_id: Number(previousStay.id), quantity: 1, capacity: Number(previousStay.capacity) });
+    }
+
+    if (quantity === 0) {
+      nextPlan = nextPlan.filter(item => Number(item.stay_id) !== stayId);
+    } else if (isWholeProperty) {
+      setSelectedStay(String(stay.id));
+      setSelectedStayPlan([]);
+      setAvailability({ type: 'idle' });
+      return;
+    } else {
+      nextPlan = nextPlan.filter(item => {
+        const itemStay = stays.find(option => Number(option.id) === Number(item.stay_id));
+        return !itemStay || !['group', 'exclusive'].includes(itemStay.style);
+      });
+      const existing = nextPlan.find(item => Number(item.stay_id) === stayId);
+      if (existing) {
+        existing.quantity = quantity;
+        existing.capacity = Number(stay.capacity);
+      } else {
+        nextPlan.push({ stay_id: stayId, quantity, capacity: Number(stay.capacity) });
+      }
+    }
+
+    setSelectedStay('');
+    setSelectedStayPlan(nextPlan);
+    setAvailability({ type: 'idle' });
+  };
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -209,7 +247,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       return { ...data, quantity: Number(room.quantity) };
     }))
       .then(results => {
-        setAvailability({ type: 'success', available: Math.min(...results.map(item => Math.floor(item.available / item.quantity))), capacity: 1, occupied: results.reduce((total, item) => total + item.occupied, 0), pending: results.reduce((total, item) => total + item.pending, 0), combination: selectedStayPlan.length > 0 });
+        const roomCount = requestedRooms.reduce((total, item) => total + Number(item.quantity), 0);
+        setAvailability({ type: 'success', available: Math.min(...results.map(item => Math.floor(item.available / item.quantity))), capacity: roomCount > 1 ? roomCount : Number(results[0]?.capacity || 1), occupied: results.reduce((total, item) => total + item.occupied, 0), pending: results.reduce((total, item) => total + item.pending, 0), combination: roomCount > 1 });
       })
       .catch(error => {
         if (error.name !== 'AbortError') setAvailability({ type: 'error', message: error.message });
@@ -335,21 +374,21 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     </div> :
       <form key={open ? 'open' : 'closed'} className="booking-form booking-experience" onSubmit={submit}>
         <section className="booking-step field--wide" aria-labelledby="choose-stay-title">
-          <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">{manual ? 'Select accommodation' : 'Choose your space'}</h3><p>{manual ? 'Select the accommodation requested by the guest. Review availability for the selected dates below.' : 'Browse every stay option. Photos are representative while room assignments are confirmed by our team.'}</p></div></div>
+          <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">{manual ? 'Select accommodation' : 'Choose your rooms'}</h3><p>{manual ? 'Select the accommodation requested by the guest. Review availability for the selected dates below.' : 'Choose one room or combine several rooms. Set the number of units you need for each room type.'}</p></div></div>
           <div className="booking-card-grid booking-card-grid--stays">
-            {chatDraft?.stayPlan?.length > 0 && <label className={`booking-choice-card ${selectedStayPlan.length ? 'is-selected' : ''}`} htmlFor="booking-stay-combination">
-              <input id="booking-stay-combination" type="radio" name="stay_choice" value="combination" checked={selectedStayPlan.length > 0} onChange={() => { setSelectedStay(''); setSelectedStayPlan(chatDraft.stayPlan); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
-              <span className="booking-choice-card__body"><strong>Recommended room combination</strong><small>{chatDraft.stayName}</small><span>Exact rooms selected by the assistant based on your group size and current availability.</span><em>{selectedStayPlan.length ? 'Selected' : 'Select combination'}</em></span>
-            </label>}
+            {chatDraft?.stayPlan?.length > 0 && <p className="booking-room-plan-note"><strong>Assistant recommendation loaded.</strong> You can adjust the room quantities below before submitting.</p>}
             {stays.map((stay, index) => {
               const inputId = `booking-stay-${stay.id}`;
               const photo = stay.photos?.length ? { src: stayPhotoSource(stay.photos[0]), alt: stay.name } : roomPhotos[index % roomPhotos.length];
               const unitCount = stayInventoryCount(stay);
-              return <label className={`booking-choice-card ${selectedStay === String(stay.id) ? 'is-selected' : ''}`} htmlFor={inputId} key={stay.id}>
-                <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => { setSelectedStay(String(stay.id)); setSelectedStayPlan([]); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
-                <span className="booking-choice-card__image"><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><i>{selectedStay === String(stay.id) ? 'Selected' : 'Select room'}</i></span>
-                <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {unitCount} {unitCount === 1 ? 'unit' : 'units'}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span>
-              </label>;
+              const plannedRoom = selectedStayPlan.find(item => Number(item.stay_id) === Number(stay.id));
+              const selectedQuantity = plannedRoom ? Number(plannedRoom.quantity) : selectedStay === String(stay.id) ? 1 : 0;
+              return <article className={`booking-choice-card ${selectedQuantity > 0 ? 'is-selected' : ''}`} key={stay.id}>
+                <input id={inputId} type={manual ? 'radio' : 'checkbox'} name="stay_choice" value={stay.id} checked={selectedQuantity > 0} onChange={() => manual ? (setSelectedStay(String(stay.id)), setSelectedStayPlan([]), setCheckInDate(''), setCheckOutDate(''), setAvailability({ type: 'idle' })) : changeStayQuantity(stay, selectedQuantity > 0 ? 0 : 1)} required={manual} />
+                <label className="booking-choice-card__select" htmlFor={inputId}><span className="booking-choice-card__image"><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><i>{selectedQuantity > 0 ? `${selectedQuantity} selected` : 'Select room'}</i></span>
+                <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {unitCount} {unitCount === 1 ? 'unit' : 'units'}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span></label>
+                {!manual && selectedQuantity > 0 && <div className="booking-room-quantity"><b>Number of rooms</b><span><button type="button" onClick={() => changeStayQuantity(stay, selectedQuantity - 1)} aria-label={`Remove one ${stay.name}`}>−</button><output aria-live="polite">{selectedQuantity}</output><button type="button" onClick={() => changeStayQuantity(stay, selectedQuantity + 1)} disabled={selectedQuantity >= unitCount || ['group', 'exclusive'].includes(stay.style)} aria-label={`Add one ${stay.name}`}>+</button></span></div>}
+              </article>;
             })}
           </div>
         </section>
@@ -413,14 +452,14 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" defaultValue={initialGuest?.guest_name || ''} autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
             <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" defaultValue={initialGuest?.email || ''} autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
             <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" defaultValue={/^\d{10}$/.test(leadPhoneDigits) ? leadPhoneDigits : ''} autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
-            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required key={selectedStay || 'none'} defaultValue={chatDraft?.guests ?? selectedStayDetails?.guests ?? 2} /></div>
+            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required defaultValue={chatDraft?.guests ?? selectedStayDetails?.guests ?? 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>
         </section>
         {!manual && <aside className="booking-price-summary field--wide" aria-labelledby="price-summary-title">
           <div><span>Preview estimate</span><h3 id="price-summary-title">Your estimated total</h3></div>
           <dl>
-            <div><dt>{selectedStayDetails && nightCount ? `${selectedStayDetails.name} × ${nightCount} ${nightCount === 1 ? 'night' : 'nights'}` : 'Stay'}</dt><dd>{staySubtotal ? formatMockPrice(staySubtotal) : 'Select dates'}</dd></div>
+            {combinationRooms.length > 0 ? combinationRooms.map(item => <div key={item.stay_id}><dt>{item.quantity} × {item.stay.name} at {formatMockPrice(mockStayRate(item.stay))}/night</dt><dd>{nightCount ? formatMockPrice(mockStayRate(item.stay) * Number(item.quantity) * nightCount) : 'Select dates'}</dd></div>) : <div><dt>{selectedStayDetails && nightCount ? `${selectedStayDetails.name} × ${nightCount} ${nightCount === 1 ? 'night' : 'nights'}` : 'Stay'}</dt><dd>{staySubtotal ? formatMockPrice(staySubtotal) : 'Select dates'}</dd></div>}
             <div><dt>{selectedActivityDetails.length ? `${selectedActivityDetails.length} selected ${selectedActivityDetails.length === 1 ? 'activity' : 'activities'}` : 'Activities'}</dt><dd>{activitySubtotal ? formatMockPrice(activitySubtotal) : 'None'}</dd></div>
           </dl>
           <div className="booking-price-summary__total"><span>Estimated total</span><strong>{mockTotal ? formatMockPrice(mockTotal) : '—'}</strong></div>

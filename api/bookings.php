@@ -33,6 +33,7 @@ $guests = filter_var($data['guests'] ?? null, FILTER_VALIDATE_INT, ['options' =>
 $stayId = $data['stay_id'] ?? null;
 $stayPlanInput = $data['stay_plan'] ?? [];
 $serviceId = $data['service_id'] ?? null;
+if (!$manualBooking) require_once dirname(__DIR__) . '/includes/facebook-automations.php';
 
 $errors = [];
 if (mb_strlen($name) < 2) $errors['guest_name'] = 'Enter your full name.';
@@ -88,7 +89,7 @@ try {
         $stayRecord = $query->fetch();
         if (!$stayRecord) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This stay is no longer listed. Refresh and choose another stay.'], 422); }
     }
-    if ($chatToken !== null && $stayPlanInput !== []) {
+    if (!$manualBooking && $stayPlanInput !== []) {
         $seenStayIds = [];
         $combinedCapacity = 0;
         foreach ($stayPlanInput as $component) {
@@ -101,13 +102,13 @@ try {
             $componentQuery->execute([$componentId]);
             $componentStay = $componentQuery->fetch();
             if (!$componentStay || $componentStay['availability'] === 'unavailable') {
-                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'A room in this arrangement is no longer listed. Reopen the booking form from chat.'], 409);
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'A room in this arrangement is no longer available. Please review your room selection.'], 409);
             }
             $componentDetails = json_decode($componentStay['details'], true, 32, JSON_THROW_ON_ERROR);
             $capacityPerRoom = (int) ($componentDetails['max_guests'] ?? 0);
             if ($capacityPerRoom < 1 || $capacityPerRoom > 10 || in_array(($componentDetails['style'] ?? 'standard'), ['group', 'exclusive'], true)
                 || facebookConversationAvailableUnits($db, (int) $componentStay['id'], $componentStay['name'], $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), (int) ($componentDetails['room_count'] ?? 0), false) < $quantity) {
-                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'The selected room combination is no longer available for these dates. Reopen the booking form from chat.'], 409);
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'The selected room combination is no longer available for these dates. Please review your room selection.'], 409);
             }
             $seenStayIds[$componentId] = true;
             $combinedCapacity += $capacityPerRoom * $quantity;
@@ -119,8 +120,11 @@ try {
         $stayRecord = null;
         $stayType = implode(' + ', array_map(static fn(array $component): string => $component['quantity'] . ' × ' . $component['name'], $stayPlan));
     }
-    if ($chatToken !== null) {
-        if ((!$stayRecord && $stayPlan === []) || websiteChatPhone($phone) === '') {
+    if (!$manualBooking) {
+        if (!$stayRecord && $stayPlan === []) {
+            $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Choose at least one room for your stay.'], 422);
+        }
+        if ($chatToken !== null && websiteChatPhone($phone) === '') {
             $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Choose an accommodation and enter a valid Philippine mobile number.'], 422);
         }
         if ($stayRecord) {
@@ -132,6 +136,8 @@ try {
                 $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This room no longer fits your dates or group. Please review your selection.'], 409);
             }
         }
+    }
+    if ($chatToken !== null) {
         $message = "Website chat request.\n" . $message;
         if (mb_strlen($message) > 1000) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Please shorten the additional information.'], 422); }
     }

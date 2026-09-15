@@ -100,7 +100,7 @@ try {
     checkFacebook($componentLabels === ['1x10', '1x5'], 'Exact fifteen-pax suggestion clearly contains one 10-guest and one 5-guest room');
     $combinationRateText = facebookConversationOptionsText($combinationOptions, facebookDefaultRules());
     checkFacebook(str_contains($combinationRateText, '1 × 10-guest room') && str_contains($combinationRateText, '1 × 5-guest room'), 'Combination response names each room quantity and capacity');
-    checkFacebook(substr_count($combinationRateText, ' at PHP ') >= 2 && str_contains($combinationRateText, ' total'), 'Combination rate shows every room price and the calculated total');
+    checkFacebook(str_contains($combinationRateText, "Room prices:\n• 1 × 10-guest room: PHP ") && str_contains($combinationRateText, "\n• 1 × 5-guest room: PHP ") && str_contains($combinationRateText, 'Combined room rate: PHP ') && str_contains($combinationRateText, 'Estimated stay total (2 nights): PHP '), 'Combination rate clearly separates every room price, nightly rate and full-stay estimate');
     $fiveGuestComponent = array_values(array_filter($bestCombination['components'], static fn(array $component): bool => (int) $component['capacity'] === 5))[0];
     $fiveGuestQuery = $db->prepare('SELECT name, details FROM resort_stays WHERE id = ?');
     $fiveGuestQuery->execute([$fiveGuestComponent['stay_id']]);

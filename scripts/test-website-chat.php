@@ -32,7 +32,7 @@ try {
     $combinationChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'combination'];
     websiteChatReply($db, $combinationChat, "Dates: {$start->format('F j')} to {$end->format('F j, Y')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 15\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567", $rules);
     chatCheck(($combinationChat['data']['stay_plan'][0]['quantity'] ?? 0) === 1 && count($combinationChat['data']['stay_plan'] ?? []) === 2, 'Website chat selects an available multi-room plan for fifteen guests');
-    chatCheck(substr_count((string) ($combinationChat['data']['rate_breakdown'] ?? ''), ' at PHP ') >= 2 && str_contains((string) $combinationChat['data']['rate_breakdown'], ' total'), 'Website review retains the per-room combination calculation');
+    chatCheck(str_contains((string) ($combinationChat['data']['rate_breakdown'] ?? ''), "Room prices:\n• 1 × 10-guest room: PHP ") && str_contains((string) $combinationChat['data']['rate_breakdown'], 'Combined room rate: PHP ') && str_contains((string) $combinationChat['data']['rate_breakdown'], 'Estimated stay total (2 nights): PHP '), 'Website review retains the guest-friendly room and full-stay price breakdown');
     $combinationDraft = websiteChatReply($db, $combinationChat, 'CONFIRM', $rules)['draft'] ?? [];
     chatCheck(count($combinationDraft['stayPlan'] ?? []) === 2 && ($combinationDraft['stayId'] ?? null) === null, 'Website modal draft carries the exact multi-room plan');
     $labelledChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'labelled'];

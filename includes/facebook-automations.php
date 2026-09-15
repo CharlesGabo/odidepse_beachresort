@@ -613,13 +613,19 @@ function facebookConversationCombinationOptions(PDO $db, array $rows, int $guest
         }
         $name = implode(' + ', array_map(static fn(array $item): string => $item['quantity'] . ' × ' . $item['name'], $components));
         $priceParts = array_map(static function (array $item): string {
-            if ($item['unit_price'] === null) return $item['quantity'] . ' × ' . $item['name'] . ' (rate to be provided by staff)';
-            $unit = 'PHP ' . number_format($item['unit_price'], 2);
-            $subtotal = 'PHP ' . number_format($item['unit_price'] * $item['quantity'], 2);
-            return $item['quantity'] . ' × ' . $item['name'] . ' at ' . $unit . ($item['quantity'] > 1 ? ' = ' . $subtotal : '');
+            if ($item['unit_price'] === null) return '• ' . $item['quantity'] . ' × ' . $item['name'] . ': Rate to be provided by staff';
+            $unit = 'PHP ' . number_format($item['unit_price'], 2) . ' per night';
+            $subtotal = 'PHP ' . number_format($item['unit_price'] * $item['quantity'], 2) . ' per night';
+            return '• ' . $item['quantity'] . ' × ' . $item['name'] . ': ' . $unit . ($item['quantity'] > 1 ? ' (' . $subtotal . ' for all ' . $item['quantity'] . ')' : '');
         }, $components);
         $combinedRate = $hasCompletePrice ? ($hasFromPrice ? 'From ' : '') . 'PHP ' . number_format($totalPrice, 2) . ' / night' : null;
-        $rateBreakdown = implode(' + ', $priceParts) . ($combinedRate !== null ? ' = ' . $combinedRate . ' total' : '');
+        $nights = (new DateTimeImmutable($checkIn))->diff(new DateTimeImmutable($checkOut))->days;
+        $rateBreakdown = "Room prices:\n" . implode("\n", $priceParts);
+        if ($combinedRate !== null) {
+            $stayTotal = ($hasFromPrice ? 'From ' : '') . 'PHP ' . number_format($totalPrice * $nights, 2);
+            $rateBreakdown .= "\nCombined room rate: {$combinedRate}";
+            $rateBreakdown .= "\nEstimated stay total ({$nights} " . ($nights === 1 ? 'night' : 'nights') . "): {$stayTotal}";
+        }
         $options[] = [
             'id' => null, 'option_key' => 'plan:' . implode(',', array_map(static fn(array $item): string => $item['stay_id'] . 'x' . $item['quantity'], $components)),
             'name' => $name, 'max_guests' => $plan['capacity'], 'available' => 1, 'style' => 'combination',
@@ -777,7 +783,8 @@ function facebookConversationOptionsText(array $options, array $rules): string
         $label = ($option['style'] ?? '') === 'combination'
             ? $option['name'] . ' (combined capacity: ' . $option['max_guests'] . ' guests)'
             : $option['name'] . ' (up to ' . $option['max_guests'] . ' guests)';
-        $lines[] = ($index + 1) . '. ' . $label . ' — ' . (($option['rate_breakdown'] ?? null) ?: (($option['rate'] ?? null) ?: 'rate to be provided by staff'));
+        $price = ($option['rate_breakdown'] ?? null) ?: (($option['rate'] ?? null) ?: 'Rate to be provided by staff');
+        $lines[] = ($index + 1) . '. ' . $label . "\n" . $price;
     }
     return facebookGuidedReply($rules, 'options_intro') . "\n" . implode("\n", $lines);
 }
@@ -1109,7 +1116,7 @@ function facebookConversationSummary(array $data, array $rules, array $presentat
         : "\n📞 {$contact}";
     $extraLines = "\n🎉 Activities: " . (implode(', ', $data['activity_names'] ?? []) ?: 'None')
         . "\n📝 Notes: " . (($data['notes'] ?? '') !== '' ? $data['notes'] : 'None');
-    if (!empty($data['stay_plan']) && !empty($data['rate_breakdown'])) $extraLines .= "\n💰 Rate calculation: " . $data['rate_breakdown'];
+    if (!empty($data['stay_plan']) && !empty($data['rate_breakdown'])) $extraLines .= "\n\n💰 Estimated accommodation price\n" . $data['rate_breakdown'];
     foreach (($presentation['extra_lines'] ?? []) as $line) {
         if (is_string($line) && trim($line) !== '') $extraLines .= "\n" . trim($line);
     }

@@ -129,8 +129,11 @@
 .booking-card-grid { display: grid; gap: 13px; }
 .booking-card-grid--stays { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .booking-card-grid--activities { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.booking-room-plan-note { grid-column: 1 / -1; margin: 0; padding: 12px 14px; border-radius: 9px; color: #53655c; background: #eaf5f0; font-size: 11px; line-height: 1.55; }
+.booking-room-plan-note strong { color: var(--deep); }
 .booking-choice-card { position: relative; display: flex; min-width: 0; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.66); box-shadow: 0 8px 22px -17px rgba(0,25,22,.35); cursor: pointer; overflow: hidden; transition: border-color .25s, box-shadow .35s, transform .35s cubic-bezier(.16,1,.3,1); }
 .booking-choice-card > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.booking-choice-card__select { display: contents; cursor: pointer; }
 .booking-choice-card:focus-within { outline: 3px solid rgba(239,118,92,.2); outline-offset: 2px; }
 .booking-choice-card.is-selected { border-color: var(--coral); box-shadow: 0 0 0 2px var(--coral), 0 18px 35px -22px rgba(0,25,22,.55); }
 .booking-choice-card__image { position: relative; display: block; aspect-ratio: 16 / 10; background: var(--sand); overflow: hidden; }
@@ -142,6 +145,13 @@
 .booking-choice-card__body small { display: block; margin-top: 7px; color: #53655c; font-size: 10px; font-weight: 700; line-height: 1.4; text-transform: uppercase; letter-spacing: .06em; }
 .booking-choice-card__body > span { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .booking-choice-card__body em { margin-top: 11px; padding: 5px 8px; border-radius: 100px; color: var(--deep); background: var(--pale-coral); font: normal 700 8px/1 sans-serif; letter-spacing: .07em; text-transform: uppercase; }
+.booking-room-quantity { display: flex; width: auto; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding: 12px 15px 15px; color: var(--ink); }
+.booking-choice-card > .booking-room-quantity { grid-column: 1 / -1; }
+.booking-room-quantity b { font-size: 10px; }
+.booking-room-quantity > span { display: grid; grid-template-columns: 30px 28px 30px; align-items: center; text-align: center; }
+.booking-room-quantity button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--deep); background: white; font-size: 17px; cursor: pointer; }
+.booking-room-quantity button:disabled { color: #aeb6b2; cursor: not-allowed; }
+.booking-room-quantity output { font-size: 12px; font-weight: 700; }
 .booking-choice-card--activity .booking-choice-card__body small { margin-top: auto; padding-top: 12px; }
 .booking-calendar-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(270px, .9fr); gap: 22px; align-items: stretch; }
 .booking-availability { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; color: #53655c; background: rgba(255,255,255,.62); }
