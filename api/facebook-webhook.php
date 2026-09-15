@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/api.php';
 require_once dirname(__DIR__) . '/includes/database.php';
 require_once dirname(__DIR__) . '/includes/facebook-automations.php';
+require_once dirname(__DIR__) . '/includes/facebook-worker.php';
 
 function webhookEnvironment(string $name): string
 {
@@ -73,9 +74,10 @@ function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
     return $id;
 }
 
-function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
+function webhookProcessPayload(PDO $db, array $payload, string $pageId): array
 {
-    if (($payload['object'] ?? null) !== 'page' || !is_array($payload['entry'] ?? null)) return;
+    if (($payload['object'] ?? null) !== 'page' || !is_array($payload['entry'] ?? null)) return [];
+    $eventIds = [];
     $rules = facebookSettings($db)['rules'];
     foreach ($payload['entry'] as $entry) {
         if (!is_array($entry) || (string) ($entry['id'] ?? '') !== $pageId) continue;
@@ -89,7 +91,7 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
             if ($senderId === '' || $mid === '' || $body === '') continue;
             $receivedAt = webhookTimestamp($messageEvent['timestamp'] ?? null);
             $category = facebookCategory($body, (bool) ($rules['categorize'] ?? true), $rules['keywords'] ?? null);
-            webhookInsertEvent($db, [
+            $eventId = webhookInsertEvent($db, [
                 'external_id' => $mid, 'page_id' => $pageId, 'sender_id' => $senderId, 'kind' => 'message',
                 'guest_name' => 'Messenger guest', 'body' => $body,
                 'attachment_type' => $normalizedMessage['attachment_type'], 'attachment_url' => $normalizedMessage['attachment_url'],
@@ -98,6 +100,7 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
                 'needs_attention' => $category === 'complaint', 'received_at' => $receivedAt,
                 'automatic_reply' => $normalizedMessage['automatic_reply'],
             ], $rules);
+            if ($eventId !== null) $eventIds[] = $eventId;
         }
         foreach (($entry['changes'] ?? []) as $change) {
             if (!is_array($change) || !is_array($change['value'] ?? null)) continue;
@@ -148,6 +151,36 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): void
             }
         }
     }
+    return $eventIds;
+}
+
+function webhookAcknowledgeAndDeliver(array $eventIds): never
+{
+    $body = 'EVENT_RECEIVED';
+    http_response_code(200);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: ' . strlen($body));
+    header('Connection: close');
+    echo $body;
+
+    ignore_user_abort(true);
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        if (ob_get_level() > 0) @ob_end_flush();
+        flush();
+    }
+
+    if ($eventIds !== []) {
+        try {
+            facebookRunDeliveryWorker($eventIds, 10, 12.0);
+        } catch (Throwable $error) {
+            error_log('Immediate Meta delivery failed; cron recovery remains queued: ' . get_class($error));
+        }
+    }
+    exit;
 }
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -185,9 +218,9 @@ try {
     if (!is_array($payload)) webhookPlain('Invalid request.', 400);
     $db = database();
     $db->beginTransaction();
-    webhookProcessPayload($db, $payload, $pageId);
+    $eventIds = webhookProcessPayload($db, $payload, $pageId);
     $db->commit();
-    webhookPlain('EVENT_RECEIVED', 200);
+    webhookAcknowledgeAndDeliver($eventIds);
 } catch (JsonException) {
     webhookPlain('Invalid request.', 400);
 } catch (Throwable $error) {
