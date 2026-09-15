@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'resort.php';
 require_once dirname(__DIR__, 2) . '/includes/booking-rooms.php';
+require_once dirname(__DIR__, 2) . '/includes/facebook-automations.php';
 
 $method = requireMethod('GET', 'PATCH');
 requireAdmin();
@@ -49,7 +50,7 @@ try {
         $undo = is_array($history) ? end($history) : false;
         if (!is_array($undo)) jsonResponse(['message' => 'There are no room moves to undo.'], 409);
         $db->beginTransaction();
-        $statement = $db->prepare('SELECT id, reference_code, stay_id, stay_type, room_index, updated_at FROM bookings WHERE id = ? FOR UPDATE');
+        $statement = $db->prepare('SELECT id, reference_code, stay_id, stay_plan_json, stay_type, room_index, updated_at FROM bookings WHERE id = ? FOR UPDATE');
         $statement->execute([(int) $undo['id']]);
         $booking = $statement->fetch();
         $sameCurrentPosition = $booking
@@ -60,8 +61,8 @@ try {
             $db->rollBack();
             jsonResponse(['message' => 'This booking changed after the move, so it cannot be safely undone.'], 409);
         }
-        $restore = $db->prepare('UPDATE bookings SET stay_id = ?, stay_type = ?, room_index = ?, updated_at = NOW() WHERE id = ?');
-        $restore->execute([$undo['stay_id'], $undo['stay_type'], $undo['room_index'], $undo['id']]);
+        $restore = $db->prepare('UPDATE bookings SET stay_id = ?, stay_type = ?, stay_plan_json = ?, room_index = ?, updated_at = NOW() WHERE id = ?');
+        $restore->execute([$undo['stay_id'], $undo['stay_type'], $undo['stay_plan_json'] ?? null, $undo['room_index'], $undo['id']]);
         array_pop($history);
         $restoredAt = $db->prepare('SELECT updated_at FROM bookings WHERE id = ?');
         $restoredAt->execute([$undo['id']]);
@@ -122,6 +123,10 @@ try {
         $reject = static function (string $message, int $status = 409) use ($db): void { $db->rollBack(); jsonResponse(['message' => $message], $status); };
         if (!$booking) $reject('Booking not found.', 404);
         if (!hash_equals((string) $booking['updated_at'], $expectedUpdatedAt)) $reject('This booking changed. Refresh and try editing the dates again.');
+        $bookingPlan = json_decode((string) ($booking['stay_plan_json'] ?? ''), true);
+        if (is_array($bookingPlan) && $bookingPlan !== [] && !facebookConversationStaySelectionAvailable($db, ['stay_plan' => $bookingPlan], $checkInValue, $checkOutValue, $id)) {
+            $reject('One or more rooms in this combination are unavailable for the new dates.');
+        }
 
         $stays = resortEntities($db, 'stays', true);
         $originalAssignments = bookingRoomAssignments($rows, $stays);
@@ -196,7 +201,7 @@ try {
         // Freeze existing displayed positions so accepting one move never shifts other cards.
         $pin = $db->prepare('UPDATE bookings SET room_index = ? WHERE id = ? AND room_index IS NULL');
         foreach ($rows as $row) if (!empty($assignments[$row['id']]) && in_array($row['status'], ['pending', 'confirmed', 'checked_in'], true)) $pin->execute([$assignments[$row['id']], $row['id']]);
-        $move = $db->prepare('UPDATE bookings SET stay_id = ?, stay_type = ?, room_index = ?, updated_at = NOW() WHERE id = ?');
+        $move = $db->prepare('UPDATE bookings SET stay_id = ?, stay_type = ?, stay_plan_json = NULL, room_index = ?, updated_at = NOW() WHERE id = ?');
         $move->execute([$stayId, $stay['name'], $room, $id]);
         $updatedAt = $db->prepare('SELECT updated_at FROM bookings WHERE id = ?');
         $updatedAt->execute([$id]);
@@ -205,6 +210,7 @@ try {
             'id' => $id,
             'stay_id' => $booking['stay_id'],
             'stay_type' => $booking['stay_type'],
+            'stay_plan_json' => $booking['stay_plan_json'] ?? null,
             'room_index' => $assignments[$id] ?? $booking['room_index'],
             'room_label' => preg_match('/room\z/i', (string) $booking['stay_type'])
                 ? (string) $booking['stay_type'] . ' #' . (string) ($assignments[$id] ?? $booking['room_index'])
@@ -247,13 +253,20 @@ try {
 
     $assignments = bookingRoomAssignments($rows, resortEntities($db, 'stays', true));
     if (in_array($status, ['confirmed', 'checked_in'], true)) {
-        $room = $assignments[$id] ?? null;
-        if (!$room) { $db->rollBack(); jsonResponse(['message' => 'Assign this booking to an available room first.'], 409); }
-        foreach ($rows as $other) {
-            $sameStay = $booking['stay_id'] ? (int) $booking['stay_id'] === (int) $other['stay_id'] : strcasecmp((string) $booking['stay_type'], (string) $other['stay_type']) === 0;
-            if ((int) $other['id'] !== $id && $sameStay && ($assignments[$other['id']] ?? null) === $room
-                && in_array($other['status'], ['confirmed', 'checked_in'], true) && bookingRoomOverlap($booking, $other)) {
-                $db->rollBack(); jsonResponse(['message' => 'This room already has a confirmed or checked-in booking for these dates. Move the request to an available room first.'], 409);
+        $bookingPlan = json_decode((string) ($booking['stay_plan_json'] ?? ''), true);
+        if (is_array($bookingPlan) && $bookingPlan !== []) {
+            if (!facebookConversationStaySelectionAvailable($db, ['stay_plan' => $bookingPlan], $booking['check_in'], $booking['check_out'], $id)) {
+                $db->rollBack(); jsonResponse(['message' => 'One or more rooms in this combination are no longer available for these dates.'], 409);
+            }
+        } else {
+            $room = $assignments[$id] ?? null;
+            if (!$room) { $db->rollBack(); jsonResponse(['message' => 'Assign this booking to an available room first.'], 409); }
+            foreach ($rows as $other) {
+                $sameStay = $booking['stay_id'] ? (int) $booking['stay_id'] === (int) $other['stay_id'] : strcasecmp((string) $booking['stay_type'], (string) $other['stay_type']) === 0;
+                if ((int) $other['id'] !== $id && $sameStay && ($assignments[$other['id']] ?? null) === $room
+                    && in_array($other['status'], ['confirmed', 'checked_in'], true) && bookingRoomOverlap($booking, $other)) {
+                    $db->rollBack(); jsonResponse(['message' => 'This room already has a confirmed or checked-in booking for these dates. Move the request to an available room first.'], 409);
+                }
             }
         }
     }

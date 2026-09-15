@@ -134,7 +134,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const dialogRef = useRef(null);
   const leadPhoneDigits = String(initialGuest?.phone || '').replace(/\D/g, '').replace(/^(?:63|0)(?=\d{10}$)/, '');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
-  const [selectedStay, setSelectedStay] = useState(String(initialStay));
+  const [selectedStay, setSelectedStay] = useState(String(initialStay || ''));
+  const [selectedStayPlan, setSelectedStayPlan] = useState(chatDraft?.stayPlan || []);
   const [selectedActivities, setSelectedActivities] = useState(initialService ? [String(initialService)] : []);
   const [checkInDate, setCheckInDate] = useState(initialDate);
   const [checkOutDate, setCheckOutDate] = useState('');
@@ -149,7 +150,10 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     copy: 'Add a UFO ride to your beach day for a fast, splash-filled group adventure.',
     availabilityLabel: 'Rates and availability upon inquiry.',
   }];
-  const selectedStayDetails = stays.find(stay => String(stay.id) === selectedStay);
+  const combinationRooms = selectedStayPlan.map(component => ({ ...component, stay: stays.find(stay => Number(stay.id) === Number(component.stay_id)) })).filter(component => component.stay);
+  const selectedStayDetails = selectedStayPlan.length
+    ? { name: chatDraft?.stayName || combinationRooms.map(item => `${item.quantity} × ${item.stay.name}`).join(' + '), min_guests: 1, max_guests: combinationRooms.reduce((total, item) => total + Number(item.capacity || item.stay.capacity) * Number(item.quantity), 0), guests: chatDraft?.guests }
+    : stays.find(stay => String(stay.id) === selectedStay);
   const selectedActivityDetails = bookingActivities.filter(service => selectedActivities.includes(String(service.id)));
   const [calendarYear, calendarMonthNumber] = calendarMonth.split('-').map(Number);
   const firstCalendarDay = new Date(calendarYear, calendarMonthNumber - 1, 1);
@@ -161,7 +165,9 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const selectingCheckOut = Boolean(checkInDate && !checkOutDate);
   const latestCheckOut = checkInDate ? (() => { const date = new Date(`${checkInDate}T12:00:00`); date.setDate(date.getDate() + 30); return dateKey(date); })() : '';
   const nightCount = checkInDate && checkOutDate ? Math.round((new Date(`${checkOutDate}T12:00:00`) - new Date(`${checkInDate}T12:00:00`)) / 86400000) : 0;
-  const stayRate = mockStayRate(selectedStayDetails);
+  const stayRate = selectedStayPlan.length
+    ? combinationRooms.reduce((total, item) => total + mockStayRate(item.stay) * Number(item.quantity), 0)
+    : mockStayRate(selectedStayDetails);
   const staySubtotal = stayRate * nightCount;
   const activitySubtotal = selectedActivityDetails.reduce((total, activity) => total + mockActivityRate(activity), 0);
   const mockTotal = staySubtotal + activitySubtotal;
@@ -169,7 +175,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   useEffect(() => {
     const dialog = dialogRef.current;
     if (open && dialog && !dialog.open) {
-      setSelectedStay(String(initialStay));
+      setSelectedStay(String(initialStay || ''));
+      setSelectedStayPlan(chatDraft?.stayPlan || []);
       setSelectedActivities(chatDraft ? chatDraft.activityIds.map(String) : initialService ? [String(initialService)] : []);
       setCheckInDate(initialDate);
       setCheckOutDate(chatDraft?.checkOut || '');
@@ -186,46 +193,56 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   }, [open]);
 
   useEffect(() => {
-    if (!open || !selectedStay || !checkInDate || !checkOutDate) {
+    if (!open || (!selectedStay && !selectedStayPlan.length) || !checkInDate || !checkOutDate) {
       setAvailability({ type: 'idle' });
       return undefined;
     }
 
     const controller = new AbortController();
-    const parameters = new URLSearchParams({ stay_id: selectedStay, check_in: checkInDate, check_out: checkOutDate });
     setAvailability({ type: 'loading' });
-    fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal })
-      .then(async response => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Availability could not be checked.');
-        setAvailability({ type: 'success', ...data });
+    const requestedRooms = selectedStayPlan.length ? selectedStayPlan : [{ stay_id: Number(selectedStay), quantity: 1 }];
+    Promise.all(requestedRooms.map(async room => {
+      const parameters = new URLSearchParams({ stay_id: room.stay_id, check_in: checkInDate, check_out: checkOutDate });
+      const response = await fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Availability could not be checked.');
+      return { ...data, quantity: Number(room.quantity) };
+    }))
+      .then(results => {
+        setAvailability({ type: 'success', available: Math.min(...results.map(item => Math.floor(item.available / item.quantity))), capacity: 1, occupied: results.reduce((total, item) => total + item.occupied, 0), pending: results.reduce((total, item) => total + item.pending, 0), combination: selectedStayPlan.length > 0 });
       })
       .catch(error => {
         if (error.name !== 'AbortError') setAvailability({ type: 'error', message: error.message });
       });
     return () => controller.abort();
-  }, [open, selectedStay, checkInDate, checkOutDate]);
+  }, [open, selectedStay, selectedStayPlan, checkInDate, checkOutDate]);
 
   useEffect(() => {
-    if (!open || !selectedStay) return;
+    if (!open || (!selectedStay && !selectedStayPlan.length)) return;
     const controller = new AbortController();
     const monthStart = `${calendarMonth}-01`;
     const from = checkInDate && checkInDate < monthStart && (new Date(`${monthStart}T12:00:00`) - new Date(`${checkInDate}T12:00:00`)) / 86400000 <= 31 ? checkInDate : monthStart;
     const end = new Date(`${from}T12:00:00`);
     end.setDate(end.getDate() + 62);
     setCalendarAvailability({ type: 'loading', days: {} });
-    const parameters = new URLSearchParams({ stay_id: selectedStay, check_in: from, check_out: dateKey(end) });
-    fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal })
-      .then(async response => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Availability could not be loaded.');
-        setCalendarAvailability({ type: 'success', days: data.days, stay: selectedStay, month: calendarMonth });
+    const requestedRooms = selectedStayPlan.length ? selectedStayPlan : [{ stay_id: Number(selectedStay), quantity: 1 }];
+    Promise.all(requestedRooms.map(async room => {
+      const parameters = new URLSearchParams({ stay_id: room.stay_id, check_in: from, check_out: dateKey(end) });
+      const response = await fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Availability could not be loaded.');
+      return { ...data, quantity: Number(room.quantity) };
+    }))
+      .then(results => {
+        const days = {};
+        Object.keys(results[0]?.days || {}).forEach(date => { days[date] = Math.min(...results.map(item => Math.floor((item.days[date] || 0) / item.quantity))); });
+        setCalendarAvailability({ type: 'success', days, stay: selectedStay || 'combination', month: calendarMonth });
       })
       .catch(error => { if (error.name !== 'AbortError') setCalendarAvailability({ type: 'error', days: {} }); });
     return () => controller.abort();
-  }, [open, selectedStay, calendarMonth, checkInDate]);
+  }, [open, selectedStay, selectedStayPlan, calendarMonth, checkInDate]);
 
-  const calendarReady = calendarAvailability.type === 'success' && calendarAvailability.stay === selectedStay && calendarAvailability.month === calendarMonth;
+  const calendarReady = calendarAvailability.type === 'success' && calendarAvailability.stay === (selectedStay || 'combination') && calendarAvailability.month === calendarMonth;
   const isBlockedDate = value => {
     if (!calendarReady) return true;
     if (selectingCheckOut && value > checkInDate) {
@@ -291,6 +308,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     if (chatDraft) body.chat_draft_token = chatDraft.token;
     if (manual && facebookLeadId) body.facebook_lead_id = facebookLeadId;
     body.stay_id = selectedStay ? Number(selectedStay) : null;
+    if (selectedStayPlan.length) body.stay_plan = selectedStayPlan.map(({ stay_id, quantity }) => ({ stay_id: Number(stay_id), quantity: Number(quantity) }));
     const soleActivityId = selectedActivities.length === 1 ? Number(selectedActivities[0]) : null;
     body.service_id = Number.isInteger(soleActivityId) ? soleActivityId : null;
     try {
@@ -319,12 +337,16 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
         <section className="booking-step field--wide" aria-labelledby="choose-stay-title">
           <div className="booking-step__heading"><span>01</span><div><h3 id="choose-stay-title">{manual ? 'Select accommodation' : 'Choose your space'}</h3><p>{manual ? 'Select the accommodation requested by the guest. Review availability for the selected dates below.' : 'Browse every stay option. Photos are representative while room assignments are confirmed by our team.'}</p></div></div>
           <div className="booking-card-grid booking-card-grid--stays">
+            {chatDraft?.stayPlan?.length > 0 && <label className={`booking-choice-card ${selectedStayPlan.length ? 'is-selected' : ''}`} htmlFor="booking-stay-combination">
+              <input id="booking-stay-combination" type="radio" name="stay_choice" value="combination" checked={selectedStayPlan.length > 0} onChange={() => { setSelectedStay(''); setSelectedStayPlan(chatDraft.stayPlan); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
+              <span className="booking-choice-card__body"><strong>Recommended room combination</strong><small>{chatDraft.stayName}</small><span>Exact rooms selected by the assistant based on your group size and current availability.</span><em>{selectedStayPlan.length ? 'Selected' : 'Select combination'}</em></span>
+            </label>}
             {stays.map((stay, index) => {
               const inputId = `booking-stay-${stay.id}`;
               const photo = stay.photos?.length ? { src: stayPhotoSource(stay.photos[0]), alt: stay.name } : roomPhotos[index % roomPhotos.length];
               const unitCount = stayInventoryCount(stay);
               return <label className={`booking-choice-card ${selectedStay === String(stay.id) ? 'is-selected' : ''}`} htmlFor={inputId} key={stay.id}>
-                <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => { setSelectedStay(String(stay.id)); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
+                <input id={inputId} type="radio" name="stay_choice" value={stay.id} checked={selectedStay === String(stay.id)} onChange={() => { setSelectedStay(String(stay.id)); setSelectedStayPlan([]); setCheckInDate(''); setCheckOutDate(''); setAvailability({ type: 'idle' }); }} required />
                 <span className="booking-choice-card__image"><img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" /><i>{selectedStay === String(stay.id) ? 'Selected' : 'Select room'}</i></span>
                 <span className="booking-choice-card__body"><strong>{stay.name}</strong><small>{stay.capacity} guests · {unitCount} {unitCount === 1 ? 'unit' : 'units'}</small><span>{stay.description}</span>{stay.badge && <em>{stay.badge}</em>}</span>
               </label>;
@@ -352,7 +374,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
                 })}
               </div>
               <p className="booking-calendar__hint"><span /> Check-in <span /> Check-out <i /> Your stay</p>
-              <p className="booking-calendar__availability-note" role="status">{!selectedStay ? 'Select an accommodation to see available dates.' : !calendarReady ? (calendarAvailability.type === 'error' ? 'Availability could not be loaded. Select the accommodation again or change month to retry.' : 'Loading available dates…') : 'Crossed-out dates are fully booked. Checkout is allowed on a fully booked date when the preceding nights are available.'}</p>
+              <p className="booking-calendar__availability-note" role="status">{!selectedStay && !selectedStayPlan.length ? 'Select an accommodation to see available dates.' : !calendarReady ? (calendarAvailability.type === 'error' ? 'Availability could not be loaded. Select the accommodation again or change month to retry.' : 'Loading available dates…') : 'Crossed-out dates are fully booked. Checkout is allowed on a fully booked date when the preceding nights are available.'}</p>
             </div>
             <div className="booking-schedule-controls">
               <CompactTimePicker label="Arrival time" value={arrivalTime} onChange={setArrivalTime} />
@@ -366,7 +388,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className={`booking-availability booking-availability--${availability.type}${availability.type === 'success' && availability.available === 0 ? ' is-full' : ''}`} aria-live="polite">
             {availability.type === 'idle' && <p>Select an accommodation and complete date range to check availability.</p>}
             {availability.type === 'loading' && <p>Checking room availability…</p>}
-            {availability.type === 'success' && <><strong>{availability.available > 0 ? `${availability.available} of ${availability.capacity} ${availability.capacity === 1 ? 'unit is' : 'units are'} available` : 'No units are currently available'}</strong><p>For your selected dates. Peak confirmed occupancy: {availability.occupied}; pending requests: {availability.pending}. Availability is finalized by the resort team.</p></>}
+            {availability.type === 'success' && <><strong>{availability.available > 0 ? (availability.combination ? 'Every room in this combination is available' : `${availability.available} of ${availability.capacity} ${availability.capacity === 1 ? 'unit is' : 'units are'} available`) : 'No units are currently available'}</strong><p>For your selected dates. Peak confirmed occupancy: {availability.occupied}; pending requests: {availability.pending}. Availability is finalized by the resort team.</p></>}
             {availability.type === 'error' && <p>{availability.message} You can still submit an inquiry.</p>}
           </div>
         </section>

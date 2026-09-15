@@ -31,6 +31,7 @@ $stayType = cleanText($data['stay_type'] ?? '', 50);
 $message = cleanText($data['message'] ?? '', 1000);
 $guests = filter_var($data['guests'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]);
 $stayId = $data['stay_id'] ?? null;
+$stayPlanInput = $data['stay_plan'] ?? [];
 $serviceId = $data['service_id'] ?? null;
 
 $errors = [];
@@ -39,6 +40,7 @@ if ((!$manualBooking || $email !== '') && filter_var($email, FILTER_VALIDATE_EMA
 if ((!$manualBooking || $phone !== '') && preg_match('/\A[0-9+()\-\s]{7,30}\z/', $phone) !== 1) $errors['phone'] = 'Enter a valid mobile number.';
 if ($guests === false) $errors['guests'] = 'Guests must be between 1 and 100.';
 if ($stayId !== null && (!is_int($stayId) || $stayId < 1)) $errors['stay_id'] = 'Choose a valid stay.';
+if (!is_array($stayPlanInput) || count($stayPlanInput) > 10) $errors['stay_plan'] = 'Choose a valid room arrangement.';
 if ($serviceId !== null && (!is_int($serviceId) || $serviceId < 1)) $errors['service_id'] = 'Choose a valid service.';
 
 try {
@@ -79,22 +81,56 @@ try {
     // Serialize offer resolution with content saves. Names are historical snapshots.
     $db->query('SELECT revision FROM resort_revision WHERE id = 1 LOCK IN SHARE MODE')->fetchColumn();
     $stayRecord = null;
+    $stayPlan = [];
     if ($stayId !== null || $stayType !== '') {
         $query = $db->prepare('SELECT id, name FROM resort_stays WHERE enabled = 1 AND archived = 0 AND ' . ($stayId !== null ? 'id = ?' : 'name = ?') . ' ORDER BY id LIMIT 1');
         $query->execute([$stayId ?? $stayType]);
         $stayRecord = $query->fetch();
         if (!$stayRecord) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This stay is no longer listed. Refresh and choose another stay.'], 422); }
     }
+    if ($chatToken !== null && $stayPlanInput !== []) {
+        $seenStayIds = [];
+        $combinedCapacity = 0;
+        foreach ($stayPlanInput as $component) {
+            $componentId = is_array($component) ? filter_var($component['stay_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) : false;
+            $quantity = is_array($component) ? filter_var($component['quantity'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 20]]) : false;
+            if ($componentId === false || $quantity === false || isset($seenStayIds[$componentId])) {
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Choose a valid room arrangement.'], 422);
+            }
+            $componentQuery = $db->prepare('SELECT id, name, details, availability FROM resort_stays WHERE id = ? AND enabled = 1 AND archived = 0 LIMIT 1');
+            $componentQuery->execute([$componentId]);
+            $componentStay = $componentQuery->fetch();
+            if (!$componentStay || $componentStay['availability'] === 'unavailable') {
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'A room in this arrangement is no longer listed. Reopen the booking form from chat.'], 409);
+            }
+            $componentDetails = json_decode($componentStay['details'], true, 32, JSON_THROW_ON_ERROR);
+            $capacityPerRoom = (int) ($componentDetails['max_guests'] ?? 0);
+            if ($capacityPerRoom < 1 || $capacityPerRoom > 10 || in_array(($componentDetails['style'] ?? 'standard'), ['group', 'exclusive'], true)
+                || facebookConversationAvailableUnits($db, (int) $componentStay['id'], $componentStay['name'], $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), (int) ($componentDetails['room_count'] ?? 0), false) < $quantity) {
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'The selected room combination is no longer available for these dates. Reopen the booking form from chat.'], 409);
+            }
+            $seenStayIds[$componentId] = true;
+            $combinedCapacity += $capacityPerRoom * $quantity;
+            $stayPlan[] = ['stay_id' => (int) $componentStay['id'], 'name' => $componentStay['name'], 'quantity' => (int) $quantity, 'capacity' => $capacityPerRoom];
+        }
+        if ($combinedCapacity < $guests) {
+            $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'The selected rooms do not fit the total number of guests.'], 422);
+        }
+        $stayRecord = null;
+        $stayType = implode(' + ', array_map(static fn(array $component): string => $component['quantity'] . ' × ' . $component['name'], $stayPlan));
+    }
     if ($chatToken !== null) {
-        if (!$stayRecord || websiteChatPhone($phone) === '') {
+        if ((!$stayRecord && $stayPlan === []) || websiteChatPhone($phone) === '') {
             $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Choose an accommodation and enter a valid Philippine mobile number.'], 422);
         }
-        $query = $db->prepare('SELECT details, availability FROM resort_stays WHERE id = ?');
-        $query->execute([$stayRecord['id']]); $current = $query->fetch();
-        $details = json_decode($current['details'], true, 32, JSON_THROW_ON_ERROR);
-        if ($current['availability'] === 'unavailable' || $guests < ($details['min_guests'] ?? 1) || $guests > ($details['max_guests'] ?? 100)
-            || facebookConversationAvailableUnits($db, (int) $stayRecord['id'], $stayRecord['name'], $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), (int) ($details['room_count'] ?? 0), ($details['style'] ?? '') === 'exclusive') < 1) {
-            $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This room no longer fits your dates or group. Please review your selection.'], 409);
+        if ($stayRecord) {
+            $query = $db->prepare('SELECT details, availability FROM resort_stays WHERE id = ?');
+            $query->execute([$stayRecord['id']]); $current = $query->fetch();
+            $details = json_decode($current['details'], true, 32, JSON_THROW_ON_ERROR);
+            if ($current['availability'] === 'unavailable' || $guests < ($details['min_guests'] ?? 1) || $guests > ($details['max_guests'] ?? 100)
+                || facebookConversationAvailableUnits($db, (int) $stayRecord['id'], $stayRecord['name'], $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), (int) ($details['room_count'] ?? 0), ($details['style'] ?? '') === 'exclusive') < 1) {
+                $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This room no longer fits your dates or group. Please review your selection.'], 409);
+            }
         }
         $message = "Website chat request.\n" . $message;
         if (mb_strlen($message) > 1000) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'Please shorten the additional information.'], 422); }
@@ -109,8 +145,9 @@ try {
     $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
     // A stable unique reference prevents duplicate insertion even if PHP stops after commit but before saving the session.
     if ($chatToken !== null) $reference = 'OD-W-' . strtoupper(substr(hash('sha256', $chatToken), 0, 18));
-    $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?)');
-    $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayRecord['name'] ?? null, $message ?: null, $stayRecord['id'] ?? null, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
+    $stayPlanJson = $stayPlan !== [] ? json_encode($stayPlan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) : null;
+    $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?, ?)');
+    $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayPlan !== [] ? $stayType : ($stayRecord['name'] ?? null), $message ?: null, $stayRecord['id'] ?? null, $stayPlanJson, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
     if ($facebookLeadId !== null) {
         $bookingId = (int) $db->lastInsertId();
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);

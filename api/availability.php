@@ -42,14 +42,13 @@ try {
     $capacity = ($details['style'] ?? '') === 'exclusive' ? 1 : max(1, $configuredCount);
 
     $bookingQuery = $db->prepare(
-        "SELECT check_in, check_out, status
+        "SELECT stay_id, stay_type, stay_plan_json, check_in, check_out, status
          FROM bookings
-         WHERE (stay_id = ? OR (stay_id IS NULL AND stay_type = ?))
-           AND status IN ('pending', 'confirmed', 'checked_in')
+         WHERE status IN ('pending', 'confirmed', 'checked_in')
            AND check_in < ?
            AND check_out > ?"
     );
-    $bookingQuery->execute([$stayId, $stay['name'], $checkOutValue, $checkInValue]);
+    $bookingQuery->execute([$checkOutValue, $checkInValue]);
     $bookings = $bookingQuery->fetchAll();
 
     $minimumAvailable = $capacity;
@@ -62,8 +61,15 @@ try {
         $pending = 0;
         foreach ($bookings as $booking) {
             if ($booking['check_in'] <= $key && $booking['check_out'] > $key) {
-                if ($booking['status'] === 'pending') $pending++;
-                else $occupied++;
+                $units = 0;
+                $plan = json_decode((string) ($booking['stay_plan_json'] ?? ''), true);
+                if (is_array($plan)) {
+                    foreach ($plan as $component) if ((int) ($component['stay_id'] ?? 0) === $stayId) $units += max(0, (int) ($component['quantity'] ?? 0));
+                } elseif ((int) ($booking['stay_id'] ?? 0) === $stayId || ($booking['stay_id'] === null && $booking['stay_type'] === $stay['name'])) {
+                    $units = 1;
+                }
+                if ($booking['status'] === 'pending') $pending += $units;
+                else $occupied += $units;
             }
         }
         $peakOccupied = max($peakOccupied, $occupied);

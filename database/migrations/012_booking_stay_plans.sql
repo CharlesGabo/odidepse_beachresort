@@ -1,0 +1,2 @@
+ALTER TABLE bookings MODIFY COLUMN stay_type VARCHAR(255) NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stay_plan_json JSON NULL AFTER stay_id;

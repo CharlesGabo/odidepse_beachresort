@@ -14,7 +14,7 @@ npm run build
 
 Setup checks the additive Facebook tables, including the stateful conversation table from migration 009, in the local `odidepse_db` using its configured application account. It creates missing tables only if that account has schema privileges, preserves existing rows, and reports booking counts before/after. If CREATE permission is unavailable, apply the SQL through the local database administration connection (for example phpMyAdmin); do not substitute root credentials in the application. The test uses a transaction and rolls back its own rows.
 
-For a later authorized Z.com release, apply migrations 004 through 009 in order after migrations 001 and 003, then deploy the changed PHP and compiled frontend together. Keep setup/test scripts and this document out of `public_html`; follow `DEPLOYMENT_WORKFLOW.md`. Configure the documented Meta environment values separately; never upload the local `.env`.
+For a later authorized Z.com release, apply migrations 004 through 009 in order after migrations 001 and 003, and apply migration 012 before deploying chatbot room-combination support. Then deploy the changed PHP and compiled frontend together. Keep setup/test scripts and this document out of `public_html`; follow `DEPLOYMENT_WORKFLOW.md`. Configure the documented Meta environment values separately; never upload the local `.env`.
 
 ## Available workflows
 

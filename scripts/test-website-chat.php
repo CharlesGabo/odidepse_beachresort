@@ -22,8 +22,19 @@ try {
     $inquiryStart = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'inquiry-start'];
     websiteChatReply($db, $inquiryStart, "I'd like to inqure", $rules);
     chatCheck($inquiryStart['state'] === 'booking' && empty($inquiryStart['data']['guest_name']), 'Common inquiry wording starts website booking flow without becoming the guest name');
+    foreach (['hm', 'how much po', 'magkano po'] as $rateQuestion) {
+        $rateStart = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'rate-start'];
+        websiteChatReply($db, $rateStart, $rateQuestion, $rules);
+        chatCheck($rateStart['state'] === 'rates', $rateQuestion . ' starts the website rate flow');
+    }
     $start = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+500 days');
     $end = $start->modify('+2 days');
+    $combinationChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'combination'];
+    websiteChatReply($db, $combinationChat, "Dates: {$start->format('F j')} to {$end->format('F j, Y')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 15\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567", $rules);
+    chatCheck(($combinationChat['data']['stay_plan'][0]['quantity'] ?? 0) === 1 && count($combinationChat['data']['stay_plan'] ?? []) === 2, 'Website chat selects an available multi-room plan for fifteen guests');
+    chatCheck(substr_count((string) ($combinationChat['data']['rate_breakdown'] ?? ''), ' at PHP ') >= 2 && str_contains((string) $combinationChat['data']['rate_breakdown'], ' total'), 'Website review retains the per-room combination calculation');
+    $combinationDraft = websiteChatReply($db, $combinationChat, 'CONFIRM', $rules)['draft'] ?? [];
+    chatCheck(count($combinationDraft['stayPlan'] ?? []) === 2 && ($combinationDraft['stayId'] ?? null) === null, 'Website modal draft carries the exact multi-room plan');
     $labelledChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'labelled'];
     $labelledReply = websiteChatReply($db, $labelledChat, "Dates: {$start->format('F j')} to {$end->format('F j, Y')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 5\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567", $rules)['reply'];
     chatCheck(($labelledChat['data']['guests'] ?? null) === 5 && $labelledChat['state'] === 'review' && str_contains($labelledReply, '5 guests'), 'Label-first guest count completes website booking from idle');
