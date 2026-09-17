@@ -45,7 +45,7 @@ Docker and Render are deliberately excluded. Do not introduce them without an ex
 project-root/
 ├── api/                         Public PHP API endpoints
 ├── includes/                    Reusable non-public PHP modules
-├── scripts/                     Local preview/development automation
+├── scripts/                     Local tools and controlled operational commands
 ├── src/                         React source code
 ├── .env                         Local secrets; never tracked
 ├── .env.example                 Placeholder environment-variable contract

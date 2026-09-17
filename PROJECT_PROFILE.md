@@ -46,7 +46,7 @@ When identity or location changes, inspect and update:
 - `src/` — visible project name/content
 - `vite.config.js` — XAMPP proxy rewrite and production base
 - `.env.example` — database defaults/placeholders
-- `scripts/start-client-preview.ps1` — executable paths, port, and status text
+- `scripts/local/start-client-preview.ps1` — executable paths, port, and status text
 - API responses or email templates containing the project name
 - database/schema names and migration files
 - Git remote and hosting configuration

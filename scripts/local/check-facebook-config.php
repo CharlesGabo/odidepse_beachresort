@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
-require_once dirname(__DIR__) . '/includes/automations/facebook-automations.php';
+require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
 
 try {
     $settings = facebookSettings(database());

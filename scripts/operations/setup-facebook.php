@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require_once dirname(__DIR__) . '/includes/shared/database.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
 try {
     if (!in_array(requireEnvironment('DB_HOST'), ['127.0.0.1', 'localhost'], true) || requireEnvironment('DB_NAME') !== 'odidepse_db') {
         throw new RuntimeException('This setup command only supports the local project database.');
@@ -10,7 +10,7 @@ try {
     $db = database();
     $before = (int) $db->query('SELECT COUNT(*) FROM bookings')->fetchColumn();
     foreach (['004_facebook_automations.sql', '009_facebook_conversations.sql'] as $migration) {
-        $sql = file_get_contents(dirname(__DIR__) . '/database/migrations/' . $migration);
+        $sql = file_get_contents(dirname(__DIR__, 2) . '/database/migrations/' . $migration);
         if ($sql === false) throw new RuntimeException('Migration file not found.');
         foreach (explode(';', $sql) as $statement) {
             if (trim($statement) === '') continue;

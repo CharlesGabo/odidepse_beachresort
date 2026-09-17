@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__) . '/includes/bookings/booking-rooms.php';
+require_once dirname(__DIR__, 2) . '/includes/bookings/booking-rooms.php';
 $stay = ['id' => 1, 'name' => '8-guest room', 'room_count' => 3, 'style' => 'room'];
 $row = ['id' => 1, 'stay_id' => 1, 'stay_type' => $stay['name'], 'status' => 'pending', 'room_index' => null, 'check_in' => '2026-09-15', 'check_out' => '2026-09-20', 'created_at' => '2026-09-01', 'message' => ''];
 $rows = [array_replace($row, ['id' => 1, 'status' => 'checked_in', 'room_index' => 1]), array_replace($row, ['id' => 2, 'room_index' => 2]), array_replace($row, ['id' => 3, 'room_index' => 2]), array_replace($row, ['id' => 4, 'room_index' => 3, 'status' => 'completed'])];
@@ -15,8 +15,8 @@ if (bookingRoomOverlap($a, $b)) throw new RuntimeException('Non-overlapping boun
 if (!bookingRoomOverlap($row, $row)) throw new RuntimeException('Overlapping dates missed.');
 echo "Passed room assignment, completed-room reuse, pinned requests and time overlap checks.\n";
 if (in_array('--database', $argv ?? [], true)) {
-    require_once dirname(__DIR__) . '/includes/shared/database.php';
-    require_once dirname(__DIR__) . '/includes/resort/resort.php';
+    require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
+    require_once dirname(__DIR__, 2) . '/includes/resort/resort.php';
     $db = database();
     $rows = $db->query('SELECT id, stay_id, stay_type, status, room_index, check_in, check_out, created_at, message FROM bookings')->fetchAll();
     $assignments = bookingRoomAssignments($rows, resortEntities($db, 'stays', true));

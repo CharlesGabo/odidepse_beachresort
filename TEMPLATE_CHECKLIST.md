@@ -53,7 +53,7 @@ Confirm:
 http://localhost/<new-xampp-folder>/api/hello.php
 ```
 
-If port `8765` is already used, assign a different preview port in `scripts/start-client-preview.ps1` and record it in `PROJECT_PROFILE.md`.
+If port `8765` is already used, assign a different preview port in `scripts/local/start-client-preview.ps1` and record it in `PROJECT_PROFILE.md`.
 
 Update executable paths in the preview script if XAMPP, Node.js, or cloudflared is installed elsewhere.
 

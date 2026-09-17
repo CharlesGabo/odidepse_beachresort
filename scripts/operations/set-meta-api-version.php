@@ -5,11 +5,11 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 $version = $argv[1] ?? '';
 if (!is_string($version) || preg_match('/\Av[0-9]{1,2}\.[0-9]\z/', $version) !== 1) {
-    fwrite(STDERR, "Usage: php scripts/set-meta-api-version.php v26.0\n");
+    fwrite(STDERR, "Usage: php scripts/operations/set-meta-api-version.php v26.0\n");
     exit(1);
 }
 
-$path = dirname(__DIR__) . '/.env';
+$path = dirname(__DIR__, 2) . '/.env';
 if (!is_file($path) || !is_readable($path) || !is_writable($path)) {
     fwrite(STDERR, "The ignored local .env file must exist and be writable.\n");
     exit(1);

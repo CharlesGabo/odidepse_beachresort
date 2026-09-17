@@ -143,6 +143,37 @@ Apply these backend placement rules:
 - Keep the website chatbot and Facebook Messenger booking rules together under `includes/automations/` so their behavior does not drift.
 - Add a clearly named feature folder when a new backend responsibility does not fit an existing one.
 
+## Script file organization
+
+Separate developer-only tools from controlled operational commands:
+
+```text
+scripts/
+|-- local/                             Never deployed
+|   |-- start-client-preview.ps1       Local Cloudflare preview launcher
+|   |-- preview-router.php             Restricted local preview router
+|   |-- facebook-worker-loop.ps1       Local worker loop
+|   |-- test-*                         Automated local test entry points
+|   |-- check-*                        Local integration diagnostics
+|   `-- development documentation and test configuration
+`-- operations/                        Deliberate setup and maintenance commands
+    |-- create-admin.php
+    |-- seed-resort.php
+    |-- setup-*.php
+    |-- pin-booking-room-baseline.php
+    |-- set-meta-api-version.php
+    `-- facebook-worker.php            Production recovery worker entry point
+```
+
+Apply these script placement rules:
+
+- Put previews, automated tests, diagnostics, test configuration, and local worker loops in `scripts/local/`.
+- Put deliberate database setup, account creation, maintenance, and production-capable command-line entry points in `scripts/operations/`.
+- Never upload `scripts/local/` to production.
+- Do not upload all of `scripts/operations/` by default. Deploy only an explicitly required operational entry point, currently `facebook-worker.php` when Messenger delivery is enabled.
+- Keep `start-client-preview.cmd` at the repository root as the convenient launcher, pointing to `scripts/local/start-client-preview.ps1`.
+- After moving a script, update its project-root calculation and every command, launcher, cron, test, and documentation reference.
+
 ## Task workflow
 
 For every task:
@@ -165,7 +196,7 @@ The public website chatbot and Facebook Messenger automation share one determini
 - Implement shared behavior in `includes/automations/facebook-automations.php` or another reusable server module instead of maintaining separate copies.
 - Apply every rule-based fix requested for either chatbot to both the website and Facebook paths automatically.
 - Preserve only necessary channel differences: Messenger may use Facebook profile identity and can create a pending request after confirmation; website chat requires its booking-form fields and opens the prefilled booking modal after confirmation.
-- After a shared behavior change, run targeted coverage for both `scripts/test-facebook.php` and `scripts/test-website-chat.php` so the channels do not drift.
+- After a shared behavior change, run targeted coverage for both `scripts/local/test-facebook.php` and `scripts/local/test-website-chat.php` so the channels do not drift.
 - Clearly report any intentional difference between the two channels rather than silently implementing divergent behavior.
 
 ## SEO workflow

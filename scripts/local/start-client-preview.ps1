@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $phpExecutable = 'C:\xampp\php\php.exe'
 $npmExecutable = 'C:\Program Files\nodejs\npm.cmd'
 $cloudflaredExecutable = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'

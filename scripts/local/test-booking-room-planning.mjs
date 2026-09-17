@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { roomPlanning } from '../src/bookingRoomPlanning.js';
+import { roomPlanning } from '../../src/pages/admin/features/bookings/bookingRoomPlanning.js';
 const booking = (id, created_at) => ({ id, created_at, status: 'pending', check_in: '2026-09-15', check_out: '2026-09-20' });
 const units = [{ key: '1', bookings: [booking(3, '2026-09-03'), booking(2, '2026-09-02'), booking(1, '2026-09-01')] }, { key: '2', bookings: [] }];
 const result = roomPlanning(units);

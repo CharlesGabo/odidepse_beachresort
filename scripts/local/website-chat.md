@@ -20,4 +20,4 @@ Only unmatched general questions are eligible for AI. Active booking flows and r
 
 ## Verification
 
-Run `C:\xampp\php\php.exe scripts/test-website-chat.php` and the existing `scripts/test-facebook.php`. Tests use the local application account with rollback and do not call Gemini. Run PHP syntax checks and `npm run build`. Manually check keyboard/mobile layout and the final booking modal submission before release. Gemini integration requires a separately configured key for an actual provider smoke test.
+Run `C:\xampp\php\php.exe scripts/local/test-website-chat.php` and the existing `scripts/local/test-facebook.php`. Tests use the local application account with rollback and do not call Gemini. Run PHP syntax checks and `npm run build`. Manually check keyboard/mobile layout and the final booking modal submission before release. Gemini integration requires a separately configured key for an actual provider smoke test.

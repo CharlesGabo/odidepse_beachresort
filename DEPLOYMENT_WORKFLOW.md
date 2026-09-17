@@ -120,6 +120,7 @@ public_html/
 ├── assets/                    from dist/assets/
 ├── api/                       PHP endpoints
 ├── includes/                  shared PHP code
+├── scripts/operations/        only explicitly required production workers
 └── .htaccess                  production-safe Apache rules
 ```
 
@@ -130,7 +131,8 @@ Do not place these in `public_html`:
 ```text
 src/
 node_modules/
-scripts/
+scripts/local/
+scripts/operations/ files other than an explicitly required worker
 .git/
 local .env
 package.json / package-lock.json
@@ -147,7 +149,8 @@ Cloudflare launchers
 - Enable HTTPS and redirect HTTP to HTTPS.
 - Disable public error display and enable private logging.
 - Configure secure sessions, upload limits, email/SMTP, and scheduled tasks as applicable.
-- Configure a once-per-minute recovery cron for `php /home/ACCOUNT/public_html/scripts/facebook-worker.php` after replacing the placeholder with the real cPanel home path. Messenger webhooks attempt immediate event-scoped delivery; this cron remains required for retries and interrupted requests.
+- Deploy only `scripts/operations/facebook-worker.php` from the scripts tree when Messenger delivery is enabled.
+- Configure a once-per-minute recovery cron for `php /home/ACCOUNT/public_html/scripts/operations/facebook-worker.php` after replacing the placeholder with the real cPanel home path. Messenger webhooks attempt immediate event-scoped delivery; this cron remains required for retries and interrupted requests.
 - Configure SPA fallback routing if client-side routes are introduced.
 
 ## 6. Production verification

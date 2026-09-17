@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-$path = dirname(__DIR__) . '/.env';
+$path = dirname(__DIR__, 2) . '/.env';
 if (!is_file($path) || !is_readable($path) || !is_writable($path)) {
     fwrite(STDERR, "The ignored local .env file must exist and be writable.\n");
     exit(1);

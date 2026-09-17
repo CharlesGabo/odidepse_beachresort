@@ -7,12 +7,12 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once dirname(__DIR__) . '/includes/shared/database.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
 
 $email = strtolower(trim((string) ($argv[1] ?? '')));
 $displayName = trim((string) ($argv[2] ?? ''));
 if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($displayName) < 2 || strlen($displayName) > 100) {
-    fwrite(STDERR, "Usage: php scripts/create-admin.php admin@example.com \"Display Name\"\n");
+    fwrite(STDERR, "Usage: php scripts/operations/create-admin.php admin@example.com \"Display Name\"\n");
     exit(1);
 }
 

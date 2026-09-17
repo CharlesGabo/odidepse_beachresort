@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Continue'
 
 $phpExecutable = 'C:\xampp\php\php.exe'
-$worker = Join-Path $PSScriptRoot 'facebook-worker.php'
+$worker = Join-Path (Split-Path -Parent $PSScriptRoot) 'operations\facebook-worker.php'
 
 while ($true) {
     & $phpExecutable $worker *> $null

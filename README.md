@@ -19,7 +19,7 @@ The public website accepts booking requests and saves them to MySQL. The private
 2. Create the first administrator from the project root:
 
 ```powershell
-C:\xampp\php\php.exe scripts\create-admin.php admin@example.com "Resort Manager"
+C:\xampp\php\php.exe scripts\operations\create-admin.php admin@example.com "Resort Manager"
 ```
 
 3. Save the generated password in a password manager. It is printed only once.
@@ -68,4 +68,4 @@ Complete `TEMPLATE_CHECKLIST.md` before using a copy for another project. Never 
 
 # Website booking assistant
 
-The homepage chat shares Facebook Automations reply rules and opens a prefilled booking form for visitor review. Configure optional server-side Gemini using [Website Chat setup](scripts/website-chat.md).
+The homepage chat shares Facebook Automations reply rules and opens a prefilled booking form for visitor review. Configure optional server-side Gemini using [Website Chat setup](scripts/local/website-chat.md).

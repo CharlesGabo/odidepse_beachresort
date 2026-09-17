@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-$projectRoot = dirname(__DIR__);
+$projectRoot = dirname(__DIR__, 2);
 $distRoot = realpath($projectRoot . DIRECTORY_SEPARATOR . 'dist');
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 

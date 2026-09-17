@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require_once dirname(__DIR__) . '/includes/automations/facebook-automations.php';
-require_once dirname(__DIR__) . '/includes/resort/stay-photos.php';
+require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
+require_once dirname(__DIR__, 2) . '/includes/resort/stay-photos.php';
 function checkFacebook(bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException($message);
 }
