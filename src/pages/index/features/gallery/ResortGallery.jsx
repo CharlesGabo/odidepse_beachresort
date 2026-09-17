@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useResort } from './ResortContent.jsx';
+import { useResort } from '../../../../shared/resort/ResortContent.jsx';
 
 export function PhotoViewer({ photos, index, onClose, onChange }) {
   const ref = useRef(null);

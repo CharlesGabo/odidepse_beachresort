@@ -1,11 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
-import './styles.css';
-import './resort-info.css';
+import IndexPage from './pages/index/IndexPage.jsx';
+import './shared/styles/global.css';
+import './pages/index/styles/resort-info.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <IndexPage />
   </StrictMode>,
 );

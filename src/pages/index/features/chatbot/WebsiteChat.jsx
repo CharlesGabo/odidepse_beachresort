@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useResort } from './ResortContent.jsx';
+import { useResort } from '../../../../shared/resort/ResortContent.jsx';
 import './website-chat.css';
 
 export default function WebsiteChat({ onDraft, onBook, refresh }) {

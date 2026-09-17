@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useResort } from './ResortContent.jsx';
+import { useResort } from '../../../../shared/resort/ResortContent.jsx';
 
 function conditions(symbol = '') {
   if (symbol.includes('thunder')) return ['⛈', 'Thunderstorms'];

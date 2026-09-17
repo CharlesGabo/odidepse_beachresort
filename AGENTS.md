@@ -66,6 +66,47 @@ Important distinctions:
 - Cloudflare is for temporary client previews, not production hosting.
 - Docker and Render are not part of this architecture. Do not add them unless the user explicitly changes the hosting strategy.
 
+## Frontend file organization
+
+Organize React source by page first and then by feature. Preserve this structure when adding, moving, or editing frontend files:
+
+```text
+src/
+|-- main.jsx                         Application entry point
+|-- assets/                          Images and videos used across pages
+|-- pages/
+|   |-- index/
+|   |   |-- IndexPage.jsx            Public resort page composition
+|   |   |-- features/
+|   |   |   |-- chatbot/             Website booking chatbot
+|   |   |   |-- gallery/             Resort and guest galleries
+|   |   |   |-- stays/               Public stay cards
+|   |   |   `-- weather/             Forecast and booking weather UI
+|   |   `-- styles/                  Public-page styles
+|   `-- admin/
+|       |-- AdminPage.jsx             Admin page composition and session shell
+|       `-- features/
+|           |-- bookings/             Booking views, calendar, and planning
+|           |-- dashboard/            Operations dashboard calculations
+|           |-- facebook-automation/  Messenger, comments, and automation UI
+|           `-- resort-management/    Stay, service, and content management
+`-- shared/
+    |-- resort/                        Resort context, formatting, and asset map
+    |-- stay-photos/                   Photo UI shared by public and admin pages
+    `-- styles/                        Application-wide foundation styles
+```
+
+Apply these placement rules:
+
+- Put code used only by the public page under `src/pages/index/` in the closest matching feature folder.
+- Put code used only by the admin page under `src/pages/admin/` in the closest matching feature folder.
+- Put code in `src/shared/` only when both the public and admin pages use it. Do not place page-specific code there for convenience.
+- Keep components beside their feature-specific styles, hooks, utilities, and tests when applicable.
+- Add a clearly named feature folder when no existing feature matches; do not add feature files directly to `src/`.
+- Keep `IndexPage.jsx` and `AdminPage.jsx` focused on page composition, routing, and top-level coordination. Move substantial feature behavior into its feature folder as it grows.
+- Keep shared static media in `src/assets/`. Continue to keep public PHP endpoints in `api/` and reusable server code in `includes/`; the frontend page structure does not change PHP endpoint URLs.
+- Before moving an existing shared module into a page folder, confirm that the other page does not import or depend on it.
+
 ## Task workflow
 
 For every task:

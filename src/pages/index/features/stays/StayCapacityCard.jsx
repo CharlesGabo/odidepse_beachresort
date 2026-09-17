@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { StayPhotoBackground, StayPhotoModal } from './StayPhotos.jsx';
+import { StayPhotoBackground, StayPhotoModal } from '../../../../shared/stay-photos/StayPhotos.jsx';
 
 export default function StayCapacityCard({ stay, copy, onBook, photoStep = 0 }) {
   const photos = Array.isArray(stay.photos) ? stay.photos.filter(Boolean) : [];

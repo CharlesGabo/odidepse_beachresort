@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import ResortManager from './ResortManager.jsx';
-import FacebookAutomations from './FacebookAutomations.jsx';
-import { dashboardData } from './dashboardData.js';
-import { overlaps, roomPlanning } from './bookingRoomPlanning.js';
+import ResortManager from './features/resort-management/ResortManager.jsx';
+import FacebookAutomations from './features/facebook-automation/FacebookAutomations.jsx';
+import { dashboardData } from './features/dashboard/dashboardData.js';
+import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.js';
 
 const statusLabels = {
   pending: 'New request',
@@ -1240,7 +1240,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   </div>;
 }
 
-export default function AdminApp({ ManualBookingModal }) {
+export default function AdminPage({ ManualBookingModal }) {
   const [session, setSession] = useState({ loading: true, user: null, csrfToken: '' });
   const mobileSplashEnabled = window.matchMedia('(max-width: 900px)').matches;
   const [showSplash, setShowSplash] = useState(mobileSplashEnabled);

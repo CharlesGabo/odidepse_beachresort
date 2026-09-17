@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import AdminApp from './AdminApp.jsx';
-import WebsiteChat from './WebsiteChat.jsx';
-import StayCapacityCard from './StayCapacityCard.jsx';
-import { stayPhotoSource } from './StayPhotos.jsx';
-import ResortGallery, { GuestStories } from './ResortGallery.jsx';
-import WeatherSection from './WeatherSection.jsx';
-import './guest-features.css';
-import heroVideoLeft from './assets/photos/videos/AQNCi_7_62Mv61gK2al1G0wsEeWObbCY0mz8j6VCDiUrSlCXt77tyZkEMiOutmuIwNBGxnvbetK9cpIscFAGZmo6n_v5cPZaday73ZagnsPc2g.mp4';
-import heroVideoCenter from './assets/photos/videos/AQNhv0XRkIAq4fPmr3uSGu_XmkB8Lhx3F82TT6Wk6O_GGkpE_L7jhcSrh2FQGp2Zl3KHAy-jbFHSKzVZrF_p8fdTuHG2r9HsD_TYHdb14tjqdw.mp4';
-import heroVideoRight from './assets/photos/videos/AQOkF-xowAbopqdtYWya5DseSgK-cP_49HcfPjtzShRHLTk5x8Yf9AnML9x9a2ioRxXvBM1uRMq-pA2ZUl4TjsjdDYoAbwX1SJgkUBO8jCPNTw.mp4';
-import { ResortProvider, useResort } from './ResortContent.jsx';
+import AdminPage from '../admin/AdminPage.jsx';
+import WebsiteChat from './features/chatbot/WebsiteChat.jsx';
+import StayCapacityCard from './features/stays/StayCapacityCard.jsx';
+import { stayPhotoSource } from '../../shared/stay-photos/StayPhotos.jsx';
+import ResortGallery, { GuestStories } from './features/gallery/ResortGallery.jsx';
+import WeatherSection from './features/weather/WeatherSection.jsx';
+import './styles/guest-features.css';
+import heroVideoLeft from '../../assets/photos/videos/AQNCi_7_62Mv61gK2al1G0wsEeWObbCY0mz8j6VCDiUrSlCXt77tyZkEMiOutmuIwNBGxnvbetK9cpIscFAGZmo6n_v5cPZaday73ZagnsPc2g.mp4';
+import heroVideoCenter from '../../assets/photos/videos/AQNhv0XRkIAq4fPmr3uSGu_XmkB8Lhx3F82TT6Wk6O_GGkpE_L7jhcSrh2FQGp2Zl3KHAy-jbFHSKzVZrF_p8fdTuHG2r9HsD_TYHdb14tjqdw.mp4';
+import heroVideoRight from '../../assets/photos/videos/AQOkF-xowAbopqdtYWya5DseSgK-cP_49HcfPjtzShRHLTk5x8Yf9AnML9x9a2ioRxXvBM1uRMq-pA2ZUl4TjsjdDYoAbwX1SJgkUBO8jCPNTw.mp4';
+import { ResortProvider, useResort } from '../../shared/resort/ResortContent.jsx';
 
 const heroVideos = [heroVideoLeft, heroVideoCenter, heroVideoRight];
 const loopingHeroVideos = [...heroVideos, ...heroVideos];
@@ -633,7 +633,7 @@ function PublicApp() {
   return <><div inert={showIntro} aria-hidden={showIntro || undefined}><ResortProvider><PublicSite onHeroReady={markIntroReady} /></ResortProvider></div>{showIntro && <div className={`admin-loading public-loading${introLeaving ? ' is-leaving' : ''}`} role="status" aria-label="Loading Odidepse Beach Resort"><span>ODIDEPSE</span></div>}</>;
 }
 
-export default function App() {
+export default function IndexPage() {
   const isAdminPath = window.location.pathname.replace(/\/+$/, '').endsWith('/admin');
-  return isAdminPath ? <AdminApp ManualBookingModal={ManualBookingModal} /> : <PublicApp />;
+  return isAdminPath ? <AdminPage ManualBookingModal={ManualBookingModal} /> : <PublicApp />;
 }

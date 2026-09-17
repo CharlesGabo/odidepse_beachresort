@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { photoAssets } from './resortPhotos.js';
+import { photoAssets } from '../resort/resortPhotos.js';
 import './stay-photos.css';
 
 export const stayPhotoSource = id => photoAssets[id] || `/api/stay-photo.php?id=${encodeURIComponent(id)}`;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { formatPrice } from './ResortContent.jsx';
-import { photoAssets } from './resortPhotos.js';
-import { StayPhotoEditor } from './StayPhotos.jsx';
+import { formatPrice } from '../../../../shared/resort/ResortContent.jsx';
+import { photoAssets } from '../../../../shared/resort/resortPhotos.js';
+import { StayPhotoEditor } from '../../../../shared/stay-photos/StayPhotos.jsx';
 import './resort-admin.css';
 
 const label = key => key.replace(/^copy\./, '').replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
