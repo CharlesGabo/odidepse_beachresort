@@ -107,6 +107,42 @@ Apply these placement rules:
 - Keep shared static media in `src/assets/`. Continue to keep public PHP endpoints in `api/` and reusable server code in `includes/`; the frontend page structure does not change PHP endpoint URLs.
 - Before moving an existing shared module into a page folder, confirm that the other page does not import or depend on it.
 
+## Backend file organization
+
+Keep public PHP URLs in `api/` and organize reusable PHP implementation under `includes/` by responsibility:
+
+```text
+includes/
+|-- shared/                           Cross-feature infrastructure
+|   |-- api.php                       JSON, method, body, and input helpers
+|   |-- auth.php                      Admin sessions and CSRF protection
+|   |-- database.php                  Shared PDO connection
+|   `-- environment.php               Environment-variable loading
+|-- bookings/
+|   `-- booking-rooms.php             Room allocation and overlap logic
+|-- resort/
+|   |-- resort.php                    Resort content validation and persistence
+|   |-- resort-seed.json              Default resort content
+|   `-- stay-photos.php               Stay-photo validation and delivery paths
+|-- automations/
+|   |-- facebook-automations.php      Shared rule-based booking conversation engine
+|   |-- facebook-worker.php           Facebook delivery worker implementation
+|   `-- website-chat.php              Website-chat adapter and session flow
+`-- weather/
+    `-- weather.php                   Forecast retrieval and summarization
+```
+
+Apply these backend placement rules:
+
+- Keep files in `api/` as thin public HTTP controllers: validate the request, call reusable logic, and return a response.
+- Put reusable, feature-specific business logic in the matching `includes/<feature>/` folder.
+- Put a module in `includes/shared/` only when it provides cross-feature infrastructure. Do not use `shared/` as a miscellaneous folder.
+- Keep browser-facing endpoint paths stable when reorganizing implementation files; moving an include must not silently change an `/api/...` URL.
+- Update every PHP include path, script, test, cron command, and documentation reference when moving a backend module.
+- Resolve filesystem paths from the project root deliberately after moves. Preserve the root `.env`, `src/assets/`, and existing `includes/stay-photo-storage/` locations.
+- Keep the website chatbot and Facebook Messenger booking rules together under `includes/automations/` so their behavior does not drift.
+- Add a clearly named feature folder when a new backend responsibility does not fit an existing one.
+
 ## Task workflow
 
 For every task:
@@ -126,7 +162,7 @@ Do not add offline functionality, commit/push changes, deploy, modify production
 
 The public website chatbot and Facebook Messenger automation share one deterministic, rule-based booking system. Treat changes to classification, parsing, validation, availability, guided replies, templates, and booking summaries as cross-channel changes unless the user explicitly limits the request to one channel.
 
-- Implement shared behavior in `includes/facebook-automations.php` or another reusable server module instead of maintaining separate copies.
+- Implement shared behavior in `includes/automations/facebook-automations.php` or another reusable server module instead of maintaining separate copies.
 - Apply every rule-based fix requested for either chatbot to both the website and Facebook paths automatically.
 - Preserve only necessary channel differences: Messenger may use Facebook profile identity and can create a pending request after confirmation; website chat requires its booking-form fields and opens the prefilled booking modal after confirmation.
 - After a shared behavior change, run targeted coverage for both `scripts/test-facebook.php` and `scripts/test-website-chat.php` so the channels do not drift.

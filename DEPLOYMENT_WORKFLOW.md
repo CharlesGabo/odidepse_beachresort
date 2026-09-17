@@ -147,7 +147,7 @@ Cloudflare launchers
 - Enable HTTPS and redirect HTTP to HTTPS.
 - Disable public error display and enable private logging.
 - Configure secure sessions, upload limits, email/SMTP, and scheduled tasks as applicable.
-- Configure a once-per-minute recovery cron for `php /home/ACCOUNT/public_html/includes/facebook-worker.php` after replacing the placeholder with the real cPanel home path. Messenger webhooks attempt immediate event-scoped delivery; this cron remains required for retries and interrupted requests.
+- Configure a once-per-minute recovery cron for `php /home/ACCOUNT/public_html/scripts/facebook-worker.php` after replacing the placeholder with the real cPanel home path. Messenger webhooks attempt immediate event-scoped delivery; this cron remains required for retries and interrupted requests.
 - Configure SPA fallback routing if client-side routes are introduced.
 
 ## 6. Production verification

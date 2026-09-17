@@ -12,7 +12,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 }
 
 try {
-    require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
+    require_once dirname(__DIR__) . '/includes/shared/database.php';
     database()->query('SELECT 1')->fetchColumn();
 
     echo json_encode([

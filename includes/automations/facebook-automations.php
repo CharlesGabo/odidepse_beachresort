@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/resort.php';
+require_once dirname(__DIR__) . '/shared/database.php';
+require_once dirname(__DIR__) . '/resort/resort.php';
 
 final class FacebookWorkflowError extends RuntimeException {}
 

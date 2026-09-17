@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require_once dirname(__DIR__) . '/includes/database.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
 try {
     if (!in_array(requireEnvironment('DB_HOST'), ['127.0.0.1', 'localhost'], true) || requireEnvironment('DB_NAME') !== 'odidepse_db') throw new RuntimeException('Local database only.');
     $db = database();

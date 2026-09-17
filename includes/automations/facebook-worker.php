@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/facebook-automations.php';
-require_once __DIR__ . '/stay-photos.php';
+require_once dirname(__DIR__) . '/resort/stay-photos.php';
 
 function workerFailJob(PDO $db, int $jobId, string $code): void
 {

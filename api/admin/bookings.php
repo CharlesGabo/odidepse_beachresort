@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'auth.php';
-require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
-require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'resort.php';
-require_once dirname(__DIR__, 2) . '/includes/booking-rooms.php';
-require_once dirname(__DIR__, 2) . '/includes/facebook-automations.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
+require_once dirname(__DIR__, 2) . '/includes/resort/resort.php';
+require_once dirname(__DIR__, 2) . '/includes/bookings/booking-rooms.php';
+require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
 
 $method = requireMethod('GET', 'PATCH');
 requireAdmin();

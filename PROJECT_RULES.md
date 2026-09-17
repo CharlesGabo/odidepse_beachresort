@@ -74,7 +74,7 @@ Do not put reusable PHP code in `dist/`. Do not put secrets in React source, `in
 2. Run `npm run dev` from the repository root.
 3. Open the Vite URL recorded in `PROJECT_PROFILE.md`.
 4. Vite proxies `/api/*` to this project's XAMPP path.
-5. PHP accesses local MariaDB/MySQL through `includes/database.php` and the untracked `.env`.
+5. PHP accesses local MariaDB/MySQL through `includes/shared/database.php` and the untracked `.env`.
 
 Do not browse the raw `index.html` through the XAMPP project URL for React development. Use the Vite development URL so modules and hot reload work correctly.
 

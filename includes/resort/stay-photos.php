@@ -4,7 +4,7 @@ declare(strict_types=1);
 function stayPhotoPath(string $id): string
 {
     if (!preg_match('/\A[a-f0-9]{32}\.jpg\z/', $id)) throw new InvalidArgumentException('Invalid photo.');
-    return __DIR__ . '/stay-photo-storage/' . $id;
+    return dirname(__DIR__) . '/stay-photo-storage/' . $id;
 }
 
 function stayPhotoDeliveryPath(string $id): string
@@ -22,7 +22,7 @@ function stayPhotoDeliveryPath(string $id): string
         'room_9' => '657125929_122094807362888235_4455804092410022346_n.jpg',
     ];
     $path = isset($bundled[$id])
-        ? dirname(__DIR__) . '/src/assets/photos/rooms/' . $bundled[$id]
+        ? dirname(__DIR__, 2) . '/src/assets/photos/rooms/' . $bundled[$id]
         : stayPhotoPath($id);
     if (!is_file($path)) throw new InvalidArgumentException('Photo unavailable.');
     return $path;

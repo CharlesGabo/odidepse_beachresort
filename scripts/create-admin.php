@@ -7,7 +7,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
 
 $email = strtolower(trim((string) ($argv[1] ?? '')));
 $displayName = trim((string) ($argv[2] ?? ''));

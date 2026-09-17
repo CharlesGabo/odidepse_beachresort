@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'auth.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
 
 requireMethod('GET');
 startAdminSession();

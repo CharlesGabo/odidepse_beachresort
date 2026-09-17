@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'environment.php';
 
-loadEnvironment(dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env');
+loadEnvironment(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . '.env');
 
 function database(): PDO
 {

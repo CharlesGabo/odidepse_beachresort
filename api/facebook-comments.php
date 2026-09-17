@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . '/includes/api.php';
-require_once dirname(__DIR__) . '/includes/database.php';
+require_once dirname(__DIR__) . '/includes/shared/api.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
 requireMethod('GET');
 
 try {

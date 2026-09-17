@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
-require_once dirname(__DIR__) . '/includes/database.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
 
 try {
     $appId = requireEnvironment('META_APP_ID');

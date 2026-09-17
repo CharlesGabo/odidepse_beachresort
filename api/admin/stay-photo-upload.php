@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__, 2) . '/includes/auth.php';
-require_once dirname(__DIR__, 2) . '/includes/stay-photos.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
+require_once dirname(__DIR__, 2) . '/includes/resort/stay-photos.php';
 requireMethod('POST');
 requireAdmin();
 requireCsrfToken();

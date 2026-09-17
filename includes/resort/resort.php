@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/api.php';
+require_once dirname(__DIR__) . '/shared/database.php';
+require_once dirname(__DIR__) . '/shared/api.php';
 require_once __DIR__ . '/stay-photos.php';
 
 function resortSeed(): array

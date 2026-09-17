@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/includes/auth.php';
-require_once dirname(__DIR__, 2) . '/includes/facebook-automations.php';
+require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
+require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
 $method = requireMethod('GET', 'POST');
 $admin = requireAdmin();
 if ($method === 'POST') requireCsrfToken();

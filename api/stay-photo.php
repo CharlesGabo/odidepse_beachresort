@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__) . '/includes/auth.php';
-require_once dirname(__DIR__) . '/includes/database.php';
-require_once dirname(__DIR__) . '/includes/stay-photos.php';
+require_once dirname(__DIR__) . '/includes/shared/auth.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
+require_once dirname(__DIR__) . '/includes/resort/stay-photos.php';
 requireMethod('GET');
 try {
     $id = $_GET['id'] ?? '';

@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__) . '/includes/website-chat.php';
+require_once dirname(__DIR__) . '/includes/automations/website-chat.php';
 $method = requireMethod('GET', 'POST');
 websiteChatStart();
 try {

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'api.php';
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'database.php';
-require_once dirname(__DIR__) . '/includes/resort.php';
+require_once dirname(__DIR__) . '/includes/shared/api.php';
+require_once dirname(__DIR__) . '/includes/shared/database.php';
+require_once dirname(__DIR__) . '/includes/resort/resort.php';
 
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
 $data = readJsonBody();
 $chatToken = $data['chat_draft_token'] ?? null;
 if ($chatToken !== null) {
-    require_once dirname(__DIR__) . '/includes/website-chat.php';
+    require_once dirname(__DIR__) . '/includes/automations/website-chat.php';
     websiteChatStart();
     websiteChatCsrf();
     if ($manualBooking || !websiteChatDraftValid($_SESSION['chat'], $chatToken)) {
@@ -22,7 +22,7 @@ $facebookLeadId = $manualBooking ? ($data['facebook_lead_id'] ?? null) : null;
 if ($facebookLeadId !== null && (!is_int($facebookLeadId) || $facebookLeadId < 1)) {
     jsonResponse(['status' => 'error', 'message' => 'Choose a valid Facebook lead.'], 422);
 }
-if ($facebookLeadId !== null) require_once dirname(__DIR__) . '/includes/facebook-automations.php';
+if ($facebookLeadId !== null) require_once dirname(__DIR__) . '/includes/automations/facebook-automations.php';
 
 $name = cleanText($data['guest_name'] ?? null, 100);
 $email = cleanText($data['email'] ?? null, 190);
@@ -33,7 +33,7 @@ $guests = filter_var($data['guests'] ?? null, FILTER_VALIDATE_INT, ['options' =>
 $stayId = $data['stay_id'] ?? null;
 $stayPlanInput = $data['stay_plan'] ?? [];
 $serviceId = $data['service_id'] ?? null;
-if (!$manualBooking) require_once dirname(__DIR__) . '/includes/facebook-automations.php';
+if (!$manualBooking) require_once dirname(__DIR__) . '/includes/automations/facebook-automations.php';
 
 $errors = [];
 if (mb_strlen($name) < 2) $errors['guest_name'] = 'Enter your full name.';
