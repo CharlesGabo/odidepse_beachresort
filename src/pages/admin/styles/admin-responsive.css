@@ -5,6 +5,9 @@
 .admin-shell :is(.admin-view,.booking-board,.booking-calendar,.guest-list,.guest-row > div,.guest-name > div,.admin-stay-card,.admin-request-modal__main,.admin-request-modal__aside) { min-width:0; }
 .admin-shell :is(.guest-row,.admin-stay-card h3,.admin-request-modal__guest strong,.admin-request-modal__guest small,.request-note p,.request-facts dd,.booking-calendar-dialog__facts dd) { overflow-wrap:anywhere; }
 .admin-shell .admin-request-modal__close { flex-shrink:0; }
+.admin-shell .guest-contact { display:grid; gap:4px; }
+.admin-shell .guest-contact a { display:block; min-width:0; overflow:hidden; color:var(--deep); text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.admin-shell .guest-contact a:hover { text-decoration:underline; }
 
 @media (max-width:900px) {
   .admin-shell .admin-mobile-nav { grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); }

@@ -1331,15 +1331,20 @@ function GuestsView({ bookings }) {
   const guests = useMemo(() => {
     const grouped = new Map();
     bookings.forEach(booking => {
-      const key = booking.email.toLowerCase();
+      const email = String(booking.email || '').trim();
+      const phone = String(booking.phone || '').trim();
+      const guestName = String(booking.guest_name || 'Guest').trim();
+      const key = email ? `email:${email.toLowerCase()}` : phone ? `phone:${phone.replace(/\D/g, '')}` : `name:${guestName.toLowerCase()}`;
       const existing = grouped.get(key);
+      const isLatest = !existing || booking.created_at > existing.createdAt;
       grouped.set(key, {
-        name: booking.guest_name,
-        email: booking.email,
-        phone: booking.phone,
+        key,
+        name: isLatest ? guestName : existing.name,
+        email: isLatest ? (email || existing?.email || '') : (existing?.email || email),
+        phone: isLatest ? (phone || existing?.phone || '') : (existing?.phone || phone),
         totalBookings: (existing?.totalBookings || 0) + 1,
-        latestStay: !existing || booking.created_at > existing.createdAt ? (booking.stay_type || 'Flexible stay') : existing.latestStay,
-        createdAt: !existing || booking.created_at > existing.createdAt ? booking.created_at : existing.createdAt,
+        latestStay: isLatest ? (booking.stay_type || 'Flexible stay') : existing.latestStay,
+        createdAt: isLatest ? booking.created_at : existing.createdAt,
       });
     });
     return [...grouped.values()].filter(guest => `${guest.name} ${guest.email} ${guest.phone}`.toLowerCase().includes(query.toLowerCase()));
@@ -1352,9 +1357,9 @@ function GuestsView({ bookings }) {
     </div>
     <div className="guest-list">
       <div className="guest-row guest-row--head"><span>Guest</span><span>Contact</span><span>Latest preference</span><span>Requests</span></div>
-      {guests.map(guest => <article className="guest-row" key={guest.email}>
+      {guests.map(guest => <article className="guest-row" key={guest.key}>
         <div className="guest-name"><i>{guest.name.charAt(0).toUpperCase()}</i><strong>{guest.name}</strong></div>
-        <div><strong>{guest.email}</strong><small>{guest.phone}</small></div>
+        <div className="guest-contact">{guest.email && <strong><a href={`mailto:${guest.email}`}>{guest.email}</a></strong>}{guest.phone && <small><a href={`tel:${guest.phone.replace(/[^\d+]/g, '')}`}>{guest.phone}</a></small>}{!guest.email && !guest.phone && <small>No contact information</small>}</div>
         <span>{guest.latestStay}</span><b>{guest.totalBookings}</b>
       </article>)}
       {guests.length === 0 && <div className="empty-state"><AdminIcon name="users" /><h3>No guests found.</h3><p>Guest profiles are created automatically from booking requests.</p></div>}
