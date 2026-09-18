@@ -8,13 +8,6 @@ import './resort-admin.css';
 const label = key => key.replace(/^copy\./, '').replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
 const clone = value => structuredClone(value);
 
-function CatalogFields({ value, fields, onChange, photos }) {
-  return <div className="resort-editor__fields">{Object.entries(fields).map(([key,spec]) => <label key={key}>
-    {key === 'price' ? 'Price (PHP; blank = upon inquiry, 0 = free)' : label(key)}
-    {spec[0] === 'boolean' ? <input type="checkbox" checked={value[key]} onChange={event => onChange({...value,[key]:event.target.checked})} /> : spec[0] === 'select' ? <select value={value[key]} onChange={event => onChange({...value,[key]:event.target.value})}>{spec[1].map(option => <option key={option} value={option}>{key === 'asset' ? (photos.find(p=>p.id === option)?.title || 'Icon only') : label(option)}</option>)}</select> : spec[0] === 'textarea' ? <textarea rows="4" maxLength={spec[1]} value={value[key]} onChange={event => onChange({...value,[key]:event.target.value})} /> : <input type={['number','price'].includes(spec[0]) ? 'number' : 'text'} value={value[key] ?? ''} min={spec[0] === 'price' ? 0 : spec[1]} max={spec[0] === 'price' ? 9999999999.99 : spec[2]} step={spec[0] === 'price' ? '.01' : '1'} maxLength={spec[0] === 'text' ? spec[1] : undefined} required={key === 'name' || spec[0] === 'number'} onChange={event => onChange({...value,[key]:spec[0] === 'number' ? Number(event.target.value) : spec[0] === 'price' && event.target.value === '' ? null : event.target.value})} />}
-  </label>)}</div>;
-}
-
 function StayFields({ value, onChange }) {
   const changeCapacity = event => {
     const capacity = event.target.value;
@@ -34,6 +27,14 @@ function StayFields({ value, onChange }) {
     <label>Name<input type="text" required maxLength="50" placeholder="e.g. 5-guest room" value={value.name} onChange={event=>onChange({...value,name:event.target.value})}/></label>
     <label>Price (PHP)<input type="number" min="0" max="9999999999.99" step=".01" placeholder="Leave blank for upon inquiry" value={value.price??''} onChange={event=>onChange({...value,price:event.target.value===''?null:event.target.value})}/></label>
     <label>Guest capacity<input type="text" required maxLength="30" inputMode="numeric" placeholder="e.g. 5, 35+, or 88–100" value={value.capacity} onChange={changeCapacity}/></label>
+  </div>;
+}
+
+function ActivityFields({ value, onChange }) {
+  return <div className="resort-editor__fields resort-editor__fields--simple">
+    <label>Activity name<input type="text" required maxLength="50" placeholder="e.g. Kayak rental" value={value.name} onChange={event=>onChange({...value,name:event.target.value})}/></label>
+    <label>Description<textarea rows="4" maxLength="2000" placeholder="Describe this activity" value={value.description} onChange={event=>onChange({...value,description:event.target.value})}/></label>
+    <label>Price (PHP)<input type="number" min="0" max="9999999999.99" step=".01" placeholder="Leave blank for upon inquiry" value={value.price??''} onChange={event=>onChange({...value,price:event.target.value===''?null:event.target.value})}/></label>
   </div>;
 }
 
@@ -66,16 +67,19 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
   });
   useEffect(()=>{
     const dialog=editorDialogRef.current;
-    if(kind==='stays'&&draft&&dialog&&!dialog.open)dialog.showModal();
-  },[kind,draft]);
+    if(draft&&dialog&&!dialog.open)dialog.showModal();
+  },[draft]);
   const choose = (id, value, showPhotos = false) => {
     if(draft && !window.confirm('Discard unsaved edits and open another item?')) return;
-    setPhotoMode(showPhotos);setSelected(id);setDraft(clone(value));setNotice('');setError('');
+    const next=clone(value);
+    if(kind==='services'&&!Array.isArray(next.photos))next.photos=next.asset?[next.asset]:[];
+    setPhotoMode(showPhotos);setSelected(id);setDraft(next);setNotice('');setError('');
   };
   const create = () => {
     const fields=data.fields[kind];
     const value=Object.fromEntries(Object.entries(fields).map(([key,spec])=>[key,spec[0]==='boolean'?key==='enabled':spec[0]==='price'?null:spec[0]==='number'?spec[1]:spec[0]==='select'?spec[1][0]:'']));
     if(kind==='stays'){value.max_guests=100;value.guests=2;value.price_unit='night';value.photos=[];}
+    else {value.price_unit='activity';value.photos=[];}
     value.availability='inquiry';value.sort_order=data[kind].length;
     choose('new',value);
   };
@@ -97,16 +101,16 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     const bounds=event.currentTarget.getBoundingClientRect();
     if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)event.currentTarget.close();
   };
-  const editor=draft&&<form className="resort-editor" onSubmit={save}><h3>{selected==='new'?'New '+(kind==='stays'?'stay':'service'):draft.name}</h3>
+  const editor=draft&&<form className="resort-editor" onSubmit={save}><h3>{selected==='new'?'New '+(kind==='stays'?'stay':'activity'):draft.name}</h3>
     {error&&<p className="admin-error" role="alert">{error}</p>}
     {kind==='stays'&&photoMode&&<StayPhotoEditor photos={draft.photos || []} name={draft.name} csrfToken={csrfToken} disabled={busy||uploading} onBusy={setUploading} onChange={photos=>setDraft(current=>({...current,photos}))} />}
-    {kind==='stays'?(photoMode?null:<StayFields value={draft} onChange={setDraft}/>):<><CatalogFields value={draft} fields={data.fields[kind]} onChange={setDraft} photos={data.sections.photos}/>{draft.asset&&<img className="resort-editor__preview" src={photoAssets[draft.asset]} alt="Selected service image"/>}</>}
+    {kind==='stays'?(photoMode?null:<StayFields value={draft} onChange={setDraft}/>):<><ActivityFields value={draft} onChange={setDraft}/><StayPhotoEditor photos={draft.photos || []} name={draft.name} subject="Activity" libraryScope="all" csrfToken={csrfToken} disabled={busy||uploading} onBusy={setUploading} onChange={photos=>setDraft(current=>({...current,photos,asset:photoAssets[photos[0]]?photos[0]:''}))} /></>}
     {conflict&&<p role="alert">Reload the latest data before saving. Your unsaved text remains available here to copy.</p>}
     <div className="resort-editor__actions"><button className="admin-mock-button" disabled={busy||uploading||conflict}>{uploading?'Uploading…':busy?'Saving…':'Save and publish'}</button><button className="admin-mock-button" type="button" disabled={busy||uploading} onClick={closeEditor}>Cancel</button></div>
   </form>;
-  const title=kind==='stays'?'Your stays':'Services';
+  const title=kind==='stays'?'Your stays':'Activities';
   return <section className="admin-view resort-manager" aria-label={title}>
-    <div className="admin-view__heading"><div><span className="admin-kicker">Public resort information</span><h2>{title}</h2></div><div className="resort-editor__actions"><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>{if(!draft || window.confirm('Discard edits and reload the latest data?'))load();}}>Reload latest data</button>{data&&<button className="admin-mock-button" type="button" disabled={busy} onClick={create}>Add {kind==='stays'?'stay':'service'}</button>}</div></div>
+    <div className="admin-view__heading"><div><span className="admin-kicker">Public resort information</span><h2>{title}</h2></div><div className="resort-editor__actions"><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>{if(!draft || window.confirm('Discard edits and reload the latest data?'))load();}}>Reload latest data</button>{data&&<button className="admin-mock-button" type="button" disabled={busy} onClick={create}>Add {kind==='stays'?'stay':'activity'}</button>}</div></div>
     <p>Availability is managed manually. Saving publishes changes immediately. Disabled or archived offers are hidden; unavailable offers remain open for inquiries.</p>
     {notice&&<p className="admin-notice" role="status">{notice}</p>}{error&&<p className="admin-error" role="alert">{error}</p>}
     {!data?<p role="status">{busy?'Loading resort information…':'Use Reload latest data to try again.'}</p>:<>
@@ -116,7 +120,7 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
           {kind==='stays'&&<button className="admin-stay-photo-link" type="button" disabled={busy} onClick={()=>choose(record.id,record,true)} aria-label={`View and edit photos of ${record.name}`}>View photos</button>}
           <div className="admin-stay-card__top"><span>{record.archived?'Archived':record.enabled?'Published':'Disabled'}</span><i className={record.availability==='unavailable'?'is-busy':''}>{label(record.availability)}</i></div><h3>{record.name}</h3><dl><div><dt>Price</dt><dd>{formatPrice(record)||'Upon inquiry'}</dd></div>{kind==='stays'&&<><div><dt>Capacity</dt><dd>{record.capacity} guests</dd></div><div><dt>Rooms</dt><dd>{record.room_count}</dd></div><div><dt>Active bookings</dt><dd>{active.length}</dd></div></>}</dl><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>choose(record.id,record)}>Edit {record.name}</button></article>;
       })}</div>
-      {kind==='stays'&&draft?<dialog ref={editorDialogRef} className="resort-editor-dialog" aria-label={selected==='new'?'Add stay':`Edit ${draft.name}`} onClick={closeEditorFromBackdrop} onClose={closeEditor} onCancel={event=>{if(busy||uploading)event.preventDefault();}}><button className="resort-editor-dialog__close" type="button" disabled={busy||uploading} aria-label="Close stay editor" onClick={()=>editorDialogRef.current?.close()}>×</button>{editor}</dialog>:editor}
+      {draft&&<dialog ref={editorDialogRef} className="resort-editor-dialog" aria-label={selected==='new'?`Add ${kind==='stays'?'stay':'activity'}`:`Edit ${draft.name}`} onClick={closeEditorFromBackdrop} onClose={closeEditor} onCancel={event=>{if(busy||uploading)event.preventDefault();}}><button className="resort-editor-dialog__close" type="button" disabled={busy||uploading} aria-label={`Close ${kind==='stays'?'stay':'activity'} editor`} onClick={()=>editorDialogRef.current?.close()}>×</button>{editor}</dialog>}
     </>}
   </section>;
 }

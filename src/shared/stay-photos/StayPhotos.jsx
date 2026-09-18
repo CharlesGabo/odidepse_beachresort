@@ -45,11 +45,12 @@ async function compressPhoto(file) {
   } finally { bitmap.close(); }
 }
 
-export function StayPhotoEditor({ photos = [], name, onChange, csrfToken, disabled, onBusy }) {
+export function StayPhotoEditor({ photos = [], name, onChange, csrfToken, disabled, onBusy, subject = 'Room', libraryScope = 'rooms' }) {
   const [error, setError] = useState('');
+  const subjectLower = subject.toLowerCase();
   const upload = async event => {
     const files = Array.from(event.target.files || []); event.target.value = '';
-    if (files.length + photos.length > 12) { setError('Choose up to 12 photos per stay.'); return; }
+    if (files.length + photos.length > 12) { setError(`Choose up to 12 photos per ${subjectLower}.`); return; }
     onBusy(true); setError('');
     let next = [...photos];
     try {
@@ -64,15 +65,16 @@ export function StayPhotoEditor({ photos = [], name, onChange, csrfToken, disabl
     finally { onBusy(false); }
   };
   const reorder = (index, offset) => { const next = [...photos]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; onChange(next); };
-  return <section className="stay-photo-editor"><h4>Room photos</h4><StayPhotoCarousel photos={photos} name={name || 'Room'} />
+  const libraryIds = Object.keys(photoAssets).filter(id => libraryScope === 'all' || id.startsWith('room_'));
+  return <section className="stay-photo-editor"><h4>{subject} photos</h4><StayPhotoCarousel photos={photos} name={name || subject} />
     {error && <p role="alert" className="admin-error">{error}</p>}
     <label>Upload photos<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled || photos.length >= 12} onChange={upload} /></label>
     <p>Up to 12 photos. The first photo is the cover. Save and publish to update the website.</p>
     <div className="stay-photo-editor__items">{photos.map((id, index) => <div key={id}><img src={stayPhotoSource(id)} alt={`${name} photo ${index + 1}`} /><span>{index === 0 ? 'Cover' : `Photo ${index + 1}`}</span><button type="button" disabled={disabled || index === 0} onClick={() => reorder(index, -1)} aria-label={`Move photo ${index + 1} earlier`}>←</button><button type="button" disabled={disabled || index === photos.length - 1} onClick={() => reorder(index, 1)} aria-label={`Move photo ${index + 1} later`}>→</button><button type="button" disabled={disabled} onClick={() => onChange(photos.filter((_, i) => i !== index))}>Remove</button></div>)}</div>
-    <details><summary>Choose from existing room photos</summary><div className="stay-photo-library">{Object.keys(photoAssets).filter(id => id.startsWith('room_')).map(id => {
+    <details><summary>Choose from existing photos</summary><div className="stay-photo-library">{libraryIds.map(id => {
       const selected = photos.includes(id);
-      const photoNumber = Number(id.split('_')[1]) + 1;
-      return <button type="button" key={id} disabled={disabled || (!selected && photos.length >= 12)} aria-pressed={selected} onClick={() => onChange(selected ? photos.filter(photo => photo !== id) : [...photos, id])} aria-label={`${selected ? 'Remove' : 'Add'} room photo ${photoNumber}`}><img src={photoAssets[id]} alt={`Room photo ${photoNumber}`} loading="lazy" /></button>;
+      const photoLabel = `${id.startsWith('room_') ? 'Room' : 'Guest'} photo ${Number(id.split('_')[1]) + 1}`;
+      return <button type="button" key={id} disabled={disabled || (!selected && photos.length >= 12)} aria-pressed={selected} onClick={() => onChange(selected ? photos.filter(photo => photo !== id) : [...photos, id])} aria-label={`${selected ? 'Remove' : 'Add'} ${photoLabel.toLowerCase()}`}><img src={photoAssets[id]} alt={photoLabel} loading="lazy" /></button>;
     })}</div></details>
   </section>;
 }

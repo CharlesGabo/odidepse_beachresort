@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AdminPage from '../admin/AdminPage.jsx';
 import WebsiteChat from './features/chatbot/WebsiteChat.jsx';
 import StayCapacityCard from './features/stays/StayCapacityCard.jsx';
-import { stayPhotoSource } from '../../shared/stay-photos/StayPhotos.jsx';
+import { StayPhotoBackground, stayPhotoSource } from '../../shared/stay-photos/StayPhotos.jsx';
 import ResortGallery, { GuestStories } from './features/gallery/ResortGallery.jsx';
 import WeatherSection from './features/weather/WeatherSection.jsx';
 import './styles/guest-features.css';
@@ -488,12 +488,6 @@ function PublicSite({ onHeroReady }) {
   const [selectedMessage, setSelectedMessage] = useState('');
   const [selectedService, setSelectedService] = useState('');
   const [stayPhotoStep, setStayPhotoStep] = useState(0);
-  const activityCards = experiences.some(item => /\bufo\b/i.test(item.title)) ? experiences : [...experiences, {
-    id: 'ufo-inquiry', title: 'UFO', icon: 'wave', photo: null,
-    image_caption: 'A little more adventure',
-    copy: 'Add a UFO ride to your beach day. Ask our team about rental options for your visit.',
-    availabilityLabel: 'Rates and availability upon inquiry.',
-  }];
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -530,8 +524,8 @@ function PublicSite({ onHeroReady }) {
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
   return <div className="site-shell" id="top">
-    <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">{copy.navigation["experience"]}</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
-    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>{copy.navigation["experience"]}</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
+    <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">Activities</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#guest-stories">{copy.navigation["guest_stories"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
+    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>Activities</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
     <main>
       <div className="hero-intro">
       <section className="hero hero--groups" ref={heroRef}>
@@ -568,7 +562,7 @@ function PublicSite({ onHeroReady }) {
       </section>
       <section className="experiences section" id="experiences" aria-labelledby="activities-title">
         <div className="section-heading" data-reveal><div><div className="section-label"><span>04</span>{copy.experiences["a_little_more_adventure"]}</div><h2 id="activities-title">{copy.experiences["make_some"]}<br /><em>{copy.experiences["waves"]}</em></h2></div><p>{copy.experiences["take_your_beach_day_up_a_notch_ask_us_about_rental_availability_w"]}</p></div>
-        <div className="activity-grid">{activityCards.map(item => <article className="activity-card" key={item.id} data-reveal><div className={`activity-card__visual ${!item.photo ? 'activity-card__visual--icon' : ''}`}>{item.photo ? <img src={item.photo.src} alt={item.photo.alt} loading="lazy" decoding="async" /> : <><Icon name={item.icon} size={84} /><span>{item.image_caption}</span></>}</div><div className="activity-card__body"><h3>{item.title}</h3><p>{item.copy}</p><span className="activity-availability">{item.availabilityLabel}</span><button className="text-link" type="button" onClick={() => openBooking('', '', `I’d like to ask about ${item.title} availability.`, item.id === 'ufo-inquiry' ? '' : item.id)}>{copy.experiences["ask_about_this_activity"]}<Icon name="arrow" size={17} /></button></div></article>)}</div>
+        <div className="activity-grid">{experiences.map(item => <article className="activity-card" key={item.id} data-reveal><div className={`activity-card__visual ${!item.photo ? 'activity-card__visual--icon' : ''}`} {...(item.photos.length > 1 ? { role: 'img', 'aria-label': `${item.title} photo slideshow` } : {})}>{item.photos.length > 1 ? <StayPhotoBackground photos={item.photos} step={stayPhotoStep} /> : item.photo ? <img src={item.photo.src} alt={item.photo.alt} loading="lazy" decoding="async" /> : <><Icon name={item.icon} size={84} /><span>{item.image_caption}</span></>}</div><div className="activity-card__body"><h3>{item.title}</h3><p>{item.copy}</p><span className="activity-availability">{item.availabilityLabel}</span><button className="text-link" type="button" onClick={() => openBooking('', '', `I’d like to ask about ${item.title} availability.`, item.id)}>{copy.experiences["ask_about_this_activity"]}<Icon name="arrow" size={17} /></button></div></article>)}</div>
       </section>
       <WeatherSection onBook={date => openBooking('', date)} />
       <GuestStories />

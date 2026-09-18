@@ -1,0 +1,4 @@
+.weather-panel--themed::before,.weather-panel--themed::after { display:none; }
+.weather-panel--themed > .weather-scene { position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; border-radius:inherit; }
+.weather-panel--themed .weather-day:not(.is-selected) { background:#10233840; border-color:#ffffff30; }
+.weather-panel--themed .weather-refresh { background:#10233840; }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import WeatherScene from './WeatherScene.jsx';
 import { useResort } from '../../../../shared/resort/ResortContent.jsx';
 
 function conditions(symbol = '') {
@@ -10,6 +11,17 @@ function conditions(symbol = '') {
   if (symbol.includes('partlycloudy') || symbol.includes('fair')) return [symbol.endsWith('_night') ? '☁' : '🌤', 'Partly cloudy'];
   if (symbol.includes('clearsky')) return [symbol.endsWith('_night') ? '☾' : '☀', 'Clear skies'];
   return ['☁', 'Cloudy'];
+}
+
+function weatherTheme(symbol = '') {
+  if (symbol.includes('thunder')) return 'storm';
+  if (symbol.includes('snow') || symbol.includes('sleet')) return 'snow';
+  if (symbol.includes('heavyrain')) return 'heavy-rain';
+  if (symbol.includes('rain')) return 'rain';
+  if (symbol.includes('fog')) return 'fog';
+  if (symbol.endsWith('_night')) return 'night';
+  if (symbol.includes('clearsky')) return 'clear';
+  return 'cloudy';
 }
 
 const localDate = date => new Date(`${date}T12:00:00+08:00`);
@@ -110,9 +122,14 @@ export default function WeatherSection({ onBook }) {
 
   const day = forecast?.days.find(item => item.date === selectedDate) || forecast?.days[0];
   const current = forecast?.current;
+  const futureDateSelected = Boolean(selectedDate && selectedDate !== forecast?.days[0]?.date);
+  const expandedThemeSymbol = futureDateSelected ? day?.symbol : current?.symbol;
+  const compactSceneSymbol = current?.symbol;
+  const expandedSceneSymbol = expandedThemeSymbol;
   return <section className={`weather-section section ${expanded ? 'weather-section--expanded' : 'weather-section--compact'}`} id="weather" aria-labelledby="weather-title">
     <div className="section-heading"><div><div className="section-label"><span>05</span>{copy.weather["a_little_outlook"]}</div><h2 id="weather-title">{copy.weather["meet_the"]}<em>{copy.weather["forecast"]}</em></h2></div><p>{copy.weather["sun_on_your_mind_get_a_feel_for_the_next_seven_days_before_choosi"]}</p></div>
-    {!expanded && <div className="weather-compact weather-panel">
+    {!expanded && <div className={`weather-compact weather-panel weather-panel--themed weather-theme--${weatherTheme(compactSceneSymbol)}`}>
+      <WeatherScene symbol={compactSceneSymbol} />
       <button ref={compactRef} type="button" className="weather-compact__open" aria-label="View 7-day forecast" aria-expanded={false} aria-controls="weather-details" onClick={toggleForecast} />
       <span className="weather-compact__location-row"><span className="weather-compact__location">{copy.weather["san_felipe_zambales"]}<small>{copy.weather["near_odidepse_philippine_time"]}</small></span><button type="button" className="weather-compact__fullscreen" title="Open fullscreen forecast" aria-label="Open fullscreen forecast" onClick={openFullscreen}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /><rect x="7" y="8" width="10" height="8" rx="1" /></svg></button></span>
       <span className="weather-compact__current"><span className="weather-kicker">Current forecast</span>
@@ -120,7 +137,8 @@ export default function WeatherSection({ onBook }) {
       </span>
       <span className="weather-compact__hint">{error ? 'Open forecast to retry' : 'View 7-day forecast'}</span>
     </div>}
-    <div id="weather-details" className={`weather-panel${fullscreen ? ' weather-panel--fullscreen' : ''}`} hidden={!expanded} aria-busy={busy} role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? 'San Felipe seven-day weather forecast' : undefined}>
+    <div id="weather-details" className={`weather-panel weather-panel--themed weather-theme--${weatherTheme(expandedSceneSymbol)}${fullscreen ? ' weather-panel--fullscreen' : ''}`} hidden={!expanded} aria-busy={busy} role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? 'San Felipe seven-day weather forecast' : undefined}>
+      {expanded && <WeatherScene symbol={expandedSceneSymbol} />}
       <div className="weather-toolbar"><span>{copy.weather["san_felipe_zambales_1"]}<small>{copy.weather["near_odidepse_philippine_time"]}</small></span><div className="weather-toolbar__actions"><button type="button" className="weather-refresh" disabled={busy} onClick={() => refreshRef.current?.()}>{busy ? 'Updating…' : '↻ Refresh'}</button>{!fullscreen && <button type="button" className="weather-refresh" onClick={openFullscreen}>Open fullscreen forecast</button>}<button ref={collapseRef} type="button" className="weather-refresh" aria-expanded={true} aria-controls="weather-details" onClick={fullscreen ? closeFullscreen : toggleForecast}>{fullscreen ? 'Close ×' : 'Collapse ↑'}</button></div></div>
       {error ? <div className="weather-empty" role="status"><span aria-hidden="true">☁</span><h3>A little pause in the forecast.</h3><p>{error}</p><button type="button" className="button button--light" disabled={busy} onClick={() => refreshRef.current?.()}>Try again</button></div> : !forecast ? <div className="weather-empty" role="status"><span aria-hidden="true">☀</span><h3>Checking the coastal skies…</h3><p>Fetching the latest forecast for your stay.</p></div> : <>
         <div className="weather-now"><div><span className="weather-kicker">Current forecast</span><div className="weather-temperature"><span>{Math.round(current.temperature)}<sup>°C</sup></span><span className="weather-symbol" aria-hidden="true">{conditions(current.symbol)[0]}</span></div><h3>{conditions(current.symbol)[1]}</h3><p>Forecast for {timeLabel(current.time)} PHT</p></div><dl><div><dt>Wind</dt><dd>{current.wind} <small>km/h</small></dd></div><div><dt>Humidity</dt><dd>{current.humidity == null ? '—' : `${Math.round(current.humidity)}%`}</dd></div><div><dt>Model updated</dt><dd className="weather-update">{timeLabel(forecast.updatedAt)} PHT</dd></div></dl></div>

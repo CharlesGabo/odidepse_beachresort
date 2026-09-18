@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { photoAssets } from './resortPhotos.js';
+import { stayPhotoSource } from '../stay-photos/StayPhotos.jsx';
 
 const ResortContext = createContext(null);
 export const useResort = () => useContext(ResortContext);
@@ -43,7 +44,12 @@ export function ResortProvider({ children }) {
       highlights: snapshot.sections.highlights, amenityGroups: snapshot.sections.amenities, occasions: snapshot.sections.occasions, reviews: snapshot.sections.reviews,
       roomPhotos: photos.filter(p => p.id.startsWith('room_')), customerPhotos: photos.filter(p => p.id.startsWith('guest_')),
       stays: snapshot.stays.map(stay => ({ ...stay, featured: stay.style === 'group', exclusive: stay.style === 'exclusive', detail: stay.detail.replaceAll('{room_count}', String(stay.room_count)).replaceAll('{room_word}', stay.room_count === 1 ? 'room' : 'rooms'), description: [stay.description, stay.availability_text, formatPrice(stay)].filter(Boolean).join(' ') })),
-      services: snapshot.services.map(item => ({ ...item, title: item.name, copy: item.description, photo: item.asset ? photos.find(p => p.id === item.asset) : null, availabilityLabel: [item.availability_text || ({available:'Available', unavailable:'Currently unavailable', inquiry:'Available upon inquiry.'})[item.availability], formatPrice(item)].filter(Boolean).join(' · ') })),
+      services: snapshot.services.map(item => {
+        const activityPhotos = Array.isArray(item.photos) && item.photos.length ? item.photos : item.asset ? [item.asset] : [];
+        const coverId = activityPhotos[0];
+        const bundledPhoto = coverId ? photos.find(photo => photo.id === coverId) : null;
+        return { ...item, photos: activityPhotos, title: item.name, copy: item.description, photo: coverId ? { src: stayPhotoSource(coverId), alt: bundledPhoto?.alt || `${item.name} activity` } : null, availabilityLabel: [item.availability_text || ({available:'Available', unavailable:'Currently unavailable', inquiry:'Available upon inquiry.'})[item.availability], formatPrice(item)].filter(Boolean).join(' · ') };
+      }),
     };
   }, [snapshot]);
   if (!content && !error) return null;

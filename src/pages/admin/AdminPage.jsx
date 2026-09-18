@@ -244,7 +244,7 @@ const navItems = [
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'stays', label: 'Stays', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
-  { id: 'services', label: 'Services', icon: 'home' },
+  { id: 'services', label: 'Activities', icon: 'home' },
   { id: 'facebook', label: 'Facebook Automations', icon: 'automation' },
 ];
 
@@ -897,7 +897,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
         <section className="request-panel">
           <div className="request-panel__heading"><span>Request details</span><strong>Guest preferences</strong></div>
           <dl className="request-facts">
-            <div><dt>Requested service</dt><dd>{booking.service_name || 'None selected'}</dd></div>
+            <div><dt>Requested activity</dt><dd>{booking.service_name || 'None selected'}</dd></div>
             <div><dt>Activities</dt><dd>{request.activities || 'None selected'}</dd></div>
           </dl>
           <div className="request-note"><span>Message from guest</span><p>{request.note || 'No additional message provided.'}</p></div>

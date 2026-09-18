@@ -33,7 +33,7 @@ function resortFields(string $kind): array
         'detail' => ['text', 300], 'badge' => ['text', 100], 'style' => ['select', ['standard', 'group', 'exclusive']],
     ];
     $assets = array_column(resortSeed()['photos'], 'id');
-    return $fields + ['asset' => ['select', array_merge([''], $assets)],
+    return $fields + ['photos' => ['photos'], 'asset' => ['select', array_merge([''], $assets)],
         'icon' => ['select', ['wave', 'wifi', 'snow', 'paw', 'tv', 'mic', 'kitchen', 'pin']], 'image_caption' => ['text', 150]];
 }
 

@@ -125,6 +125,7 @@
     {
       "name": "ATV rental",
       "description": "Add an off-road adventure to your beach getaway.",
+      "photos": ["guest_4"],
       "asset": "guest_4",
       "icon": "wave",
       "price": null,
@@ -140,6 +141,7 @@
     {
       "name": "Banana boat rental",
       "description": "Get the crew together for a splash-filled ride.",
+      "photos": ["guest_1"],
       "asset": "guest_1",
       "icon": "wave",
       "price": null,
@@ -155,6 +157,7 @@
     {
       "name": "Jet ski rental",
       "description": "Make some waves and bring a little speed to your beach day.",
+      "photos": [],
       "asset": "",
       "icon": "wave",
       "price": null,
@@ -166,6 +169,22 @@
       "archived": false,
       "sort_order": 2,
       "image_caption": "Meet you on the water"
+    },
+    {
+      "name": "UFO",
+      "description": "Add a UFO ride to your beach day. Ask our team about rental options for your visit.",
+      "photos": [],
+      "asset": "",
+      "icon": "wave",
+      "price": null,
+      "price_mode": "fixed",
+      "price_unit": "ride",
+      "availability": "inquiry",
+      "availability_text": "Rates and availability upon inquiry.",
+      "enabled": true,
+      "archived": false,
+      "sort_order": 3,
+      "image_caption": "A little more adventure"
     }
   ]
 }

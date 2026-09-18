@@ -59,7 +59,6 @@ function Intake({ kind, mutate, busy }) {
       if (await mutate({ action: 'intake', kind, ...Object.fromEntries(new FormData(form)) })) form.reset();
     }}><fieldset disabled={busy}><div className="fb-grid">
       <Field title="Guest name" name="guest_name" maxLength={100} required />
-      <Field title="Facebook item ID (optional, prevents duplicate imports)" name="external_id" />
       {kind === 'lead' && <><Field title="Email (optional)" name="email" type="email" /><Field title="Phone (optional)" name="phone" maxLength={30} /></>}
     </div><Field title={kind === 'lead' ? 'Inquiry details' : 'Message or comment'} name="body" maxLength={4000} multiline required />
     <button className="fb-primary">Save {kind === 'message' ? 'inquiry' : kind}</button></fieldset></form>

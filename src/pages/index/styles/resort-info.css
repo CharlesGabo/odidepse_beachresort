@@ -69,7 +69,10 @@
 .amenities .eyebrow { display: block; margin-bottom: 24px; }
 .amenity-grid, .activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
 .amenity-grid { perspective: 1000px; }
-.activity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.activity-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.activity-grid > .activity-card { grid-column: span 2; }
+.activity-grid > .activity-card:last-child:nth-child(3n + 1) { grid-column: 3 / span 2; }
+.activity-grid > .activity-card:nth-last-child(2):nth-child(3n + 1) { grid-column: 2 / span 2; }
 .amenity-card { position: relative; padding: clamp(24px, 3vw, 36px); border: 1px solid #c7cec6; border-bottom-color: #98a79e; border-radius: 10px; background: linear-gradient(145deg, #fffef9 0%, #f2efe5 100%); box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #d9ddd5, 0 5px 0 #aab5ad, 0 12px 22px #173d3520; transition: transform .3s ease, box-shadow .3s ease; }
 .amenity-card::after { content: ''; position: absolute; inset: 1px 1px auto; height: 38%; border-radius: 8px 8px 45% 45%; background: linear-gradient(180deg, #ffffff8c, transparent); pointer-events: none; }
 .amenity-card > * { position: relative; z-index: 1; }
@@ -107,7 +110,8 @@
 .occasion-list ul { display: flex; flex-wrap: wrap; gap: 10px; list-style: none; padding: 0; margin: 16px 0 0; }
 .occasion-list li { padding: 7px 12px; border: 1px solid #ffffff40; border-radius: 100px; font-size: 13px; }
 .activity-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: #fffdf7; overflow: hidden; transition: transform .3s, box-shadow .3s; }
-.activity-card__visual { aspect-ratio: 4 / 3; background: var(--sand); }
+.activity-card__visual { position: relative; aspect-ratio: 4 / 3; background: var(--sand); overflow: hidden; }
+.activity-card__visual > .stay-photo-background { z-index: 0; }
 .activity-card__visual img { height: 100%; object-fit: cover; }
 .activity-card__visual--icon { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: var(--lagoon); color: var(--foam); }
 .activity-card__visual--icon span { font: italic 24px Georgia, serif; }
@@ -241,7 +245,9 @@
   .amenity-grid { grid-template-columns: 1fr; }
   .group-highlight { grid-template-columns: 1fr; }
   .group-highlight__image { min-height: 0; height: 400px; }
-  .activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }.activity-card__body { padding: 20px; }
+  .activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .activity-grid > .activity-card,.activity-grid > .activity-card:last-child:nth-child(3n + 1),.activity-grid > .activity-card:nth-last-child(2):nth-child(3n + 1) { grid-column: auto; }
+  .activity-card__body { padding: 20px; }
   .booking-card-grid--stays, .booking-card-grid--activities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .booking-calendar-layout { grid-template-columns: 1fr; }
 }
