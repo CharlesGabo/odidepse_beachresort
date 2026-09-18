@@ -4,6 +4,7 @@ import ResortManager from './features/resort-management/ResortManager.jsx';
 import FacebookAutomations from './features/facebook-automation/FacebookAutomations.jsx';
 import { dashboardData } from './features/dashboard/dashboardData.js';
 import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.js';
+import useVisibilityPolling from './features/polling/useVisibilityPolling.js';
 
 const statusLabels = {
   pending: 'New request',
@@ -14,7 +15,7 @@ const statusLabels = {
   cancelled: 'Cancelled',
 };
 
-const calendarFilteredOnlyStatuses = ['completed', 'no_show', 'cancelled'];
+const terminalBookingStatuses = ['completed', 'no_show', 'cancelled'];
 
 const statusActions = {
   pending: [
@@ -61,6 +62,20 @@ function getBookingNights(booking) {
   const checkOut = new Date(`${booking.check_out}T12:00:00`);
   const nights = Math.round((checkOut - checkIn) / 86400000);
   return Number.isFinite(nights) && nights > 0 ? nights : null;
+}
+
+function escapeSpreadsheetXml(value) {
+  return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+}
+
+function spreadsheetCell(value, type = 'String', style = '') {
+  const safeType = type === 'Number' ? 'Number' : 'String';
+  const safeValue = safeType === 'Number' && Number.isFinite(Number(value)) ? Number(value) : escapeSpreadsheetXml(value);
+  return `<Cell${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="${safeType}">${safeValue}</Data></Cell>`;
+}
+
+function spreadsheetRow(values, style = '') {
+  return `<Row>${values.map(value => spreadsheetCell(value, typeof value === 'number' ? 'Number' : 'String', style)).join('')}</Row>`;
 }
 
 function formatBookingTime(value) {
@@ -230,7 +245,6 @@ const navItems = [
   { id: 'stays', label: 'Stays', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
   { id: 'services', label: 'Services', icon: 'home' },
-  { id: 'content', label: 'Website Content', icon: 'home' },
   { id: 'facebook', label: 'Facebook Automations', icon: 'automation' },
 ];
 
@@ -384,9 +398,9 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   }, [floatingCard]);
   const days = useMemo(() => Array.from({ length: new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate() }, (_, index) => addCalendarDays(visibleMonth, index)), [visibleMonth]);
   const calendarBookings = useMemo(() => bookings.filter(booking => (
-    calendarFilteredOnlyStatuses.includes(statusFilter)
+    terminalBookingStatuses.includes(statusFilter)
       ? booking.status === statusFilter
-      : !calendarFilteredOnlyStatuses.includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
+      : !terminalBookingStatuses.includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
   )), [bookings, statusFilter]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -944,8 +958,15 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     return data;
   };
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
-  const [filter, setFilter] = useState('all');
-  const [query, setQuery] = useState('');
+  const [bookingChildView, setBookingChildView] = useState('requests');
+  const [calendarFilter, setCalendarFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeQuery, setActiveQuery] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyDateMode, setHistoryDateMode] = useState('all');
+  const [historyDateValue, setHistoryDateValue] = useState('');
+  const [historyDateEnd, setHistoryDateEnd] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
   const [highlightedBookingId, setHighlightedBookingId] = useState(null);
   const [highlightedCalendarBookingId, setHighlightedCalendarBookingId] = useState(null);
@@ -955,15 +976,28 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const calendarScrollEndRef = useRef(null);
   useEffect(() => {
     if (!navigationIntent) return;
-    setFilter(navigationIntent.status || 'all');
-    setQuery('');
     setManualBookingOpen(Boolean(navigationIntent.openManualBooking));
     const id = navigationIntent.bookingId ? String(navigationIntent.bookingId) : null;
+    const targetBooking = id ? bookings.find(item => String(item.id) === id) : null;
+    const targetIsHistory = terminalBookingStatuses.includes(targetBooking?.status);
     const focusCalendar = navigationIntent.focus === 'calendar';
+    if (focusCalendar) {
+      setBookingChildView('requests');
+      setCalendarFilter(targetBooking?.status || navigationIntent.status || 'all');
+    } else if (targetIsHistory) {
+      setBookingChildView('history');
+      setHistoryFilter('all');
+      setHistoryQuery('');
+    } else {
+      setBookingChildView('requests');
+      setActiveFilter(navigationIntent.status || 'all');
+      setActiveQuery('');
+    }
     if (id && focusCalendar) setHighlightedCalendarBookingId(id);
     else if (id) setHighlightedBookingId(id);
     const timer = window.setTimeout(() => {
-      const target = focusCalendar ? document.querySelector('.booking-calendar') : id ? document.getElementById(`booking-${id}`) : document.getElementById('bookings-heading');
+      const targetId = targetIsHistory && window.matchMedia('(max-width: 700px)').matches ? `booking-mobile-${id}` : `booking-${id}`;
+      const target = focusCalendar ? document.querySelector('.booking-calendar') : id ? document.getElementById(targetId) : document.getElementById('bookings-heading');
       if (id && !focusCalendar) target?.focus({ preventScroll: true });
       target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: focusCalendar ? 'start' : id ? 'center' : 'start' });
     }, 0);
@@ -971,12 +1005,13 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     else if (id) highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
     return () => window.clearTimeout(timer);
   }, [navigationIntent]);
-  const visible = useMemo(() => {
+  const visibleActiveBookings = useMemo(() => {
     return bookings.filter(item => (
-      (filter === 'all' ? !calendarFilteredOnlyStatuses.includes(item.status) : item.status === filter)
-      && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
+      !terminalBookingStatuses.includes(item.status)
+      && (activeFilter === 'all' || item.status === activeFilter)
+      && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(activeQuery.toLowerCase())
     )).sort((a, b) => {
-      if (filter === 'all') {
+      if (activeFilter === 'all') {
         const statusOrder = ['pending', 'confirmed', 'checked_in'];
         const statusDifference = statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status);
         if (statusDifference) return statusDifference;
@@ -985,7 +1020,102 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
         || a.check_out.localeCompare(b.check_out)
         || String(a.id).localeCompare(String(b.id));
     });
-  }, [bookings, filter, query]);
+  }, [bookings, activeFilter, activeQuery]);
+  const historyYears = useMemo(() => [...new Set(bookings
+    .filter(item => terminalBookingStatuses.includes(item.status) && /^\d{4}-/.test(item.check_in || ''))
+    .map(item => item.check_in.slice(0, 4)))].sort((a, b) => b.localeCompare(a)), [bookings]);
+  const visibleHistoryBookings = useMemo(() => bookings.filter(item => (
+    terminalBookingStatuses.includes(item.status)
+    && (historyFilter === 'all' || item.status === historyFilter)
+    && (historyDateMode === 'all'
+      || (historyDateMode === 'range'
+        ? (!historyDateValue || item.check_in >= historyDateValue) && (!historyDateEnd || item.check_in <= historyDateEnd)
+        : !historyDateValue
+          || (historyDateMode === 'date' && item.check_in === historyDateValue)
+          || (historyDateMode === 'month' && item.check_in?.startsWith(historyDateValue))
+          || (historyDateMode === 'year' && item.check_in?.startsWith(`${historyDateValue}-`))))
+    && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(historyQuery.toLowerCase())
+  )).sort((a, b) => (
+    (b.check_out || '').localeCompare(a.check_out || '')
+    || (b.check_in || '').localeCompare(a.check_in || '')
+    || String(b.id).localeCompare(String(a.id))
+  )), [bookings, historyFilter, historyQuery, historyDateMode, historyDateValue, historyDateEnd]);
+  const historySummary = useMemo(() => {
+    const uniqueGuests = new Set(visibleHistoryBookings.map(item => (item.email || item.guest_name || '').trim().toLowerCase()).filter(Boolean));
+    const checkIns = visibleHistoryBookings.map(item => item.check_in).filter(Boolean).sort();
+    const checkOuts = visibleHistoryBookings.map(item => item.check_out).filter(Boolean).sort();
+    return {
+      bookings: visibleHistoryBookings.length,
+      uniqueGuests: uniqueGuests.size,
+      partyGuests: visibleHistoryBookings.reduce((total, item) => total + (Number(item.guests) || 0), 0),
+      completed: visibleHistoryBookings.filter(item => item.status === 'completed').length,
+      noShow: visibleHistoryBookings.filter(item => item.status === 'no_show').length,
+      cancelled: visibleHistoryBookings.filter(item => item.status === 'cancelled').length,
+      firstCheckIn: checkIns[0] || '',
+      lastCheckOut: checkOuts.at(-1) || '',
+    };
+  }, [visibleHistoryBookings]);
+
+  const bookingUnitName = booking => {
+    const roomIndex = Number(booking.room_index);
+    if (!Number.isInteger(roomIndex) || roomIndex < 1) return 'Not assigned';
+    const accommodation = accommodations.find(item => Number(item.id) === Number(booking.stay_id))
+      || accommodations.find(item => item.name.toLowerCase() === String(booking.stay_type || '').toLowerCase());
+    const accommodationName = (accommodation?.name || booking.stay_type || '').trim();
+    if (!accommodationName) return 'Not assigned';
+    return Number(accommodation?.room_count) === 1 ? accommodationName : `${accommodationName} #${roomIndex}`;
+  };
+
+  const exportBookingHistory = () => {
+    const dateFilter = historyDateMode === 'all' ? 'All dates'
+      : historyDateMode === 'range' ? `${historyDateValue || 'Beginning'} to ${historyDateEnd || 'Latest'}`
+        : `${historyDateMode}: ${historyDateValue || 'Not selected'}`;
+    const summaryRows = [
+      ['Booking History Summary', ''],
+      ['Generated', new Date().toLocaleString('en-PH')],
+      ['Status filter', historyFilter === 'all' ? 'All history' : statusLabels[historyFilter]],
+      ['Date filter (check-in)', dateFilter],
+      ['Search', historyQuery || 'None'],
+      ['Matching bookings', historySummary.bookings],
+      ['Unique guests', historySummary.uniqueGuests],
+      ['Total party guests', historySummary.partyGuests],
+      ['Completed', historySummary.completed],
+      ['No show', historySummary.noShow],
+      ['Cancelled', historySummary.cancelled],
+      ['Coverage', historySummary.firstCheckIn ? `${historySummary.firstCheckIn} to ${historySummary.lastCheckOut}` : 'No matching dates'],
+    ];
+    const detailHeaders = ['Reference', 'Guest', 'Email', 'Phone', 'Stay', 'Accommodation / room', 'Party', 'Check-in', 'Check-out', 'Status', 'Source'];
+    const bookingExportRow = booking => [
+      booking.reference_code,
+      booking.guest_name,
+      booking.email,
+      booking.phone || '',
+      booking.stay_type || booking.service_name || 'Flexible stay',
+      bookingUnitName(booking),
+      Number(booking.guests) || 0,
+      booking.check_in,
+      booking.check_out,
+      statusLabels[booking.status] || booking.status,
+      Number(booking.is_facebook_booking) === 1 ? 'Facebook Page' : 'Website / Manual',
+    ];
+    const detailGroups = terminalBookingStatuses.map(status => ({
+      status,
+      rows: visibleHistoryBookings.filter(booking => booking.status === status).map(bookingExportRow),
+    })).filter(group => group.rows.length > 0);
+    const summaryColumns = '<Column ss:AutoFitWidth="0" ss:Width="145"/><Column ss:AutoFitWidth="0" ss:Width="250"/>';
+    const detailWidths = [110, 145, 190, 110, 155, 110, 55, 90, 90, 85, 105];
+    const detailColumns = detailWidths.map(width => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`).join('');
+    const detailSections = detailGroups.map((group, index) => `<Row ss:Height="24"><Cell ss:MergeAcross="10" ss:StyleID="Section${group.status}"><Data ss:Type="String">${escapeSpreadsheetXml(statusLabels[group.status])} (${group.rows.length})</Data></Cell></Row>${spreadsheetRow(detailHeaders, 'Header')}${group.rows.map(row => spreadsheetRow(row, 'Body')).join('')}${index < detailGroups.length - 1 ? '<Row ss:Height="10"/>' : ''}`).join('');
+    const workbook = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1"/><Interior ss:Color="#E8F0EC" ss:Pattern="Solid"/></Style><Style ss:ID="Body"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10"/></Style><Style ss:ID="Sectioncompleted"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#53635E" ss:Pattern="Solid"/></Style><Style ss:ID="Sectionno_show"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#75551F" ss:Pattern="Solid"/></Style><Style ss:ID="Sectioncancelled"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#A9473F" ss:Pattern="Solid"/></Style></Styles><Worksheet ss:Name="Summary"><Table>${summaryColumns}${summaryRows.map((row, index) => spreadsheetRow(row, index === 0 ? 'Header' : 'Body')).join('')}</Table></Worksheet><Worksheet ss:Name="Booking History"><Table>${detailColumns}${detailSections}</Table></Worksheet></Workbook>`;
+    const url = URL.createObjectURL(new Blob([`\uFEFF${workbook}`], { type: 'application/vnd.ms-excel;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `odidepse-booking-history-${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => () => {
     window.clearTimeout(highlightTimerRef.current);
@@ -995,15 +1125,24 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   }, []);
 
   const viewBookingFromCalendar = bookingId => {
-    setFilter('all');
-    setQuery('');
+    const booking = bookings.find(item => String(item.id) === String(bookingId));
+    if (terminalBookingStatuses.includes(booking?.status)) {
+      setBookingChildView('history');
+      setHistoryFilter('all');
+      setHistoryQuery('');
+    } else {
+      setBookingChildView('requests');
+      setActiveFilter('all');
+      setActiveQuery('');
+    }
     setHighlightedBookingId(String(bookingId));
     window.clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = window.setTimeout(() => setHighlightedBookingId(null), 2500);
     window.clearTimeout(calendarModalTimerRef.current);
     if (calendarScrollEndRef.current) window.removeEventListener('scrollend', calendarScrollEndRef.current);
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      const target = document.getElementById(`booking-${bookingId}`);
+      const targetId = terminalBookingStatuses.includes(booking?.status) && window.matchMedia('(max-width: 700px)').matches ? `booking-mobile-${bookingId}` : `booking-${bookingId}`;
+      const target = document.getElementById(targetId);
       const openBookingModal = () => {
         window.clearTimeout(calendarModalTimerRef.current);
         if (calendarScrollEndRef.current) window.removeEventListener('scrollend', calendarScrollEndRef.current);
@@ -1028,31 +1167,78 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     }));
   };
 
-  const viewBookingInCalendar = bookingId => {
-    setHighlightedCalendarBookingId(String(bookingId));
+  const viewBookingInCalendar = booking => {
+    setBookingChildView('requests');
+    setCalendarFilter(terminalBookingStatuses.includes(booking.status) ? booking.status : 'all');
+    setHighlightedCalendarBookingId(String(booking.id));
     window.clearTimeout(calendarHighlightTimerRef.current);
     calendarHighlightTimerRef.current = window.setTimeout(() => setHighlightedCalendarBookingId(null), 2500);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => document.querySelector('.booking-calendar')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })));
   };
 
+  const renderBookingCard = (booking, showPhone = false, idPrefix = 'booking') => {
+    const nights = getBookingNights(booking);
+    return <article className={`booking-card booking-card--calendar-link${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`${idPrefix}-${booking.id}`} key={booking.id}
+      tabIndex="0" role="button" aria-label={`Show ${booking.guest_name}'s booking in the calendar`}
+      onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking); }}
+      onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking); } }}>
+      <div className="booking-card__top">
+        <div className="booking-card__reference"><span>{booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}</div>
+        <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+      </div>
+      <div className="booking-card__guest">
+        <div><strong>{booking.guest_name}</strong><small>{booking.email}</small>{showPhone && <small>{booking.phone || 'No phone provided'}</small>}</div>
+      </div>
+      <div className="booking-card__stay">
+        <div><span>Stay</span><strong>{booking.stay_type || booking.service_name || 'Flexible stay'}</strong></div>
+        <div><span>Party</span><strong>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</strong></div>
+      </div>
+      <div className="booking-card__footer">
+        <div className="booking-card__dates">
+          <div><span>Check-in</span><strong>{formatBookingDate(booking.check_in, true)}</strong></div>
+          <div className="booking-card__route"><span>{nights ? `${nights + 1}D · ${nights}N` : '→'}</span></div>
+          <div><span>Check-out</span><strong>{formatBookingDate(booking.check_out, true)}</strong></div>
+        </div>
+        <div className="booking-card__actions">
+          <BookingStatusActions booking={booking} updateStatus={updateStatus} />
+          <button className="booking-manage-button" type="button" onClick={() => setSelectedBookingId(booking.id)}>View &amp; manage <AdminIcon name="arrow" /></button>
+        </div>
+      </div>
+    </article>;
+  };
+
+  const renderBookingCards = (items, filter, showPhone, emptyTitle, emptyMessage, keyPrefix) => <div className="booking-table booking-card-grid">
+    {items.flatMap((booking, index) => {
+      const card = renderBookingCard(booking, showPhone, keyPrefix === 'history' ? 'booking-mobile' : 'booking');
+      const startsStatusGroup = filter === 'all' && (index === 0 || items[index - 1].status !== booking.status);
+      return startsStatusGroup
+        ? [<h3 className={`booking-status-group-heading booking-status-group-heading--${booking.status}`} key={`${keyPrefix}-${booking.status}-heading`}>{statusLabels[booking.status]}</h3>, card]
+        : [card];
+    })}
+    {items.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>{emptyTitle}</h3><p>{emptyMessage}</p></div>}
+  </div>;
+
   return <>
-    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={filter} onStatusFilterChange={setFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} onMoveBooking={moveBooking} canUndoRoomMove={canUndoRoomMove} onUndoRoomMove={undoRoomMove} onSaveRoomMoves={saveRoomMoves} />
+    <nav className="booking-subnav" aria-label="Booking pages">
+      <button type="button" className={bookingChildView === 'requests' ? 'active' : ''} aria-current={bookingChildView === 'requests' ? 'page' : undefined} onClick={() => setBookingChildView('requests')}>Booking Requests</button>
+      <button type="button" className={bookingChildView === 'history' ? 'active' : ''} aria-current={bookingChildView === 'history' ? 'page' : undefined} onClick={() => setBookingChildView('history')}>Booking History</button>
+    </nav>
+    {bookingChildView === 'requests' && <>
+    <BookingCalendar bookings={bookings} accommodations={accommodations} statusFilter={calendarFilter} onStatusFilterChange={setCalendarFilter} onViewBooking={viewBookingFromCalendar} highlightedBookingId={highlightedCalendarBookingId} onMoveBooking={moveBooking} canUndoRoomMove={canUndoRoomMove} onUndoRoomMove={undoRoomMove} onSaveRoomMoves={saveRoomMoves} />
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
-      <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visible.length} {visible.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
-      <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search bookings" placeholder="Search guest or reference" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visibleActiveBookings.length} {visibleActiveBookings.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
+      <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search active bookings" placeholder="Search guest or reference" value={activeQuery} onChange={event => setActiveQuery(event.target.value)} /></label>
     </div>
-    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in', 'completed', 'no_show', 'cancelled'].flatMap(value => [
-      value === 'completed' ? <span className="status-filter-divider" aria-hidden="true" key="completed-divider">|</span> : null,
-      <button type="button" key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>,
-    ])}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
+    <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in'].map(value => <button type="button" key={value} className={activeFilter === value ? 'active' : ''} onClick={() => setActiveFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
     <div className="booking-table booking-card-grid">
-      {visible.flatMap((booking, index) => {
+      {visibleActiveBookings.flatMap((booking, index) => {
         const nights = getBookingNights(booking);
         const card = <article className={`booking-card booking-card--calendar-link${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}
           tabIndex="0" role="button" aria-label={`Show ${booking.guest_name}'s booking in the calendar`}
-          onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking.id); }}
-          onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking.id); } }}>
+          onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking); }}
+          onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking); } }}>
           <div className="booking-card__top">
             <div className="booking-card__reference"><span>{booking.reference_code}</span>{Number(booking.is_facebook_booking) === 1 && <span className="booking-source booking-source--facebook">Facebook Page</span>}</div>
             <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
@@ -1076,16 +1262,65 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
             </div>
           </div>
         </article>;
-        const startsStatusGroup = filter === 'all' && (index === 0 || visible[index - 1].status !== booking.status);
+        const startsStatusGroup = activeFilter === 'all' && (index === 0 || visibleActiveBookings[index - 1].status !== booking.status);
         return startsStatusGroup
           ? [<h3 className={`booking-status-group-heading booking-status-group-heading--${booking.status}`} key={`${booking.status}-heading`}>{statusLabels[booking.status]}</h3>, card]
           : [card];
       })}
-      {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
+      {visibleActiveBookings.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No active reservations here.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
     <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} updateDates={updateDates} />
-    {manualBookingOpen && <ManualBookingModal open onClose={() => setManualBookingOpen(false)} csrfToken={csrfToken} onSaved={data => { setFilter('pending'); setQuery(''); onBookingSaved(data); }} />}
+    {manualBookingOpen && <ManualBookingModal open onClose={() => setManualBookingOpen(false)} csrfToken={csrfToken} onSaved={data => { setActiveFilter('pending'); setActiveQuery(''); onBookingSaved(data); }} />}
     </section>
+    </>}
+    {bookingChildView === 'history' && <>
+    <section className="booking-board booking-history admin-view" aria-labelledby="booking-history-heading">
+      <div className="booking-board__head">
+        <div className="booking-board__summary"><h2 id="booking-history-heading">Booking History</h2><p>{visibleHistoryBookings.length} past {visibleHistoryBookings.length === 1 ? 'reservation' : 'reservations'}</p></div>
+        <div className="booking-history-head-actions"><label className="admin-search"><AdminIcon name="search" /><input aria-label="Search booking history" placeholder="Search past guest or reference" value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} /></label><button type="button" className="booking-history-export" disabled={visibleHistoryBookings.length === 0} onClick={exportBookingHistory}>Export to Excel</button></div>
+      </div>
+      <div className="booking-history-date-filters">
+        <label><span>Filter by check-in</span><select value={historyDateMode} onChange={event => { setHistoryDateMode(event.target.value); setHistoryDateValue(''); setHistoryDateEnd(''); }}><option value="all">All dates</option><option value="date">Exact date</option><option value="month">Month</option><option value="year">Year</option><option value="range">Date range</option></select></label>
+        {historyDateMode === 'date' && <label><span>Date</span><input type="date" value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)} /></label>}
+        {historyDateMode === 'month' && <label><span>Month</span><input type="month" value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)} /></label>}
+        {historyDateMode === 'year' && <label><span>Year</span><select value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)}><option value="">Choose year</option>{historyYears.map(year => <option key={year} value={year}>{year}</option>)}</select></label>}
+        {historyDateMode === 'range' && <><label><span>From</span><input type="date" value={historyDateValue} max={historyDateEnd || undefined} onChange={event => setHistoryDateValue(event.target.value)} /></label><label><span>To</span><input type="date" value={historyDateEnd} min={historyDateValue || undefined} onChange={event => setHistoryDateEnd(event.target.value)} /></label></>}
+        {historyDateMode !== 'all' && <button type="button" onClick={() => { setHistoryDateMode('all'); setHistoryDateValue(''); setHistoryDateEnd(''); }}>Show all dates</button>}
+      </div>
+      <div className="filter-row">{['all', ...terminalBookingStatuses].map(value => <button type="button" key={value} className={historyFilter === value ? 'active' : ''} onClick={() => setHistoryFilter(value)}>{value === 'all' ? 'All history' : statusLabels[value]}</button>)}</div>
+      <div className="booking-history-summary" aria-live="polite">
+        <article><span>Bookings</span><strong>{historySummary.bookings}</strong></article>
+        <article><span>Unique guests</span><strong>{historySummary.uniqueGuests}</strong></article>
+        <article><span>Total party guests</span><strong>{historySummary.partyGuests}</strong></article>
+        <article><span>Completed</span><strong>{historySummary.completed}</strong></article>
+        <article><span>No show</span><strong>{historySummary.noShow}</strong></article>
+        <article><span>Cancelled</span><strong>{historySummary.cancelled}</strong></article>
+      </div>
+      {historySummary.firstCheckIn && <p className="booking-history-coverage">Showing stays from {formatBookingDate(historySummary.firstCheckIn)} through {formatBookingDate(historySummary.lastCheckOut)}.</p>}
+      <div className="booking-history-table-wrap">
+        <table className="booking-history-table">
+          <thead><tr><th>Reference</th><th>Guest</th><th>Contact</th><th>Stay</th><th>Accommodation / room</th><th>Party</th><th>Check-in</th><th>Check-out</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {visibleHistoryBookings.map(booking => <tr key={booking.id} id={`booking-${booking.id}`} className={highlightedBookingId === String(booking.id) ? 'is-calendar-highlighted' : ''}>
+              <td><strong>{booking.reference_code}</strong>{Number(booking.is_facebook_booking) === 1 && <small>Facebook Page</small>}</td>
+              <td><strong>{booking.guest_name}</strong></td>
+              <td><a href={`mailto:${booking.email}`}>{booking.email}</a><small>{booking.phone || 'No phone provided'}</small></td>
+              <td>{booking.stay_type || booking.service_name || 'Flexible stay'}</td>
+              <td>{bookingUnitName(booking)}</td>
+              <td>{booking.guests}</td>
+              <td>{formatBookingDate(booking.check_in, true)}</td>
+              <td>{formatBookingDate(booking.check_out, true)}</td>
+              <td><span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span></td>
+              <td><div className="booking-history-table__actions"><BookingStatusActions booking={booking} updateStatus={updateStatus} /><button className="booking-history-view" type="button" onClick={() => setSelectedBookingId(booking.id)}>View</button></div></td>
+            </tr>)}
+            {visibleHistoryBookings.length === 0 && <tr><td className="booking-history-table__empty" colSpan="10"><strong>No booking history found.</strong><span>Completed, no-show, and cancelled bookings will appear here.</span></td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="booking-history-cards">{renderBookingCards(visibleHistoryBookings, 'history', true, 'No booking history found.', 'Completed, no-show, and cancelled bookings will appear here.', 'history')}</div>
+    </section>
+    <BookingRequestModal booking={bookings.find(item => item.id === selectedBookingId) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} updateDates={updateDates} />
+    </>}
   </>;
 }
 
@@ -1178,6 +1413,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   }, [onLogout]);
 
   useEffect(() => { load(); }, [load]);
+  useVisibilityPolling(load, { enabled: ['dashboard', 'bookings', 'stays', 'services', 'facebook'].includes(activeView) });
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
 
   const updateStatus = async (id, status) => {
@@ -1232,7 +1468,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
-        {['stays','services','content'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
+        {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
         {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} updateDates={updateDates} onBookingSaved={load} onOpenBooking={id => {
           const booking = bookings.find(item => Number(item.id) === Number(id));

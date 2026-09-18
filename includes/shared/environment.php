@@ -35,16 +35,32 @@ function loadEnvironment(string $filePath): void
             $value = substr($value, 1, -1);
         }
 
-        if (getenv($name) === false) {
-            putenv("{$name}={$value}");
-            $_ENV[$name] = $value;
+        $existing = getenv($name);
+        if (($existing === false || $existing === '') && isset($_SERVER[$name]) && is_string($_SERVER[$name])) {
+            $existing = $_SERVER[$name];
         }
+        if (($existing === false || $existing === '') && isset($_ENV[$name]) && is_string($_ENV[$name])) {
+            $existing = $_ENV[$name];
+        }
+        if ($existing !== false && $existing !== '') {
+            $_ENV[$name] = $existing;
+            continue;
+        }
+
+        $_ENV[$name] = $value;
+        putenv("{$name}={$value}");
     }
 }
 
 function requireEnvironment(string $name): string
 {
     $value = getenv($name);
+    if (($value === false || $value === '') && isset($_SERVER[$name]) && is_string($_SERVER[$name])) {
+        $value = $_SERVER[$name];
+    }
+    if (($value === false || $value === '') && isset($_ENV[$name]) && is_string($_ENV[$name])) {
+        $value = $_ENV[$name];
+    }
     if ($value === false || $value === '') {
         throw new RuntimeException("Required environment variable {$name} is not configured.");
     }

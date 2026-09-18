@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import MessengerInbox from './MessengerInbox.jsx';
+import useVisibilityPolling, { HIDDEN_POLL_INTERVAL_MS, VISIBLE_POLL_INTERVAL_MS } from '../polling/useVisibilityPolling.js';
 import './facebook-automations.css';
 
 const sections = [['message', 'Messenger'], ['alerts', 'Booking Requests'], ['comment', 'Comments'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
@@ -16,8 +17,6 @@ const guidedReplies = [
   ['pending_updated', 'Pending request updated'],
 ];
 const MESSENGER_REFRESH_MS = 1000;
-const VISIBLE_REFRESH_MS = 15000;
-const HIDDEN_REFRESH_MS = 60000;
 const label = value => String(value || '').replaceAll('_', ' ');
 const bookingStatusLabels = { pending: 'New request', confirmed: 'Confirmed', checked_in: 'Checked in', completed: 'Completed', no_show: 'No show', cancelled: 'Cancelled' };
 
@@ -199,32 +198,10 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
     return () => controller.abort();
   }, [section, page, refresh, onLogout]);
 
-  useEffect(() => {
-    let timer;
-    let stopped = false;
-    const schedule = () => {
-      const delay = document.visibilityState === 'visible'
-        ? (section === 'message' ? MESSENGER_REFRESH_MS : VISIBLE_REFRESH_MS)
-        : HIDDEN_REFRESH_MS;
-      timer = window.setTimeout(() => {
-        if (stopped) return;
-        setRefresh(value => value + 1);
-        schedule();
-      }, delay);
-    };
-    const visibilityChanged = () => {
-      window.clearTimeout(timer);
-      if (document.visibilityState === 'visible') setRefresh(value => value + 1);
-      schedule();
-    };
-    document.addEventListener('visibilitychange', visibilityChanged);
-    schedule();
-    return () => {
-      stopped = true;
-      window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', visibilityChanged);
-    };
-  }, [section]);
+  useVisibilityPolling(() => setRefresh(value => value + 1), {
+    visibleInterval: section === 'message' ? MESSENGER_REFRESH_MS : VISIBLE_POLL_INTERVAL_MS,
+    hiddenInterval: HIDDEN_POLL_INTERVAL_MS,
+  });
 
   const mutate = async payload => {
     if (busy) return false;

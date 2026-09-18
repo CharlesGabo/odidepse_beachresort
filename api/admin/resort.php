@@ -34,6 +34,7 @@ try {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
     if ($error instanceof InvalidArgumentException) jsonResponse(['status' => 'error', 'message' => $error->getMessage()], 422);
     if ($error instanceof OutOfBoundsException) jsonResponse(['status' => 'error', 'message' => 'Record not found.'], 404);
-    error_log('Resort content save failed: ' . $error->getMessage());
-    jsonResponse(['status' => 'error', 'message' => 'Resort information could not be saved. Please try again.'], 503);
+    $operation = $method === 'GET' ? 'load' : 'save';
+    error_log("Resort content {$operation} failed: " . $error->getMessage());
+    jsonResponse(['status' => 'error', 'message' => $method === 'GET' ? 'Resort information could not be loaded. Please try again.' : 'Resort information could not be saved. Please try again.'], 503);
 }
