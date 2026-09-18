@@ -1,0 +1,49 @@
+/* Admin-only sizing: let content shrink and keep wide calendars locally scrollable. */
+.admin-shell .admin-search { max-width:100%; min-width:0; }
+.admin-shell .admin-search input { min-width:0; }
+.admin-shell .admin-search svg { flex-shrink:0; }
+.admin-shell :is(.admin-view,.booking-board,.booking-calendar,.guest-list,.guest-row > div,.guest-name > div,.admin-stay-card,.admin-request-modal__main,.admin-request-modal__aside) { min-width:0; }
+.admin-shell :is(.guest-row,.admin-stay-card h3,.admin-request-modal__guest strong,.admin-request-modal__guest small,.request-note p,.request-facts dd,.booking-calendar-dialog__facts dd) { overflow-wrap:anywhere; }
+.admin-shell .admin-request-modal__close { flex-shrink:0; }
+
+@media (max-width:900px) {
+  .admin-shell .admin-mobile-nav { grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); }
+  .admin-shell .admin-main > header { flex-wrap:wrap; }
+  .admin-shell .admin-main > header > div { min-width:0; }
+  .admin-shell .admin-main > header h1 { overflow-wrap:anywhere; }
+  .admin-shell .admin-view__heading { flex-wrap:wrap; }
+  .admin-shell .booking-board__head { flex-wrap:wrap; }
+  .admin-shell .calendar-move-actions { flex-wrap:wrap; max-width:100%; }
+  .admin-shell .booking-modal .booking-calendar__toolbar { grid-template-columns:40px minmax(0,1fr) 40px; }
+  .admin-shell .booking-modal .booking-calendar__toolbar strong { white-space:normal; }
+  .admin-shell :is(input,select,textarea):not([type=checkbox]):not([type=radio]) { min-width:0; max-width:100%; font-size:16px; }
+  .admin-shell :is(.booking-status-action,.booking-manage-button,.filter-row button,.booking-subnav button,.booking-history-export,.resort-editor__actions button,.fb-tabs button) { min-height:44px; }
+}
+
+@media (max-width:650px) {
+  .admin-shell .guest-row { grid-template-columns:minmax(0,1fr) 35px; }
+  .admin-shell .booking-history-head-actions { flex-wrap:wrap; }
+  .admin-shell .booking-history-head-actions .admin-search { flex:1 1 100%; }
+  .admin-shell .booking-history-export { width:100%; }
+  .admin-shell .booking-history-summary span { white-space:normal; overflow-wrap:anywhere; }
+  .admin-shell .booking-card__top { flex-wrap:wrap; }
+  .admin-shell .booking-card__dates > div:not(.booking-card__route) { min-width:0; }
+  .admin-shell .booking-card__dates { flex-wrap:wrap; }
+  .admin-shell .request-date-editor__actions { flex-wrap:wrap; }
+  .admin-shell .request-date-route label { min-width:0; }
+  .admin-shell .calendar-move-warning__actions { flex-wrap:wrap; }
+  .admin-shell .calendar-move-warning__actions button { min-height:44px; }
+  .admin-shell .resort-editor__actions { flex-wrap:nowrap; width:100%; overflow-x:auto; padding-bottom:4px; overscroll-behavior-x:contain; scrollbar-width:thin; }
+  .admin-shell .resort-editor__actions > button { flex:1 0 max-content; min-height:44px; white-space:nowrap; }
+  .admin-shell .fb-tabs { flex-wrap:nowrap; width:100%; overflow-x:auto; padding-bottom:12px; overscroll-behavior-x:contain; scrollbar-width:thin; }
+  .admin-shell .fb-tabs button { flex:0 0 auto; white-space:nowrap; }
+  .admin-shell .fb-pagination { flex-wrap:wrap; gap:8px; }
+  .admin-shell .fb-connection > div,.admin-shell .fb-row > div { min-width:0; overflow-wrap:anywhere; }
+  .admin-shell .messenger-inbox { grid-template-columns:minmax(0,1fr); }
+  .admin-shell .messenger-sidebar,.admin-shell .messenger-conversation { height:clamp(300px,66dvh,680px); }
+  .admin-shell .messenger-hover-time { display:none; }
+  .admin-shell .messenger-bubble { min-width:0; }
+  .admin-shell .messenger-input-shell { padding-inline:10px; gap:6px; }
+  .admin-shell .messenger-compose-row { gap:6px; }
+  .admin-shell .messenger-photo-viewer img { max-height:calc(100dvh - 110px); }
+}

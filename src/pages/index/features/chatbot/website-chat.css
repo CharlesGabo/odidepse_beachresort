@@ -18,6 +18,14 @@
 .website-chat-speaker { display:block; font-size:11px; margin-bottom:4px; }
 .website-chat-actions { display:flex; flex-wrap:nowrap; gap:6px; padding:6px 12px; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
 .website-chat-actions button,.website-chat-actions a { flex:0 0 auto; border:1px solid #cbd5cb; border-radius:20px; color:#254d40; background:white; padding:8px 10px; font-size:12px; text-decoration:none; }
+.website-chat-actions .website-chat-contact-button { border-color:#254d40; color:white; background:#254d40; }
+.website-chat-contact { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:2px 12px 6px; padding:12px; border:1px solid #d7dfd7; border-radius:12px; background:#edf1e9; }
+.website-chat-contact > div { grid-column:1 / -1; }
+.website-chat-contact > div strong,.website-chat-contact > div small,.website-chat-contact a span,.website-chat-contact a strong { display:block; }
+.website-chat-contact > div small { margin-top:3px; color:#58665e; font-size:11px; line-height:1.45; }
+.website-chat-contact a { min-width:0; padding:9px 10px; border-radius:9px; color:#254d40; background:white; text-decoration:none; overflow-wrap:anywhere; }
+.website-chat-contact a span { margin-bottom:4px; color:#68786f; font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.website-chat-contact a strong { font-size:11px; line-height:1.35; }
 .website-chat-panel form { padding:8px 12px; }
 .website-chat-panel form > div { display:flex; gap:8px; }
 .website-chat textarea { flex:1; min-width:0; min-height:76px; max-height:180px; resize:none; overflow-y:auto; border:1px solid #cbd5cb; border-radius:8px; padding:10px; font-size:14px; line-height:1.45; background:white; color:#20362e; }
@@ -30,6 +38,11 @@
 @media(max-width:768px) {
   .website-chat { right:16px; bottom:max(16px,env(safe-area-inset-bottom)); }
   .website-chat-panel { position:fixed; inset:12px 12px 0; width:auto; height:auto; padding-bottom:env(safe-area-inset-bottom); border-bottom:0; border-radius:20px 20px 0 0; z-index:81; }
+  .website-chat-actions { flex:0 0 auto; padding-block:8px; }
+  .website-chat-actions .website-chat-contact-button { position:sticky; left:0; z-index:2; min-height:44px; padding-inline:16px; box-shadow:8px 0 10px #fffdf7; }
+  .website-chat-contact { flex:0 1 auto; grid-template-columns:1fr; max-height:min(260px,35dvh); margin-inline:12px; padding:10px; overflow-y:auto; overscroll-behavior:contain; }
+  .website-chat-contact > div { grid-column:1; }
+  .website-chat-contact a { display:flex; min-height:48px; flex-direction:column; justify-content:center; padding:10px 12px; }
   .website-chat textarea { font-size:16px; }
 }
 .website-chat-panel.is-fullscreen { position:fixed; inset:0; width:100vw; height:100dvh; padding-bottom:env(safe-area-inset-bottom); border:0; border-radius:0; z-index:1000; }

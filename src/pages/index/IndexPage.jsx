@@ -54,7 +54,7 @@ function Icon({ name, size = 20 }) {
     arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
     close: <><path d="M6 6l12 12M18 6L6 18" /></>,
     menu: <><path d="M4 8h16M4 16h16" /></>,
-    instagram: <><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><path d="M17.5 6.5h.01" /></>,
+    gmail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6M4 17l5.5-5M20 17l-5.5-5" /></>,
     pin: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
     wave: <><path d="M2 15c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2M2 19c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2" /></>,
   };
@@ -588,7 +588,7 @@ function PublicSite({ onHeroReady }) {
       <section className="closing section resort-closing" data-reveal><span className="eyebrow">{copy.closing["the_sea_is_waiting"]}</span><h2>{copy.closing["effortless_fun"]}<br /><em>{copy.closing["a_little_extra"]}</em></h2><p>{copy.closing["because_your_beach_trip_should_be_all_three_from_beach_days_and_j"]}</p><button className="button button--dark" type="button" onClick={() => openBooking()}>{copy.closing["plan_your_stay"]}<Icon name="arrow" /></button></section>
     </main>
     <button type="button" className={`scroll-to-top${headerScrolled ? ' is-visible' : ''}`} aria-label="Scroll to top" aria-hidden={!headerScrolled} tabIndex={headerScrolled ? 0 : -1} onClick={scrollToTop}><Icon name="arrow" size={20} /></button>
-    <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.instagram} aria-label="Instagram"><Icon name="instagram" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
+    <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.email} aria-label="Email us"><Icon name="gmail" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
     <WebsiteChat refresh={chatRefresh} onBook={() => openBooking()} onDraft={draft => { setChatDraft(draft); setBookingOpen(true); }} />
     <BookingModal key={chatDraft?.token || 'regular'} chatDraft={chatDraft} open={bookingOpen} onClose={() => setBookingOpen(false)} onSaved={() => setChatRefresh(value => value + 1)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
   </div>;

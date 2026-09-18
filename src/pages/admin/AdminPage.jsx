@@ -5,6 +5,7 @@ import FacebookAutomations from './features/facebook-automation/FacebookAutomati
 import { dashboardData } from './features/dashboard/dashboardData.js';
 import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.js';
 import useVisibilityPolling from './features/polling/useVisibilityPolling.js';
+import './styles/admin-responsive.css';
 
 const statusLabels = {
   pending: 'New request',
@@ -738,10 +739,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         </div>
         <div className="booking-calendar__legend" aria-label="Booking status legend">
           <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
-          {Object.entries(statusLabels).flatMap(([status, label]) => [
-            status === 'completed' ? <span className="status-filter-divider" aria-hidden="true" key="completed-divider">|</span> : null,
-            <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{label}</button>,
-          ])}
+          {['pending', 'confirmed', 'checked_in'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
         </div>
       </div>
       <div className="booking-calendar__toolbar">
@@ -772,6 +770,10 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
           <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">›</button>
         </div>
         <button type="button" onClick={closeLandscape} aria-label="Close landscape calendar">×</button>
+      </div>
+      <div className="booking-calendar__legend booking-calendar-landscape__legend" aria-label="Filter landscape calendar by booking status">
+        <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
+        {['pending', 'confirmed', 'checked_in'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
       </div>
       {resourceSummary}
       {renderCalendarGrid(' in landscape view', true)}
@@ -1470,7 +1472,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
-        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} ManualBookingModal={ManualBookingModal} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} updateDates={updateDates} onBookingSaved={load} onOpenBooking={id => {
+        {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} updateDates={updateDates} onOpenBooking={id => {
           const booking = bookings.find(item => Number(item.id) === Number(id));
           navigate('bookings');
           setNavigationIntent({ bookingId: id, focus: 'calendar', status: ['no_show', 'cancelled'].includes(booking?.status) ? booking.status : 'all' });

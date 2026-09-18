@@ -25,7 +25,6 @@
 .operations-empty { margin: 20px 0 8px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .admin-main > .booking-calendar,.admin-main > .resort-manager,.admin-main > .guest-directory { margin-top: 32px; }
 @media (max-width: 900px) {
-  .admin-shell .admin-mobile-nav { grid-template-columns: repeat(6,minmax(0,1fr)); }
   .operations-add-booking--desktop { display: none; }
   .operations-add-booking--mobile { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: -8px; }
   .operations-today { grid-template-columns: minmax(0,1fr); gap: 8px; }
@@ -42,7 +41,6 @@
 .resort-manager > p { color: var(--muted); font-size: 14px; }
 .filter-row { align-items:center; }
 .filter-row > button { flex:0 0 auto; }
-.status-filter-divider { flex:0 0 auto; align-self:center; color:#a8b1ad; font-size:14px; line-height:1; user-select:none; }
 .calendar-move-help { color:var(--muted); font-size:12px; }
 .calendar-move-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:6px 0 10px; }
 .calendar-move-tools .calendar-move-help { margin:0; }
@@ -364,6 +362,10 @@
 .booking-calendar-landscape__header > button { display: grid; flex: 0 0 auto; place-items: center; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: white; font-size: 20px; cursor: pointer; }
 .booking-calendar-landscape__toolbar { flex: 0 0 auto; margin: 0; }
 .booking-calendar-landscape__toolbar button { min-width: 44px; width: 44px; height: 44px; padding: 0; }
+.booking-calendar-landscape__legend { flex:0 0 auto; flex-wrap:nowrap; justify-content:flex-start; gap:6px; margin:0 0 6px; padding:2px; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
+.booking-calendar-landscape__legend > button { flex:0 0 auto; min-height:34px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:white; font-size:11px; }
+.booking-calendar-landscape__legend > button[aria-pressed="true"] { border-color:var(--deep); color:white; background:var(--deep); }
+.booking-calendar-landscape__legend > button[aria-pressed="true"] .booking-calendar__status-dot { box-shadow:0 0 0 2px rgba(255,255,255,.7); }
 .booking-calendar-landscape .booking-calendar__scroll { flex:1 1 auto; min-height:0; margin:0; padding:0; overflow-x:auto; overflow-y:hidden; overscroll-behavior-inline:contain; touch-action:pan-x; }
 .booking-calendar-landscape .booking-calendar__grid { display: grid; grid-template-rows: auto repeat(var(--calendar-week-count),minmax(0,1fr)); width: 100%; min-width: 0; height: 100%; }
 .booking-calendar-landscape .booking-calendar__weekdays span { padding: 4px; font-size: 8px; }

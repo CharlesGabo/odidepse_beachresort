@@ -3,7 +3,7 @@ import MessengerInbox from './MessengerInbox.jsx';
 import useVisibilityPolling, { HIDDEN_POLL_INTERVAL_MS, VISIBLE_POLL_INTERVAL_MS } from '../polling/useVisibilityPolling.js';
 import './facebook-automations.css';
 
-const sections = [['message', 'Messenger'], ['alerts', 'Booking Requests'], ['comment', 'Comments'], ['lead', 'Leads'], ['drafts', 'Post drafts'], ['rules', 'Reply rules'], ['jobs', 'Delivery queue'], ['audit', 'Audit log']];
+const sections = [['message', 'Messenger'], ['alerts', 'Booking Requests'], ['comment', 'Comments'], ['rules', 'Reply rules'], ['audit', 'Audit log']];
 const categories = ['booking', 'rates', 'amenities', 'location', 'complaint', 'general'];
 const guidedReplies = [
   ['website_contact', 'Website booking contact details (email and phone)'],
@@ -59,13 +59,12 @@ function Intake({ kind, mutate, busy }) {
       if (await mutate({ action: 'intake', kind, ...Object.fromEntries(new FormData(form)) })) form.reset();
     }}><fieldset disabled={busy}><div className="fb-grid">
       <Field title="Guest name" name="guest_name" maxLength={100} required />
-      {kind === 'lead' && <><Field title="Email (optional)" name="email" type="email" /><Field title="Phone (optional)" name="phone" maxLength={30} /></>}
-    </div><Field title={kind === 'lead' ? 'Inquiry details' : 'Message or comment'} name="body" maxLength={4000} multiline required />
+    </div><Field title="Message or comment" name="body" maxLength={4000} multiline required />
     <button className="fb-primary">Save {kind === 'message' ? 'inquiry' : kind}</button></fieldset></form>
   </details>;
 }
 
-function EventCard({ item, mutate, busy, onConvert, onBooking, showBookingSummary = false }) {
+function EventCard({ item, mutate, busy, onBooking, showBookingSummary = false }) {
   const hasBookingSummary = showBookingSummary && item.booking_id && item.reference_code;
   return <article className="fb-panel">
     <div className="fb-row"><div><span className="fb-eyebrow">{item.source === 'manual' ? 'Manually recorded' : 'Facebook'} · {item.kind} #{item.id}</span><h3>{item.guest_name}</h3></div>
@@ -89,7 +88,6 @@ function EventCard({ item, mutate, busy, onConvert, onBooking, showBookingSummar
         {item.kind === 'comment' && <button type="button" className={item.website_status === 'published' ? '' : 'fb-primary'} disabled={busy} onClick={() => mutate({ action: item.website_status === 'published' ? 'hide_comment' : 'publish_comment', id: Number(item.id), revision: Number(item.revision) })}>{item.website_status === 'published' ? 'Hide from website' : 'Show on website'}</button>}
         {item.kind === 'comment' && <span>{item.website_status === 'published' ? 'Visible on the public homepage' : 'Hidden from the public website'}</span>}
         {item.kind === 'message' && item.status !== 'resolved' && <button type="button" disabled={busy} onClick={() => mutate({ action: 'prepare_reply', id: Number(item.id), revision: Number(item.revision) })}>Queue template reply</button>}
-        {item.kind === 'lead' && <button type="button" className="fb-primary" disabled={busy} onClick={() => onConvert(item)}>Create booking from lead</button>}
       </div>
     </>}
   </article>;
@@ -151,22 +149,7 @@ function Rules({ settings, mutate, busy }) {
   </fieldset></form>;
 }
 
-function DraftEditor({ draft, mutate, busy, onDone }) {
-  return <form className="fb-panel" onSubmit={async event => {
-    event.preventDefault(); const form = event.currentTarget;
-    const action = event.nativeEvent.submitter?.value || 'save_draft';
-    if (await mutate({ action, ...Object.fromEntries(new FormData(form)), ...(draft ? { id: Number(draft.id), revision: Number(draft.revision) } : {}) })) { form.reset(); onDone(); }
-  }}><fieldset disabled={busy}><h2>{draft ? 'Edit draft' : 'Create a post draft'}</h2>
-    <p>Generate a caption from the details you provide, or save your own text. Generation uses a fixed template, not an AI service. Every edit requires approval again.</p>
-    <Field title="Internal title" name="title" value={draft?.title} maxLength={120} required />
-    <Field title="Post text or details for the generated caption" name="body" value={draft?.body} maxLength={4000} multiline required />
-    <div className="fb-actions"><button className="fb-primary" name="action" value="save_draft">Save for approval</button>
-      {!draft && <button name="action" value="generate_draft">Generate template draft</button>}
-      {draft && <button type="button" onClick={onDone}>Cancel edit</button>}</div>
-  </fieldset></form>;
-}
-
-export default function FacebookAutomations({ csrfToken, onLogout, ManualBookingModal, BookingRequestModal, bookings, updateStatus, updateDates, onBookingSaved, onOpenBooking }) {
+export default function FacebookAutomations({ csrfToken, onLogout, BookingRequestModal, bookings, updateStatus, updateDates, onOpenBooking }) {
   const [section, setSection] = useState('message');
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
@@ -175,10 +158,7 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [lead, setLead] = useState(null);
-  const [draft, setDraft] = useState(null);
   const [selectedBookingId, setSelectedBookingId] = useState(null);
-  const [editorKey, setEditorKey] = useState(0);
   const lastRequestKey = useRef('');
 
   useEffect(() => {
@@ -210,26 +190,25 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       if (response.status === 401) { onLogout(); return false; }
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Could not save changes.');
-      setNotice(payload.action === 'send_message' ? 'Staff reply queued for Messenger delivery.' : payload.action === 'prepare_reply' ? 'Reply prepared for staff review. Only verified Messenger inquiries are sent automatically.' : payload.action === 'approve_draft' ? 'Draft approved. Nothing has been published.' : 'Changes saved.');
+      setNotice(payload.action === 'send_message' ? 'Staff reply queued for Messenger delivery.' : payload.action === 'prepare_reply' ? 'Reply prepared for staff review. Only verified Messenger inquiries are sent automatically.' : 'Changes saved.');
       setRefresh(value => value + 1); return true;
     } catch (exception) { setError(exception.message); return false; }
     finally { setBusy(false); }
   };
-  const navigate = value => { setSection(value); setPage(1); setNotice(''); setError(''); setDraft(null); };
-  const finishEdit = () => { setDraft(null); setEditorKey(value => value + 1); };
-  const eventSection = ['comment', 'lead'].includes(section);
+  const navigate = value => { setSection(value); setPage(1); setNotice(''); setError(''); };
+  const eventSection = section === 'comment';
   const connected = data?.connection === 'connected';
 
   return <section className="fb-workspace admin-view" aria-labelledby="facebook-heading">
-    <div className="fb-row fb-heading"><div><span className="fb-eyebrow">Page operations</span><h1 id="facebook-heading">Facebook Automations</h1><p>One workspace for conversations, leads, and content.</p></div><button type="button" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
-    <div className="fb-connection"><span className="fb-badge fb-badge--strong">{loading ? 'Checking' : connected ? 'Connected' : 'Not connected'}</span><div><strong>{loading ? 'Checking the Facebook connection…' : connected ? 'Facebook webhook verified.' : 'Your workspace is ready for setup.'}</strong><p>{connected ? 'Meta successfully verified this callback. Keep the active callback URL online and run the delivery worker for automatic replies.' : 'Complete Meta webhook verification to enable live Page activity.'}</p></div></div>
-    <div className="fb-stats">{[['message', 'Open inquiries', 'inquiries'], ['alerts', 'Booking Requests', 'alerts'], ['lead', 'Unconverted leads', 'leads'], ['drafts', 'Awaiting approval', 'drafts']].map(([target, title, key]) => <button type="button" disabled={busy} key={key} onClick={() => navigate(target)}><span>{title}</span><strong>{data ? Number(data.counts[key] || 0) : '—'}</strong></button>)}</div>
+    <div className="fb-row fb-heading"><div><span className="fb-eyebrow">Page operations</span><h1 id="facebook-heading">Facebook Automations</h1><p>One workspace for conversations, booking requests, comments, and automated replies.</p></div><button className="fb-refresh fb-refresh--desktop" type="button" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
+    <div className="fb-connection"><span className="fb-badge fb-badge--strong">{loading ? 'Checking' : connected ? 'Connected' : 'Not connected'}</span><div><strong>{loading ? 'Checking the Facebook connection…' : connected ? 'Facebook webhook verified.' : 'Your workspace is ready for setup.'}</strong><p>{connected ? 'Meta successfully verified this callback. Keep the active callback URL online and run the delivery worker for automatic replies.' : 'Complete Meta webhook verification to enable live Page activity.'}</p></div><button className="fb-refresh fb-refresh--mobile" type="button" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
+    <div className="fb-stats">{[['message', 'Open inquiries', 'inquiries'], ['alerts', 'Booking Requests', 'alerts']].map(([target, title, key]) => <button type="button" disabled={busy} key={key} onClick={() => navigate(target)}><span>{title}</span><strong>{data ? Number(data.counts[key] || 0) : '—'}</strong></button>)}</div>
     <nav className="fb-tabs" aria-label="Facebook automation sections">{sections.map(([key, title]) => <button type="button" key={key} disabled={busy} aria-current={section === key ? 'page' : undefined} className={section === key ? 'active' : ''} onClick={() => navigate(key)}>{title}</button>)}</nav>
     {error && <p className="fb-feedback fb-feedback--error" role="alert">{error}</p>}
     {notice && <p className="fb-feedback" role="status">{notice}</p>}
     {loading ? <p role="status">Loading workspace…</p> : data && <>
       {section === 'message' && <>
-        <MessengerInbox records={data.records} total={data.total} connected={connected} busy={busy} onSend={(item, body) => mutate({ action: 'send_message', id: Number(item.id), revision: Number(item.revision), body })} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />} />
+        <MessengerInbox records={data.records} total={data.total} connected={connected} busy={busy} onSend={(item, body) => mutate({ action: 'send_message', id: Number(item.id), revision: Number(item.revision), body })} renderDetails={item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onBooking={onOpenBooking} />} />
         <Intake kind="message" mutate={mutate} busy={busy} />
       </>}
       {section === 'alerts' && <><div className="fb-row"><div><h2>Booking Requests</h2><p>Booking requests created through your connected Facebook Page.</p></div><small>{data.total} {data.total === 1 ? 'request' : 'requests'}</small></div>
@@ -239,27 +218,13 @@ export default function FacebookAutomations({ csrfToken, onLogout, ManualBooking
       </>}
       {eventSection && <><Intake key={section} kind={section} mutate={mutate} busy={busy} /><div className="fb-row"><h2>{sections.find(([key]) => key === section)?.[1]}</h2><small>{data.total} recorded</small></div>
         {section === 'comment' && <p>New comments appear here with staff attention flags. Acknowledge one by clearing its attention checkbox. Refresh to check for new items.</p>}
-        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onConvert={setLead} onBooking={onOpenBooking} />)}
+        {data.records.map(item => <EventCard key={`${item.id}-${item.revision}`} item={item} mutate={mutate} busy={busy} onBooking={onOpenBooking} />)}
       </>}
       {section === 'rules' && <Rules key={data.settings.revision} settings={data.settings} mutate={mutate} busy={busy} />}
-      {section === 'drafts' && <><DraftEditor key={draft ? `edit-${draft.id}` : `new-${editorKey}`} draft={draft} mutate={mutate} busy={busy} onDone={finishEdit} />
-        {data.records.map(item => <article className="fb-panel" key={item.id}><div className="fb-row"><h3>{item.title}</h3><span className="fb-badge">{label(item.status)}</span></div><p className="fb-copy">{item.body}</p><small>Revision {item.revision} · {stamp(item.updated_at)}</small>
-          <div className="fb-actions">{item.status !== 'published' && <button type="button" disabled={busy} onClick={() => { setDraft(item); document.getElementById('facebook-heading')?.scrollIntoView({ block: 'start' }); }}>Edit</button>}
-            {item.status === 'pending' && <><button className="fb-primary" type="button" disabled={busy} onClick={() => mutate({ action: 'approve_draft', id: Number(item.id), revision: Number(item.revision) })}>Approve</button><button type="button" disabled={busy} onClick={() => mutate({ action: 'reject_draft', id: Number(item.id), revision: Number(item.revision) })}>Reject</button></>}
-            {item.status === 'approved' && <span>Approved · publishing awaits connection</span>}</div></article>)}
-      </>}
-      {section === 'jobs' && <><h2>Delivery queue</h2><p>Verified Messenger inquiries are sent automatically by the server worker. Manual test entries stay blocked. Temporary failures can use up to five attempts with increasing delays; uncertain delivery is never repeated automatically.</p>
-        {data.records.map(item => <article className="fb-panel" key={item.id}><div className="fb-row"><h3>{label(item.kind)} #{item.id}</h3><span className="fb-badge">{label(item.status)}</span></div><p className="fb-copy">{item.payload}</p><small>Attempts {item.attempts}/{item.max_attempts} · {label(item.error_code) || 'No error'} · Next attempt: {stamp(item.next_attempt_at)}</small>
-          {['blocked', 'pending', 'retry_wait'].includes(item.status) && <div className="fb-actions"><button type="button" disabled={busy} onClick={() => mutate({ action: 'cancel_job', id: Number(item.id) })}>Cancel delivery</button></div>}</article>)}
-      </>}
       {section === 'audit' && <><h2>Audit log</h2><p>Records changes and processing outcomes without copying private conversations or credentials into the log.</p><div className="fb-panel">{data.records.map(item => <div className="fb-audit-row" key={item.id}><strong>{label(item.action)}</strong><span>{item.entity_type} #{item.entity_id} · {item.actor_id ? `Admin #${item.actor_id}` : 'System'}</span><small>{stamp(item.created_at)}</small></div>)}</div></>}
-      {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{section === 'alerts' ? 'New booking requests from your connected Facebook Page will appear here.' : eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : section === 'drafts' ? 'Create a draft above and review it before publishing.' : 'Activity will appear here as you use the workspace.'}</p></div>}
+      {section !== 'rules' && section !== 'message' && data.records.length === 0 && <div className="fb-empty"><span className="fb-eyebrow">A clear workspace</span><h3>No {sections.find(([key]) => key === section)?.[1].toLowerCase()} yet.</h3><p>{section === 'alerts' ? 'New booking requests from your connected Facebook Page will appear here.' : eventSection ? 'Record an item above, or wait for the Facebook connection to bring in new activity.' : 'Activity will appear here as you use the workspace.'}</p></div>}
       {!['rules', 'message'].includes(section) && data.total > data.page_size && <div className="fb-pagination"><button type="button" disabled={busy || page <= 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {Math.ceil(data.total / data.page_size)}</span><button type="button" disabled={busy || page * data.page_size >= data.total} onClick={() => setPage(value => value + 1)}>Next</button></div>}
     </>}
-    {lead && <ManualBookingModal key={lead.id} open onClose={() => setLead(null)} csrfToken={csrfToken}
-      facebookLeadId={Number(lead.id)} initialGuest={lead}
-      initialMessage={`Facebook lead #${lead.id}${lead.external_id ? ` (${lead.external_id})` : ''}: ${lead.body}`.slice(0, 650)}
-      onSaved={result => { setLead(null); setNotice(`Lead converted to booking ${result.reference}.`); setRefresh(value => value + 1); onBookingSaved(); }} />}
     <BookingRequestModal booking={bookings.find(item => Number(item.id) === Number(selectedBookingId)) || null} onClose={() => setSelectedBookingId(null)} updateStatus={updateStatus} updateDates={updateDates} />
   </section>;
 }
