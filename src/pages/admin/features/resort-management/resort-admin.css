@@ -91,6 +91,11 @@
 .booking-board__summary { min-width:0; }
 .booking-board__mobile-add { display:none; }
 .booking-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; background: transparent; }
+.booking-status-group-heading { grid-column:1 / -1; display:flex; align-items:center; gap:9px; margin:12px 0 -2px; padding:10px 0; border-bottom:2px solid var(--line); color:var(--ink); font-size:14px; font-weight:700; }
+.booking-status-group-heading::before { width:10px; height:10px; border-radius:50%; background:#53635e; content:''; }
+.booking-status-group-heading--pending::before { background:#9a650f; }
+.booking-status-group-heading--confirmed::before { background:#17614f; }
+.booking-status-group-heading--checked_in::before { background:#245f85; }
 .booking-card-grid > .empty-state { grid-column: 1 / -1; justify-content: center; width: 100%; min-height: 260px; }
 .booking-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fbfbf8; box-shadow: 0 8px 24px rgba(12, 44, 39, .045); transition: border-color .2s, box-shadow .2s, transform .2s; }
 .booking-card--calendar-link { cursor:pointer; }

@@ -972,18 +972,18 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     return () => window.clearTimeout(timer);
   }, [navigationIntent]);
   const visible = useMemo(() => {
-    const todayKey = calendarDateKey(new Date());
     return bookings.filter(item => (
-      (filter === 'all' || item.status === filter)
+      (filter === 'all' ? !calendarFilteredOnlyStatuses.includes(item.status) : item.status === filter)
       && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(query.toLowerCase())
     )).sort((a, b) => {
-      const aIsUpcoming = a.check_in >= todayKey;
-      const bIsUpcoming = b.check_in >= todayKey;
-      if (aIsUpcoming !== bIsUpcoming) return aIsUpcoming ? -1 : 1;
-      const dateOrder = aIsUpcoming
-        ? a.check_in.localeCompare(b.check_in)
-        : b.check_in.localeCompare(a.check_in);
-      return dateOrder || String(a.id).localeCompare(String(b.id));
+      if (filter === 'all') {
+        const statusOrder = ['pending', 'confirmed', 'checked_in'];
+        const statusDifference = statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status);
+        if (statusDifference) return statusDifference;
+      }
+      return a.check_in.localeCompare(b.check_in)
+        || a.check_out.localeCompare(b.check_out)
+        || String(a.id).localeCompare(String(b.id));
     });
   }, [bookings, filter, query]);
 
@@ -1047,9 +1047,9 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     ])}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
     <div className="booking-table booking-card-grid">
-      {visible.map(booking => {
+      {visible.flatMap((booking, index) => {
         const nights = getBookingNights(booking);
-        return <article className={`booking-card booking-card--calendar-link${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}
+        const card = <article className={`booking-card booking-card--calendar-link${highlightedBookingId === String(booking.id) ? ' is-calendar-highlighted' : ''}`} id={`booking-${booking.id}`} key={booking.id}
           tabIndex="0" role="button" aria-label={`Show ${booking.guest_name}'s booking in the calendar`}
           onClick={event => { if (!event.target.closest('button,select,input,label,a')) viewBookingInCalendar(booking.id); }}
           onKeyDown={event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); viewBookingInCalendar(booking.id); } }}>
@@ -1076,6 +1076,10 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
             </div>
           </div>
         </article>;
+        const startsStatusGroup = filter === 'all' && (index === 0 || visible[index - 1].status !== booking.status);
+        return startsStatusGroup
+          ? [<h3 className={`booking-status-group-heading booking-status-group-heading--${booking.status}`} key={`${booking.status}-heading`}>{statusLabels[booking.status]}</h3>, card]
+          : [card];
       })}
       {visible.length === 0 && <div className="empty-state"><AdminIcon name="calendar" /><h3>No reservations here yet.</h3><p>New booking requests will appear automatically.</p></div>}
     </div>
