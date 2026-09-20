@@ -6,16 +6,19 @@ require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
 require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
 require_once dirname(__DIR__, 2) . '/includes/resort/resort.php';
 require_once dirname(__DIR__, 2) . '/includes/bookings/booking-rooms.php';
+require_once dirname(__DIR__, 2) . '/includes/bookings/booking-finance.php';
 require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
 
 $method = requireMethod('GET', 'PATCH');
-requireAdmin();
+$actor = requireAdmin();
 
 try {
     $db = database();
+    $analyticsReady = analyticsSchemaReady($db);
     if ($method === 'GET') {
+        $analyticsColumns = $analyticsReady ? 'b.agreed_total, b.booking_source, 1 AS finance_enabled' : "NULL AS agreed_total, 'unknown' AS booking_source, 0 AS finance_enabled";
         $statement = $db->query("SELECT b.id, b.reference_code, b.guest_name, b.email, b.phone, b.check_in, b.check_out, b.guests, b.stay_type, b.stay_id, b.service_id, b.service_name, b.message, b.room_index,
-            CASE WHEN b.status = 'confirmed' AND b.check_in < CURDATE() THEN 'no_show' ELSE b.status END AS status, b.created_at, b.updated_at,
+            CASE WHEN b.status = 'confirmed' AND b.check_in < CURDATE() THEN 'no_show' ELSE b.status END AS status, b.created_at, b.updated_at, $analyticsColumns, b.stay_plan_json,
             EXISTS(SELECT 1 FROM facebook_events e WHERE e.booking_id = b.id AND e.source = 'facebook') AS is_facebook_booking
             FROM bookings b ORDER BY b.created_at DESC");
         $rows = $statement->fetchAll();
@@ -252,6 +255,7 @@ try {
     }
 
     $assignments = bookingRoomAssignments($rows, resortEntities($db, 'stays', true));
+    if ($status === 'confirmed' && $analyticsReady) financeRequireTotal($booking);
     if (in_array($status, ['confirmed', 'checked_in'], true)) {
         $bookingPlan = json_decode((string) ($booking['stay_plan_json'] ?? ''), true);
         if (is_array($bookingPlan) && $bookingPlan !== []) {
@@ -278,10 +282,12 @@ try {
         $db->rollBack();
         jsonResponse(['status' => 'error', 'message' => 'This booking changed while you were viewing it. Refresh the page and try again.'], 409);
     }
+    if ($analyticsReady) $db->prepare('INSERT INTO booking_status_history (booking_id, old_status, new_status, created_by) VALUES (?, ?, ?, ?)')->execute([$id, $currentStatus, $status, (int) $actor['id']]);
     $db->commit();
     jsonResponse(['status' => 'success', 'reference' => $booking['reference_code']]);
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
+    if ($error instanceof InvalidArgumentException) jsonResponse(['message' => $error->getMessage()], 422);
     error_log('Admin booking operation failed: ' . $error->getMessage());
     jsonResponse(['status' => 'error', 'message' => 'The booking operation is temporarily unavailable.'], 500);
 }

@@ -1545,6 +1545,8 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
         $insert = $db->prepare("INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)");
         $insert->execute([$reference, $data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $bookingMessage, $stayId, $stayPlanJson, $serviceId, $serviceName]);
         $bookingId = (int) $db->lastInsertId();
+        require_once dirname(__DIR__) . '/shared/analytics-schema.php';
+        bookingRecordSource($db, $bookingId, 'facebook');
         $data['reference'] = $reference;
         facebookConversationSave($db, (int) $conversation['id'], 'completed', $data, $eventId, $bookingId);
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 1, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $eventId]);

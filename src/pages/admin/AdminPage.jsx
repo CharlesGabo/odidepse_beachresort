@@ -5,6 +5,8 @@ import FacebookAutomations from './features/facebook-automation/FacebookAutomati
 import { dashboardData } from './features/dashboard/dashboardData.js';
 import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.js';
 import useVisibilityPolling from './features/polling/useVisibilityPolling.js';
+import AnalyticsPage from './features/analytics/AnalyticsPage.jsx';
+import BookingFinance, { BookingFinanceContext, BookingFinanceDialog } from './features/bookings/BookingFinance.jsx';
 import './styles/admin-responsive.css';
 
 const statusLabels = {
@@ -242,6 +244,7 @@ function getBookingNotes(message = '') {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'overview' },
+  { id: 'analytics', label: 'Analytics', icon: 'analytics' },
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'stays', label: 'Stays', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
@@ -251,6 +254,7 @@ const navItems = [
 
 function AdminIcon({ name }) {
   const paths = {
+    analytics: <><path d="M3 3v18h18M7 16v-4M12 16V8M17 16V5" /></>,
     automation: <><rect x="3" y="4" width="18" height="13" rx="3" /><path d="m7 17-2 4 7-4M8 9h8M8 12h5" /></>,
     overview: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
@@ -904,6 +908,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
           </dl>
           <div className="request-note"><span>Message from guest</span><p>{request.note || 'No additional message provided.'}</p></div>
         </section>
+        <BookingFinance key={booking.id} bookingId={booking.id} />
       </div>
       <aside className="admin-request-modal__aside">
         <section className="request-panel request-contact">
@@ -921,6 +926,19 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
 }
 
 function BookingsView({ bookings, accommodations, notice, setNotice, updateStatus, updateDates, ManualBookingModal, csrfToken, onBookingSaved, navigationIntent, canUndoRoomMove }) {
+  const [analyticsScope, setAnalyticsScope] = useState(null);
+  const matchesAnalytics = item => {
+    if (!analyticsScope) return true;
+    const scope = analyticsScope;
+    if (scope.source !== 'all' && item.booking_source !== scope.source) return false;
+    if (scope.status !== 'all' && item.status !== scope.status) return false;
+    if (Number(scope.stay_id)) {
+      let plan = [];
+      try { plan = JSON.parse(item.stay_plan_json || '[]'); } catch { /* Legacy single-room booking. */ }
+      if (Number(item.stay_id) !== Number(scope.stay_id) && !plan?.some?.(part => Number(part.stay_id) === Number(scope.stay_id))) return false;
+    }
+    return scope.basis === 'requests' ? item.created_at.slice(0, 10) >= scope.from && item.created_at.slice(0, 10) <= scope.to : item.check_in <= scope.to && item.check_out > scope.from;
+  };
   const moveBooking = async (booking, stayId, roomIndex, confirmWarnings = false) => {
     const response = await fetch('/api/admin/bookings.php', {
       method: 'PATCH',
@@ -978,17 +996,18 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const calendarScrollEndRef = useRef(null);
   useEffect(() => {
     if (!navigationIntent) return;
+    setAnalyticsScope(navigationIntent.analytics || null);
     setManualBookingOpen(Boolean(navigationIntent.openManualBooking));
     const id = navigationIntent.bookingId ? String(navigationIntent.bookingId) : null;
     const targetBooking = id ? bookings.find(item => String(item.id) === id) : null;
-    const targetIsHistory = terminalBookingStatuses.includes(targetBooking?.status);
+    const targetIsHistory = terminalBookingStatuses.includes(targetBooking?.status || navigationIntent.status);
     const focusCalendar = navigationIntent.focus === 'calendar';
     if (focusCalendar) {
       setBookingChildView('requests');
       setCalendarFilter(targetBooking?.status || navigationIntent.status || 'all');
     } else if (targetIsHistory) {
       setBookingChildView('history');
-      setHistoryFilter('all');
+      setHistoryFilter(navigationIntent.analytics?.status || 'all');
       setHistoryQuery('');
     } else {
       setBookingChildView('requests');
@@ -1009,6 +1028,8 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   }, [navigationIntent]);
   const visibleActiveBookings = useMemo(() => {
     return bookings.filter(item => (
+      matchesAnalytics(item)
+      &&
       !terminalBookingStatuses.includes(item.status)
       && (activeFilter === 'all' || item.status === activeFilter)
       && `${item.guest_name} ${item.reference_code} ${item.email} ${item.phone || ''} ${item.stay_type || ''} ${item.service_name || ''} ${item.message || ''}`.toLowerCase().includes(activeQuery.toLowerCase())
@@ -1022,11 +1043,13 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
         || a.check_out.localeCompare(b.check_out)
         || String(a.id).localeCompare(String(b.id));
     });
-  }, [bookings, activeFilter, activeQuery]);
+  }, [bookings, activeFilter, activeQuery, analyticsScope]);
   const historyYears = useMemo(() => [...new Set(bookings
     .filter(item => terminalBookingStatuses.includes(item.status) && /^\d{4}-/.test(item.check_in || ''))
     .map(item => item.check_in.slice(0, 4)))].sort((a, b) => b.localeCompare(a)), [bookings]);
   const visibleHistoryBookings = useMemo(() => bookings.filter(item => (
+    matchesAnalytics(item)
+    &&
     terminalBookingStatuses.includes(item.status)
     && (historyFilter === 'all' || item.status === historyFilter)
     && (historyDateMode === 'all'
@@ -1041,7 +1064,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     (b.check_out || '').localeCompare(a.check_out || '')
     || (b.check_in || '').localeCompare(a.check_in || '')
     || String(b.id).localeCompare(String(a.id))
-  )), [bookings, historyFilter, historyQuery, historyDateMode, historyDateValue, historyDateEnd]);
+  )), [bookings, historyFilter, historyQuery, historyDateMode, historyDateValue, historyDateEnd, analyticsScope]);
   const historySummary = useMemo(() => {
     const uniqueGuests = new Set(visibleHistoryBookings.map(item => (item.email || item.guest_name || '').trim().toLowerCase()).filter(Boolean));
     const checkIns = visibleHistoryBookings.map(item => item.check_in).filter(Boolean).sort();
@@ -1221,6 +1244,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   </div>;
 
   return <>
+    {analyticsScope && <p className="admin-notice">Analytics filter: {analyticsScope.from} – {analyticsScope.to} · {analyticsScope.basis === 'requests' ? 'request date' : 'stay overlap'} · {analyticsScope.source} sources. Use Requests and History to inspect both groups. <button type="button" onClick={() => setAnalyticsScope(null)}>Clear analytics filter</button></p>}
     <nav className="booking-subnav" aria-label="Booking pages">
       <button type="button" className={bookingChildView === 'requests' ? 'active' : ''} aria-current={bookingChildView === 'requests' ? 'page' : undefined} onClick={() => setBookingChildView('requests')}>Booking Requests</button>
       <button type="button" className={bookingChildView === 'history' ? 'active' : ''} aria-current={bookingChildView === 'history' ? 'page' : undefined} onClick={() => setBookingChildView('history')}>Booking History</button>
@@ -1399,6 +1423,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [accommodations, setAccommodations] = useState([]);
   const [canUndoRoomMove, setCanUndoRoomMove] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
+  const [financeBookingId, setFinanceBookingId] = useState(null);
   const [navigationIntent, setNavigationIntent] = useState(null);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1424,6 +1449,11 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
 
   const updateStatus = async (id, status) => {
+    const booking = bookings.find(item => Number(item.id) === Number(id));
+    if (status === 'confirmed' && Number(booking?.finance_enabled) === 1 && booking?.agreed_total === null) {
+      setFinanceBookingId(Number(id));
+      return;
+    }
     try {
       const response = await fetch('/api/admin/bookings.php', {
         method: 'PATCH',
@@ -1433,6 +1463,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Update failed.');
       await load();
+      setFinanceBookingId(null);
       setNotice(`Booking ${data.reference} updated.`);
     } catch (error) {
       setNotice(error.message);
@@ -1463,7 +1494,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  return <div className="admin-shell">
+  return <BookingFinanceContext.Provider value={{ csrfToken, onLogout, onSaved: load }}><div className="admin-shell">
     <aside className="admin-sidebar">
       <span className="admin-wordmark admin-sidebar__label">ODIDEPSE</span>
       <nav aria-label="Admin navigation"><span className="admin-sidebar__label">Workspace</span>{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-sidebar__label">{item.label}</span></button>)}</nav>
@@ -1474,6 +1505,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
+        {activeView === 'analytics' && <AnalyticsPage csrfToken={csrfToken} onLogout={onLogout} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
@@ -1484,7 +1516,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         }} />}
       </>}
     </main>
-  </div>;
+  </div><BookingFinanceDialog booking={bookings.find(item => Number(item.id) === financeBookingId) || null} notice={notice} onClose={() => setFinanceBookingId(null)} onConfirm={() => updateStatus(financeBookingId, 'confirmed')} /></BookingFinanceContext.Provider>;
 }
 
 export default function AdminPage({ ManualBookingModal }) {

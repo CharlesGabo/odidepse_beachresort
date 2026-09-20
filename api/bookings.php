@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/shared/api.php';
 require_once dirname(__DIR__) . '/includes/shared/database.php';
 require_once dirname(__DIR__) . '/includes/resort/resort.php';
+require_once dirname(__DIR__) . '/includes/shared/analytics-schema.php';
 
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
@@ -154,8 +155,11 @@ try {
     $stayPlanJson = $stayPlan !== [] ? json_encode($stayPlan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) : null;
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayPlan !== [] ? $stayType : ($stayRecord['name'] ?? null), $message ?: null, $stayRecord['id'] ?? null, $stayPlanJson, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
+    $createdBookingId = (int) $db->lastInsertId();
+    $bookingSource = $facebookLeadId !== null ? 'facebook' : ($manualBooking ? 'manual' : ($chatToken !== null ? 'website_chat' : 'website'));
+    bookingRecordSource($db, $createdBookingId, $bookingSource);
     if ($facebookLeadId !== null) {
-        $bookingId = (int) $db->lastInsertId();
+        $bookingId = $createdBookingId;
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);
         facebookAudit($db, (int) $_SESSION['admin_user']['id'], 'lead_converted', 'event', $facebookLeadId);
     }
