@@ -73,6 +73,37 @@ After preview-script changes, verify publicly that:
 
 ## 4. Pre-release gate
 
+### Release branch while analytics is in development
+
+Deploy from `main`. The `analytics` branch contains the unfinished analytics page,
+forecasting, AI insights, mock data, booking-finance additions and source tracking.
+Keep that branch separate until those features are approved for release.
+
+Before preparing release files, save and commit any development work on its branch,
+then switch to `main` with a clean working tree:
+
+```powershell
+git status --short
+git switch main
+git branch --show-current
+npm.cmd run build
+```
+
+Switching branches does not replace ignored `dist/` output. Always rebuild after
+switching, and take both the frontend build and PHP backend from the same branch.
+Do not upload leftover or untracked feature files. Follow the full pre-release
+gate below before an actual release; a build alone is not release approval.
+
+Use the schema and reviewed migrations from `main` for production. Migration
+`013_admin_analytics.sql` belongs to the analytics branch and is excluded from this
+release. Do not import the entire analytics development database into production.
+The local database may retain migration 013: switching Git branches does not switch
+or roll back the database. Keep production on its separate database and credentials.
+
+To resume analytics development, save release work first and run `git switch analytics`.
+Rebuild again before using a compiled preview. Merge approved main-system fixes into
+analytics as needed; merge analytics into main only when that feature is ready.
+
 Before every Z.com release:
 
 1. Confirm the intended commit and clean/understood working tree.
