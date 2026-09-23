@@ -322,6 +322,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const form = event.currentTarget;
     const formData = new FormData(form);
     const body = Object.fromEntries(formData);
+    if (manual) body.send_customer_email = formData.get('send_customer_email') === 'on';
     if (availability.type !== 'success' || availability.available === 0) {
       setStatus({ type: 'error', message: 'Choose available dates and wait for the availability check before saving.' });
       return;
@@ -465,6 +466,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-price-summary__total"><span>Estimated total</span><strong>{mockTotal ? formatMockPrice(mockTotal) : '—'}</strong></div>
           <p>Mock rates for preview only. Final rates and availability will be confirmed by our team.</p>
         </aside>}
+        {manual && <label className="field--wide"><input type="checkbox" name="send_customer_email" defaultChecked /> Send customer email when an email address is provided</label>}
         {status.type === 'error' && <p className="form-error field--wide" role="alert">{status.message}</p>}
         <button className="button button--dark field--wide" disabled={status.type === 'loading'}>{manual ? (status.type === 'loading' ? 'Saving booking…' : 'Save booking') : (status.type === 'loading' ? copy.inquiry.sending : copy.inquiry.submit)} <Icon name="arrow" size={18} /></button>
         <p className="form-note field--wide">{manual ? 'Saved bookings appear under New request. Confirm the booking after reviewing availability and arrangements.' : copy.inquiry["no_payment_is_taken_today_your_stay_is_confirmed_only_after_our_t"]}</p>

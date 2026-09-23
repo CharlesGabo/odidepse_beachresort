@@ -7,6 +7,7 @@ require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
 require_once dirname(__DIR__, 2) . '/includes/resort/resort.php';
 require_once dirname(__DIR__, 2) . '/includes/bookings/booking-rooms.php';
 require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
+require_once dirname(__DIR__, 2) . '/includes/notifications/notifications.php';
 
 $method = requireMethod('GET', 'PATCH');
 requireAdmin();
@@ -39,11 +40,18 @@ try {
             'bookings' => $rows,
             'accommodations' => $accommodations,
             'can_undo_room_move' => !empty($_SESSION['booking_room_undo']),
+            'email_setup_required' => !notificationSchemaAvailable($db),
+            'email_failures' => notificationSchemaAvailable($db) ? (int) $db->query("SELECT COUNT(*) FROM email_jobs WHERE status IN ('failed','unknown') AND created_at >= CURRENT_TIMESTAMP - INTERVAL 90 DAY")->fetchColumn() : 0,
         ]);
     }
 
     requireCsrfToken();
     $data = readJsonBody();
+    foreach (['staff_note', 'cancellation_reason'] as $field) {
+        if (isset($data[$field]) && (!is_string($data[$field]) || mb_strlen($data[$field]) > 1000)) jsonResponse(['message' => 'Staff notes and reasons must be at most 1,000 characters.'], 422);
+    }
+    $staffNote = trim($data['staff_note'] ?? '');
+    $cancellationReason = trim($data['cancellation_reason'] ?? '');
     $action = is_string($data['action'] ?? null) ? $data['action'] : '';
     if ($action === 'undo_room_move') {
         $history = $_SESSION['booking_room_undo'] ?? [];
@@ -84,7 +92,12 @@ try {
     if ($action === 'save_room_moves') {
         $history = $_SESSION['booking_room_undo'] ?? [];
         if (!is_array($history) || $history === []) jsonResponse(['message' => 'There are no room changes to save.'], 409);
+        $db->beginTransaction();
+        try { notificationSavedRoomChanges($db, $history, (int) $_SESSION['admin_user']['id'], $staffNote); }
+        catch (DomainException $error) { $db->rollBack(); jsonResponse(['message' => $error->getMessage()], 409); }
+        $db->commit();
         unset($_SESSION['booking_room_undo']);
+        notificationFlushAfterResponse();
         jsonResponse([
             'status' => 'success',
             'saved_moves' => count($history),
@@ -147,8 +160,11 @@ try {
         $roomToPersist = in_array($booking['status'], ['pending', 'confirmed', 'checked_in'], true) ? ($room ?: null) : null;
         $statement = $db->prepare('UPDATE bookings SET check_in = ?, check_out = ?, room_index = COALESCE(room_index, ?), updated_at = NOW() WHERE id = ?');
         $statement->execute([$checkInValue, $checkOutValue, $roomToPersist, $id]);
+        $notification = ['customer' => 'unchanged'];
+        if ($booking['check_in'] !== $checkInValue || $booking['check_out'] !== $checkOutValue) $notification = notificationBookingEvent($db, $id, 'updated', (int) $_SESSION['admin_user']['id'], $staffNote);
         $db->commit();
-        jsonResponse(['status' => 'success', 'reference' => $booking['reference_code']]);
+        notificationFlushAfterResponse();
+        jsonResponse(['status' => 'success', 'reference' => $booking['reference_code'], 'notification' => $notification]);
     }
     if ($action === 'move_room') {
         $stayId = filter_var($data['stay_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -207,6 +223,7 @@ try {
         $updatedAt->execute([$id]);
         $history = is_array($_SESSION['booking_room_undo'] ?? null) ? $_SESSION['booking_room_undo'] : [];
         $history[] = [
+            'notification_key' => bin2hex(random_bytes(16)),
             'id' => $id,
             'stay_id' => $booking['stay_id'],
             'stay_type' => $booking['stay_type'],
@@ -224,6 +241,7 @@ try {
         jsonResponse(['status' => 'success', 'reference' => $booking['reference_code'], 'can_undo_room_move' => true]);
     }
     $status = is_string($data['status'] ?? null) ? $data['status'] : '';
+    if ($status === 'cancelled' && $cancellationReason === '') jsonResponse(['message' => 'Provide a cancellation reason for the guest.'], 422);
     $allowed = ['confirmed', 'checked_in', 'completed', 'cancelled'];
     if ($id === false || !in_array($status, $allowed, true)) {
         jsonResponse(['status' => 'error', 'message' => 'The booking update is invalid.'], 422);
@@ -236,6 +254,9 @@ try {
     if (!$booking) {
         $db->rollBack();
         jsonResponse(['status' => 'error', 'message' => 'Booking not found.'], 404);
+    }
+    if (isset($data['expected_updated_at']) && (!is_string($data['expected_updated_at']) || !hash_equals($booking['updated_at'], $data['expected_updated_at']))) {
+        $db->rollBack(); jsonResponse(['message' => 'This booking changed. Refresh before applying its status.'], 409);
     }
 
     $transitions = [
@@ -278,8 +299,10 @@ try {
         $db->rollBack();
         jsonResponse(['status' => 'error', 'message' => 'This booking changed while you were viewing it. Refresh the page and try again.'], 409);
     }
+    $notification = notificationBookingEvent($db, $id, $status, (int) $_SESSION['admin_user']['id'], $staffNote, $cancellationReason);
     $db->commit();
-    jsonResponse(['status' => 'success', 'reference' => $booking['reference_code']]);
+    notificationFlushAfterResponse();
+    jsonResponse(['status' => 'success', 'reference' => $booking['reference_code'], 'notification' => $notification]);
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
     error_log('Admin booking operation failed: ' . $error->getMessage());

@@ -1,0 +1,21 @@
+.notifications { max-width:1200px; margin:auto; padding:20px; }
+.notifications header,.notification-pages { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.notification-panel { margin:20px 0; padding:24px; background:#fff; border:1px solid #d8e2dd; border-radius:14px; }
+.notification-panel h2 { margin:0 0 14px; font-size:20px; }
+.notification-panel p,.notification-confirm p { line-height:1.6; }
+.notification-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:20px 0; }
+.notification-options label { display:flex; align-items:flex-start; gap:10px; }
+.notification-options input { flex:none; width:18px; height:18px; }
+.notification-field { display:grid; gap:8px; margin:16px 0; }
+.notification-field input,.notification-field textarea,.notification-field select { width:100%; box-sizing:border-box; padding:10px; border:1px solid #bbcfc4; border-radius:6px; font:inherit; }
+.notification-field textarea { min-height:84px; resize:vertical; }
+.notifications button,.notification-confirm button { padding:10px 16px; background:#17614f; color:#fff; border:0; border-radius:6px; cursor:pointer; font:inherit; }
+.notifications button:disabled,.notification-confirm button:disabled { opacity:.5; cursor:default; }
+.notification-table { overflow-x:auto; margin:16px 0; }
+.notification-table table { width:100%; border-collapse:collapse; text-align:left; font-size:14px; }
+.notification-table td,.notification-table th { padding:12px; border-bottom:1px solid #d8e2dd; vertical-align:top; overflow-wrap:anywhere; }
+.notification-table small { display:block; margin-top:6px; color:#576b61; }
+.notification-confirm { width:min(540px,calc(100% - 32px)); max-height:85vh; overflow:auto; box-sizing:border-box; padding:26px; border:1px solid #bbcfc4; border-radius:14px; color:#183c33; }
+.notification-confirm::backdrop { background:#102b2380; }
+.notification-failure-banner { padding:12px 18px; border:1px solid #be7b56; border-radius:8px; background:#fff2e6; }
+@media(max-width:650px) { .notifications { padding:8px; } .notification-panel { padding:16px; } .notification-options { grid-template-columns:1fr; } }

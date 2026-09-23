@@ -5,6 +5,8 @@ import FacebookAutomations from './features/facebook-automation/FacebookAutomati
 import { dashboardData } from './features/dashboard/dashboardData.js';
 import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.js';
 import useVisibilityPolling from './features/polling/useVisibilityPolling.js';
+import Notifications from './features/notifications/Notifications.jsx';
+import BookingEmailConfirmation from './features/notifications/BookingEmailConfirmation.jsx';
 import './styles/admin-responsive.css';
 
 const statusLabels = {
@@ -29,22 +31,14 @@ const statusActions = {
 };
 
 function BookingStatusActions({ booking, updateStatus }) {
-  const [updating, setUpdating] = useState(false);
+  const [selectedAction, setSelectedAction] = useState(null);
   const actions = statusActions[booking.status] || [];
   if (actions.length === 0) return null;
 
-  const applyStatus = async status => {
-    setUpdating(true);
-    try {
-      await updateStatus(booking.id, status);
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   return <div className="booking-status-actions" aria-label={`Actions for ${booking.guest_name}`}>
     {actions.map(action => <button type="button" className={`booking-status-action booking-status-action--${action.tone}`} key={action.status}
-      disabled={updating} onClick={() => applyStatus(action.status)}>{updating ? 'Updating…' : action.label}</button>)}
+      onClick={() => setSelectedAction(action)}>{action.label}</button>)}
+    {selectedAction && <BookingEmailConfirmation booking={booking} status={selectedAction.status} label={selectedAction.label} onClose={() => setSelectedAction(null)} onConfirm={details => updateStatus(booking.id, selectedAction.status, details)} />}
   </div>;
 }
 
@@ -247,6 +241,7 @@ const navItems = [
   { id: 'guests', label: 'Guests', icon: 'users' },
   { id: 'services', label: 'Activities', icon: 'home' },
   { id: 'facebook', label: 'Facebook Automations', icon: 'automation' },
+  { id: 'notifications', label: 'Email notifications', icon: 'mail' },
 ];
 
 function AdminIcon({ name }) {
@@ -321,6 +316,7 @@ function StatCards({ stats }) {
 }
 
 function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilterChange, onViewBooking, highlightedBookingId, onMoveBooking, canUndoRoomMove, onUndoRoomMove, onSaveRoomMoves }) {
+  const [roomChangeNote, setRoomChangeNote] = useState('');
   const [draggedId, setDraggedId] = useState(null);
   const [floatingCard, setFloatingCard] = useState(null);
   const [dropRoom, setDropRoom] = useState('');
@@ -541,7 +537,8 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
     setMoving(true);
     setMoveNotice('Saving room changes...');
     try {
-      const result = await onSaveRoomMoves();
+      const result = await onSaveRoomMoves(roomChangeNote);
+      setRoomChangeNote('');
       const count = Number(result.saved_moves || 0);
       setMoveNotice(`${count} room ${count === 1 ? 'change' : 'changes'} saved.`);
     } catch (error) { setMoveNotice(error.message); }
@@ -758,6 +755,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         </div>
       </div>
       {moveNotice && <p className="admin-notice" role="status">{moveNotice}</p>}
+      {canUndoRoomMove && <label className="notification-field">Optional message about saved accommodation changes (sent to affected guests)<textarea maxLength={1000} value={roomChangeNote} onChange={event => setRoomChangeNote(event.target.value)} /><small>Save room changes to send accommodation updates. Internal room-number moves do not send email.</small></label>}
       {renderCalendarGrid()}
     </section>
 
@@ -838,6 +836,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
   const [dates, setDates] = useState({ checkIn: '', checkOut: '' });
   const [dateSaving, setDateSaving] = useState(false);
   const [dateError, setDateError] = useState('');
+  const [dateNote, setDateNote] = useState('');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -846,6 +845,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
   useEffect(() => {
     setDates({ checkIn: booking?.check_in || '', checkOut: booking?.check_out || '' });
     setDateError('');
+    setDateNote('');
   }, [booking?.id, booking?.check_in, booking?.check_out]);
 
   if (!booking) return null;
@@ -861,7 +861,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
     setDateSaving(true);
     setDateError('');
     try {
-      await updateDates(booking, dates.checkIn, dates.checkOut);
+      await updateDates(booking, dates.checkIn, dates.checkOut, dateNote);
     } catch (error) {
       setDateError(error.message);
     } finally {
@@ -890,6 +890,7 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
             {dateError && <span role="alert">{dateError}</span>}
             <button type="submit" disabled={!datesChanged || dateSaving}>{dateSaving ? 'Saving…' : 'Save dates'}</button>
           </div>
+          {datesChanged && <label className="notification-field">Optional message about these dates (sent to guest)<textarea maxLength={1000} value={dateNote} onChange={event => setDateNote(event.target.value)} /><small>Saving sends the updated dates when email notifications are enabled.</small></label>}
           {(request.arrival || request.departure) && <div className="request-times">
             <AdminIcon name="clock" />
             <span>Arrival <strong>{formatBookingTime(request.arrival) || 'Not set'}</strong></span>
@@ -937,11 +938,11 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     await onBookingSaved(data);
     return data;
   };
-  const saveRoomMoves = async () => {
+  const saveRoomMoves = async (staffNote = '') => {
     const response = await fetch('/api/admin/bookings.php', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
-      body: JSON.stringify({ action: 'save_room_moves' }),
+      body: JSON.stringify({ action: 'save_room_moves', staff_note: staffNote }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not save the room changes.');
@@ -1399,6 +1400,8 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [accommodations, setAccommodations] = useState([]);
   const [canUndoRoomMove, setCanUndoRoomMove] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
+  const [emailFailures, setEmailFailures] = useState(0);
+  const [emailSetupRequired, setEmailSetupRequired] = useState(false);
   const [navigationIntent, setNavigationIntent] = useState(null);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1412,6 +1415,8 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       setBookings(data.bookings);
       setAccommodations(data.accommodations || []);
       setCanUndoRoomMove(Boolean(data.can_undo_room_move));
+      setEmailFailures(Number(data.email_failures || 0));
+      setEmailSetupRequired(Boolean(data.email_setup_required));
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1423,27 +1428,28 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   useVisibilityPolling(load, { enabled: ['dashboard', 'bookings', 'stays', 'services', 'facebook'].includes(activeView) });
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
 
-  const updateStatus = async (id, status) => {
+  const updateStatus = async (id, status, details = {}) => {
     try {
       const response = await fetch('/api/admin/bookings.php', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ id: Number(id), status }),
+        body: JSON.stringify({ id: Number(id), status, ...details }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Update failed.');
       await load();
-      setNotice(`Booking ${data.reference} updated.`);
+      setNotice(`Booking ${data.reference} updated. Customer email: ${data.notification?.customer?.replaceAll('_', ' ') || 'not queued'}.`);
     } catch (error) {
       setNotice(error.message);
+      throw error;
     }
   };
 
-  const updateDates = async (booking, checkIn, checkOut) => {
+  const updateDates = async (booking, checkIn, checkOut, staffNote = '') => {
     const response = await fetch('/api/admin/bookings.php', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrfToken },
-      body: JSON.stringify({ action: 'update_dates', id: Number(booking.id), check_in: checkIn, check_out: checkOut, expected_updated_at: booking.updated_at }),
+      body: JSON.stringify({ action: 'update_dates', id: Number(booking.id), check_in: checkIn, check_out: checkOut, staff_note: staffNote, expected_updated_at: booking.updated_at }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not update the booking dates.');
@@ -1470,9 +1476,12 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       <button type="button" title="Sign out" onClick={logout}><AdminIcon name="logout" /><span className="admin-sidebar__label">Sign out</span></button>
     </aside>
     <main className="admin-main">
+      {emailSetupRequired && <p className="notification-failure-banner" role="status">Email setup is incomplete. Bookings remain available; notifications will start after the database setup is completed.</p>}
+      {emailFailures > 0 && <p className="notification-failure-banner" role="status">{emailFailures} email deliveries need attention. <button type="button" onClick={() => navigate('notifications')}>Open delivery log</button></p>}
       {activeView === 'dashboard' && <header><div><span className="admin-kicker">Daily operations</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>}
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
+        {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} />}
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}

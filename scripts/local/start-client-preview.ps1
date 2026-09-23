@@ -13,6 +13,7 @@ $cloudflaredProcess = $null
 $cloudflaredStdout = $null
 $cloudflaredStderr = $null
 $workerProcess = $null
+$emailWorkerProcess = $null
 
 if (-not (Test-Path -LiteralPath $phpExecutable -PathType Leaf)) {
     throw "XAMPP PHP was not found at $phpExecutable."
@@ -70,6 +71,12 @@ try {
     $workerProcess = Start-Process `
         -FilePath 'powershell.exe' `
         -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'facebook-worker-loop.ps1')) `
+        -WindowStyle Hidden `
+        -PassThru
+
+    $emailWorkerProcess = Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'email-worker-loop.ps1')) `
         -WindowStyle Hidden `
         -PassThru
 
@@ -157,6 +164,9 @@ finally {
 
     if ($workerProcess -and -not $workerProcess.HasExited) {
         Stop-Process -Id $workerProcess.Id -Force
+    }
+    if ($emailWorkerProcess -and -not $emailWorkerProcess.HasExited) {
+        Stop-Process -Id $emailWorkerProcess.Id -Force
     }
 
     if ($phpProcess -and -not $phpProcess.HasExited) {

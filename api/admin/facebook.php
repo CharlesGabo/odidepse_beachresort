@@ -250,6 +250,7 @@ try {
             // Invalidate stale replies after a human changes category or resolves a conversation.
             if ($category !== $event['category'] || $status === 'resolved') $db->prepare("UPDATE facebook_jobs SET status = 'cancelled', error_code = 'inquiry_changed' WHERE event_id = ? AND status IN ('blocked','pending','retry_wait')")->execute([$id]);
             facebookAudit($db, $actor, 'inquiry_updated', 'event', $id);
+            if ($attention && !(bool) $event['needs_attention']) facebookAudit($db, $actor, 'staff_alert_created', 'event', $id);
         }
     } elseif (in_array($action, ['save_draft', 'generate_draft'], true)) {
         $title = facebookText($data, 'title', 120);
@@ -282,6 +283,7 @@ try {
         throw new FacebookWorkflowError('Unsupported automation action.');
     }
     $db->commit();
+    if (function_exists('notificationFlushAfterResponse')) notificationFlushAfterResponse();
     jsonResponse(['status' => 'success', 'message' => 'Changes saved.']);
 } catch (FacebookWorkflowError $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();

@@ -183,6 +183,8 @@ function facebookAudit(PDO $db, ?int $actor, string $action, string $type, ?int 
 {
     // Metadata only: never store message bodies, contacts, tokens, or API error responses in the audit trail.
     $db->prepare('INSERT INTO facebook_audit (actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')->execute([$actor, $action, $type, $id]);
+    require_once dirname(__DIR__) . '/notifications/notifications.php';
+    notificationFacebookAudit($db, $action, $type, $id);
 }
 
 function facebookAutomaticReplyNotice(): string
@@ -1531,6 +1533,8 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
             $bookingMessage = facebookConversationBookingMessage($data, 'Updated through the Messenger guided booking assistant. Staff confirmation is required.');
             $update = $db->prepare('UPDATE bookings SET guest_name = ?, email = ?, phone = ?, check_in = ?, check_out = ?, guests = ?, stay_type = ?, stay_id = ?, stay_plan_json = ?, service_id = ?, service_name = ?, message = ? WHERE id = ? AND status = \'pending\'');
             $update->execute([$data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $stayId, $stayPlanJson, $serviceId, $serviceName, $bookingMessage, $editingBookingId]);
+            require_once dirname(__DIR__) . '/notifications/notifications.php';
+            notificationBookingEvent($db, $editingBookingId, 'updated', key: 'messenger-update:' . $eventId);
             $reference = (string) $booking['reference_code'];
             $data['reference'] = $reference;
             unset($data['editing_booking_id']);
@@ -1545,6 +1549,8 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
         $insert = $db->prepare("INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)");
         $insert->execute([$reference, $data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $bookingMessage, $stayId, $stayPlanJson, $serviceId, $serviceName]);
         $bookingId = (int) $db->lastInsertId();
+        require_once dirname(__DIR__) . '/notifications/notifications.php';
+        notificationBookingEvent($db, $bookingId, 'created');
         $data['reference'] = $reference;
         facebookConversationSave($db, (int) $conversation['id'], 'completed', $data, $eventId, $bookingId);
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 1, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $eventId]);

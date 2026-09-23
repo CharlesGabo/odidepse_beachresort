@@ -56,6 +56,7 @@ The launcher:
 5. Creates a temporary `trycloudflare.com` URL.
 6. Waits for Cloudflare DNS publication and verifies the public PHP health endpoint before displaying the URL.
 7. Runs the Facebook delivery worker every second while the preview is open, then stops it with the tunnel.
+8. Runs the email worker every 30 seconds while the preview is open, then stops it with the tunnel. SMTP is disabled by default; use `MAIL_TEST_RECIPIENT` for previews.
 
 Send the displayed HTTPS URL to the client and keep the window, computer, internet connection, and XAMPP MySQL running. Press `Ctrl+C` to stop sharing.
 
@@ -180,9 +181,38 @@ Cloudflare launchers
 - Enable HTTPS and redirect HTTP to HTTPS.
 - Disable public error display and enable private logging.
 - Configure secure sessions, upload limits, email/SMTP, and scheduled tasks as applicable.
-- Deploy only `scripts/operations/facebook-worker.php` from the scripts tree when Messenger delivery is enabled.
+- Deploy `scripts/operations/facebook-worker.php` when Messenger delivery is enabled and `scripts/operations/email-worker.php` when email is enabled. Do not deploy other scripts by default.
 - Configure a once-per-minute recovery cron for `php /home/ACCOUNT/public_html/scripts/operations/facebook-worker.php` after replacing the placeholder with the real cPanel home path. Messenger webhooks attempt immediate event-scoped delivery; this cron remains required for retries and interrupted requests.
 - Configure SPA fallback routing if client-side routes are introduced.
+
+### Email notifications
+
+Follow `scripts/local/email-notifications.md` for Gmail app-password setup and
+local verification. Apply additive migration `014_email_notifications.sql`
+before deploying the email-enabled PHP code. Migration 013 remains unrelated.
+The runtime database user does not need CREATE permission; apply migrations using
+the controlled phpMyAdmin maintenance account.
+
+Install locked PHP dependencies locally with Composer (`install --no-dev
+--optimize-autoloader`) and upload the generated `vendor/` directory with the PHP
+release. Protect it and Composer metadata using the updated `.htaccess`. Do not
+upload Composer's installer/PHAR or local `.env`. PHP 8.1+, OpenSSL and mbstring
+are required by this email implementation.
+
+Also deploy `scripts/operations/email-worker.php` when email is enabled, and add
+the once-per-minute cron `php /home/ACCOUNT/public_html/scripts/operations/email-worker.php`
+using the hosting account's real PHP binary/path. This is an additional approved
+production worker alongside `facebook-worker.php`; other operational scripts
+remain excluded. Keep cron output private.
+
+Configure SMTP credentials, From/Reply-To, `MAIL_ADMIN_RECIPIENTS` and HTTPS
+`APP_BASE_URL` separately for production. Start with `MAIL_ENABLED=0`. Use a test
+inbox redirect, enable sending deliberately, then run the protected admin test.
+Verify actual inbox receipt and the worker heartbeat before removing the test
+redirect. SMTP acceptance alone is not delivery confirmation. No migration sends
+historical booking emails. Keep the worker running for daily 07:00 Asia/Manila
+digests, one-day reminders, and retries. See the delivery log for failures or
+uncertain outcomes; these must not be blindly resent.
 
 ## 6. Production verification
 

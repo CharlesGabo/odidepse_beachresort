@@ -16,4 +16,12 @@ Everything in `local/` is development-only and must not be uploaded to productio
 
 Files in `operations/` must be run deliberately from the command line. Most are one-time setup or maintenance tools and are not public web endpoints.
 
-Do not deploy the entire folder automatically. When Facebook Messenger delivery is enabled, `operations/facebook-worker.php` is the only script currently required by the production recovery cron.
+Email setup is documented in `local/email-notifications.md`. The additional
+production entry point `operations/email-worker.php` is required when email is
+enabled. Run it once per minute through cron. `operations/setup-email.php` is
+local/controlled maintenance only and is not deployed. Local email tests use a
+fake transport; `local/email-worker-loop.ps1` is only for development/preview.
+
+Do not deploy the entire folder automatically. Deploy only the required workers:
+`operations/facebook-worker.php` for Messenger and `operations/email-worker.php`
+for email. Both require a production recovery cron.

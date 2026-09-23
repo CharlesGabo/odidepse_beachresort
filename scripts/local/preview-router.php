@@ -6,6 +6,15 @@ $projectRoot = dirname(__DIR__, 2);
 $distRoot = realpath($projectRoot . DIRECTORY_SEPARATOR . 'dist');
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
+// Internal resources must stay denied even when the browser asks for SPA HTML.
+if (is_string($requestPath) && (preg_match('#\A/(?:\.|phpmyadmin(?:/|$)|src(?:/|$)|includes(?:/|$)|database(?:/|$)|scripts(?:/|$)|vendor(?:/|$)|node_modules(?:/|$)|composer[.-])#i', rawurldecode($requestPath))
+    || preg_match('/\.(?:md|sql|ini|log|phar)\z/i', $requestPath))) {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Not Found';
+    return;
+}
+
 if ($distRoot !== false && ($requestPath === '/' || $requestPath === '/index.html')) {
     header('Content-Type: text/html; charset=UTF-8');
     readfile($distRoot . DIRECTORY_SEPARATOR . 'index.html');

@@ -5,10 +5,14 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/shared/api.php';
 require_once dirname(__DIR__) . '/includes/shared/database.php';
 require_once dirname(__DIR__) . '/includes/resort/resort.php';
+require_once dirname(__DIR__) . '/includes/notifications/notifications.php';
 
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
 $data = readJsonBody();
+if ($manualBooking && isset($data['send_customer_email']) && !is_bool($data['send_customer_email'])) {
+    jsonResponse(['message' => 'Send customer email must be true or false.'], 422);
+}
 $chatToken = $data['chat_draft_token'] ?? null;
 if ($chatToken !== null) {
     require_once dirname(__DIR__) . '/includes/automations/website-chat.php';
@@ -154,13 +158,15 @@ try {
     $stayPlanJson = $stayPlan !== [] ? json_encode($stayPlan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) : null;
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayPlan !== [] ? $stayType : ($stayRecord['name'] ?? null), $message ?: null, $stayRecord['id'] ?? null, $stayPlanJson, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
+    $bookingId = (int) $db->lastInsertId();
     if ($facebookLeadId !== null) {
-        $bookingId = (int) $db->lastInsertId();
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);
         facebookAudit($db, (int) $_SESSION['admin_user']['id'], 'lead_converted', 'event', $facebookLeadId);
     }
     $chatSuccessReply = $chatToken !== null ? facebookGuidedReply(facebookSettings($db)['rules'], 'pending_created', ['reference' => $reference]) . ' This request is pending staff approval.' : '';
+    $notification = notificationBookingEvent($db, $bookingId, 'created', $manualBooking ? (int) $_SESSION['admin_user']['id'] : null, customer: !$manualBooking || ($data['send_customer_email'] ?? true));
     $db->commit();
+    notificationFlushAfterResponse();
     if ($chatToken !== null) {
         unset($_SESSION['chat']['draft']);
         $_SESSION['chat']['state'] = 'completed';
@@ -168,7 +174,7 @@ try {
         websiteChatRecord($_SESSION['chat'], 'assistant', $chatSuccessReply);
         session_write_close();
     }
-    jsonResponse(['status' => 'success', 'reference' => $reference], 201);
+    jsonResponse(['status' => 'success', 'reference' => $reference, 'notification' => $notification], 201);
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
     error_log('Booking request failed: ' . $error->getMessage());

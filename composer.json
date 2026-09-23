@@ -1,0 +1,10 @@
+{
+    "name": "odidepse/beach-resort",
+    "description": "Server-side transactional email for Odidepse Beach Resort",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "phpmailer/phpmailer": "^7.0"
+    },
+    "config": { "sort-packages": true }
+}

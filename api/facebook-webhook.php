@@ -122,7 +122,9 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): array
                     $query = $db->prepare("UPDATE facebook_events SET guest_name = ?, body = ?, category = ?, status = 'new', needs_attention = 1, website_status = 'hidden', website_published_at = NULL, revision = revision + 1 WHERE kind = 'comment' AND external_id = ? AND page_id = ?");
                     $query->execute([cleanText($value['from']['name'] ?? 'Facebook guest', 100) ?: 'Facebook guest', mb_substr($body, 0, 4000), $category, $commentId, $pageId]);
                     if ($query->rowCount()) {
-                        facebookAudit($db, null, 'comment_edited_hidden', 'event', null);
+                        $edited = $db->prepare("SELECT id FROM facebook_events WHERE kind = 'comment' AND external_id = ? AND page_id = ?");
+                        $edited->execute([$commentId, $pageId]);
+                        facebookAudit($db, null, 'comment_edited_hidden', 'event', (int) $edited->fetchColumn());
                         continue;
                     }
                 }
@@ -156,6 +158,7 @@ function webhookProcessPayload(PDO $db, array $payload, string $pageId): array
 
 function webhookAcknowledgeAndDeliver(array $eventIds): never
 {
+    if (function_exists('notificationFlushAfterResponse')) notificationFlushAfterResponse();
     $body = 'EVENT_RECEIVED';
     http_response_code(200);
     header('Content-Type: text/plain; charset=UTF-8');

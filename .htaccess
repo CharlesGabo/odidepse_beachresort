@@ -10,7 +10,8 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(?:includes|database|scripts|src)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:includes|database|scripts|src|vendor|\.git)(?:/|$) - [F,L,NC]
+    RewriteRule ^composer(?:[.-].*)?$ - [F,L,NC]
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.html [L]
