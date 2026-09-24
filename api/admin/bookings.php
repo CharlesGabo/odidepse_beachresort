@@ -35,13 +35,21 @@ try {
             ],
             resortEntities($db, 'stays', true)
         );
+        $emailSchemaAvailable = notificationSchemaAvailable($db);
+        $emailFailures = 0;
+        $emailFailureTarget = null;
+        if ($emailSchemaAvailable) {
+            $emailFailures = (int) $db->query("SELECT COUNT(*) FROM email_jobs WHERE status IN ('failed','unknown') AND created_at >= CURRENT_TIMESTAMP - INTERVAL 90 DAY")->fetchColumn();
+            $emailFailureTarget = $db->query("SELECT id,status FROM email_jobs WHERE status IN ('failed','unknown') AND created_at >= CURRENT_TIMESTAMP - INTERVAL 90 DAY ORDER BY id DESC LIMIT 1")->fetch() ?: null;
+        }
         jsonResponse([
             'status' => 'success',
             'bookings' => $rows,
             'accommodations' => $accommodations,
             'can_undo_room_move' => !empty($_SESSION['booking_room_undo']),
-            'email_setup_required' => !notificationSchemaAvailable($db),
-            'email_failures' => notificationSchemaAvailable($db) ? (int) $db->query("SELECT COUNT(*) FROM email_jobs WHERE status IN ('failed','unknown') AND created_at >= CURRENT_TIMESTAMP - INTERVAL 90 DAY")->fetchColumn() : 0,
+            'email_setup_required' => !$emailSchemaAvailable,
+            'email_failures' => $emailFailures,
+            'email_failure_target' => $emailFailureTarget,
         ]);
     }
 

@@ -53,6 +53,17 @@ function notificationAdminMutate(PDO $db, array $data, int $actor): array
             $db->prepare("UPDATE email_jobs SET status = 'pending', attempts = 0, manual_retries = manual_retries + 1, error_code = NULL, next_attempt_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$id]);
             $GLOBALS['notification_immediate_ids'][$id] = $id;
             $message = 'Delivery queued for retry. Superseded customer messages will be cancelled.';
+        } elseif ($action === 'cancel') {
+            $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if (!$id) throw new InvalidArgumentException('Choose a delivery record.');
+            $q = $db->prepare("SELECT status FROM email_jobs WHERE id = ? AND created_at >= CURRENT_TIMESTAMP - INTERVAL 90 DAY FOR UPDATE"); $q->execute([$id]);
+            $status = $q->fetchColumn();
+            if (!is_string($status) || !in_array($status, ['pending','retry_wait','failed','unknown'], true)) throw new DomainException('This delivery can no longer be cancelled.');
+            $update = $db->prepare("UPDATE email_jobs SET status = 'cancelled', error_code = 'cancelled_by_admin', next_attempt_at = UTC_TIMESTAMP() WHERE id = ? AND status = ?");
+            $update->execute([$id, $status]);
+            if ($update->rowCount() !== 1) throw new DomainException('This delivery changed. Refresh and try again.');
+            unset($GLOBALS['notification_immediate_ids'][$id]);
+            $message = 'Email delivery cancelled. It will not be retried.';
         } else throw new InvalidArgumentException('Unknown notification action.');
         $db->commit();
         return ['status' => 'success', 'message' => $message];

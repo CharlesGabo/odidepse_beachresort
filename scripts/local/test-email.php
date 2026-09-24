@@ -101,6 +101,8 @@ try {
     emailCheck($state($jobIds['temporary']) === 'failed', 'Five-attempt limit');
     notificationRunWorker($db, [$jobIds['permanent']], false, 1, static fn($job) => ['status' => 'failed', 'code' => 'smtp_rejected']);
     emailCheck($state($jobIds['permanent']) === 'failed', 'Permanent rejection');
+    notificationAdminMutate($db, ['action' => 'cancel', 'id' => $jobIds['permanent']], 1);
+    emailCheck($state($jobIds['permanent']) === 'cancelled' && notificationRunWorker($db, [$jobIds['permanent']], false, 1, $fake) === 0, 'Admin cancellation prevents a failed delivery from being retried');
     notificationRunWorker($db, [$jobIds['ambiguous']], false, 1, static fn($job) => ['status' => 'unknown', 'code' => 'delivery_unconfirmed']);
     emailCheck($state($jobIds['ambiguous']) === 'unknown', 'Ambiguous delivery not retried');
     $db->prepare("UPDATE email_jobs SET status = 'processing', started_at = UTC_TIMESTAMP() - INTERVAL 10 MINUTE WHERE id = ?")->execute([$jobIds['stale']]);

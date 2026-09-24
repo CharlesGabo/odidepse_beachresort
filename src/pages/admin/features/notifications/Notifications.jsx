@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useVisibilityPolling from '../polling/useVisibilityPolling.js';
 import './notifications.css';
 
-export default function Notifications({ csrfToken, onLogout, onRefresh }) {
+export default function Notifications({ csrfToken, onLogout, onRefresh, focus = null }) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
   const [page, setPage] = useState(1);
@@ -10,6 +10,7 @@ export default function Notifications({ csrfToken, onLogout, onRefresh }) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const handledFocus = useRef(null);
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/notifications.php?page=${page}&status=${filter}`, { headers: { Accept: 'application/json' } });
@@ -22,6 +23,18 @@ export default function Notifications({ csrfToken, onLogout, onRefresh }) {
     } catch (e) { setError(e.message); }
   }, [page, filter, onLogout]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!focus?.id) return;
+    handledFocus.current = null;
+    setPage(1);
+    setFilter(['failed', 'unknown'].includes(focus.status) ? focus.status : '');
+  }, [focus]);
+  useEffect(() => {
+    if (!focus?.id || handledFocus.current === focus.token || !data?.jobs?.some(job => Number(job.id) === Number(focus.id))) return;
+    const frame = requestAnimationFrame(() => document.getElementById(`email-job-${focus.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    handledFocus.current = focus.token;
+    return () => cancelAnimationFrame(frame);
+  }, [data, focus]);
   useVisibilityPolling(load, { enabled: !busy });
   const mutate = async payload => {
     setBusy(true); setError(''); setNotice('');
@@ -37,6 +50,13 @@ export default function Notifications({ csrfToken, onLogout, onRefresh }) {
   const retry = job => {
     if (job.status === 'unknown' && !window.confirm('This email may already have reached the recipient. Retrying can send a duplicate. Have you checked the provider and do you want to retry?')) return;
     mutate({ action: 'retry', id: Number(job.id), acknowledge_duplicate_risk: job.status === 'unknown' });
+  };
+  const cancelDelivery = job => {
+    const warning = job.status === 'unknown'
+      ? 'This email may already have reached the recipient, but cancelling will prevent any future retry. Cancel this delivery record?'
+      : 'Cancel this email delivery? It will not be retried.';
+    if (!window.confirm(warning)) return;
+    mutate({ action: 'cancel', id: Number(job.id) });
   };
   return <section className="notifications admin-view">
     <header><div><span className="admin-kicker">Customer communication</span><h1>Email notifications</h1></div><button type="button" onClick={load} disabled={busy}>Refresh</button></header>
@@ -59,9 +79,9 @@ export default function Notifications({ csrfToken, onLogout, onRefresh }) {
       </form>
       <section className="notification-panel"><h2>Delivery log</h2><p>“Accepted by SMTP” means the provider accepted the email; it does not prove inbox delivery. Records are retained for 90 days.</p>
         <label className="notification-field">Filter<select value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="">All statuses</option>{['pending','processing','retry_wait','succeeded','failed','unknown','skipped','cancelled'].map(status => <option key={status} value={status}>{status === 'succeeded' ? 'Accepted by SMTP' : status.replaceAll('_', ' ')}</option>)}</select></label>
-        <div className="notification-table"><table><thead><tr><th>Email</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Created</th><th>Action</th></tr></thead><tbody>{data.jobs.map(job => <tr key={job.id}><td>{job.subject}<small>{job.event_type}</small></td><td>{job.recipient || 'No email address'}</td><td>{job.status === 'succeeded' ? 'Accepted by SMTP' : job.status.replaceAll('_', ' ')}{job.error_code && <small>{job.error_code.replaceAll('_', ' ')}</small>}</td><td>{job.attempts}</td><td>{job.created_at}</td><td>{['failed','unknown'].includes(job.status) && <button disabled={busy} onClick={() => retry(job)}>Retry</button>}</td></tr>)}</tbody></table></div>
+        <div className="notification-table"><table><thead><tr><th>No.</th><th>Email</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Created</th><th>Action</th></tr></thead><tbody>{data.jobs.map((job, index) => <tr id={`email-job-${job.id}`} className={Number(focus?.id) === Number(job.id) ? 'is-notification-highlighted' : ''} key={job.id}><td className="notification-table__number" data-label="No.">{(page - 1) * 25 + index + 1}</td><td data-label="Email">{job.subject}<small>{job.event_type}</small></td><td data-label="Recipient">{job.recipient || 'No email address'}</td><td data-label="Status">{job.status === 'succeeded' ? 'Accepted by SMTP' : job.status.replaceAll('_', ' ')}{job.error_code && <small>{job.error_code.replaceAll('_', ' ')}</small>}</td><td data-label="Attempts">{job.attempts}</td><td data-label="Created">{job.created_at}</td><td data-label="Actions"><div className="notification-table__actions">{['failed','unknown'].includes(job.status) && <button disabled={busy} onClick={() => retry(job)}>Retry</button>}{['pending','retry_wait','failed','unknown'].includes(job.status) && <button className="notification-cancel-button" disabled={busy} onClick={() => cancelDelivery(job)}>Cancel</button>}</div></td></tr>)}</tbody></table></div>
         {data.jobs.length === 0 && <p>No deliveries in this view.</p>}
-        <div className="notification-pages"><button disabled={page <= 1 || busy} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} · {data.total} records</span><button disabled={page * 25 >= data.total || busy} onClick={() => setPage(page + 1)}>Next</button></div>
+        <div className="notification-pages"><button disabled={page <= 1 || busy} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {Math.max(1, Math.ceil(data.total / 25))} · Showing {data.total === 0 ? 0 : (page - 1) * 25 + 1}–{Math.min(page * 25, data.total)} of {data.total}</span><button disabled={page * 25 >= data.total || busy} onClick={() => setPage(page + 1)}>Next</button></div>
       </section>
     </>}
   </section>;

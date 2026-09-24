@@ -1416,6 +1416,8 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   const [canUndoRoomMove, setCanUndoRoomMove] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
   const [emailFailures, setEmailFailures] = useState(0);
+  const [emailFailureTarget, setEmailFailureTarget] = useState(null);
+  const [notificationFocus, setNotificationFocus] = useState(null);
   const [emailSetupRequired, setEmailSetupRequired] = useState(false);
   const [navigationIntent, setNavigationIntent] = useState(null);
   const [notice, setNotice] = useState('');
@@ -1431,6 +1433,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       setAccommodations(data.accommodations || []);
       setCanUndoRoomMove(Boolean(data.can_undo_room_move));
       setEmailFailures(Number(data.email_failures || 0));
+      setEmailFailureTarget(data.email_failure_target || null);
       setEmailSetupRequired(Boolean(data.email_setup_required));
     } catch (error) {
       setNotice(error.message);
@@ -1479,9 +1482,17 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
 
   const navigate = view => {
     setNavigationIntent(null);
+    setNotificationFocus(null);
     setActiveView(view);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openEmailFailure = () => {
+    setNavigationIntent(null);
+    setNotificationFocus(emailFailureTarget ? { id: Number(emailFailureTarget.id), status: emailFailureTarget.status, token: Date.now() } : null);
+    setActiveView('notifications');
+    setNotice('');
   };
 
   return <div className="admin-shell">
@@ -1492,11 +1503,11 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
     </aside>
     <main className="admin-main">
       {emailSetupRequired && <p className="notification-failure-banner" role="status">Email setup is incomplete. Bookings remain available; notifications will start after the database setup is completed.</p>}
-      {emailFailures > 0 && <p className="notification-failure-banner" role="status">{emailFailures} email deliveries need attention. <button type="button" onClick={() => navigate('notifications')}>Open delivery log</button></p>}
+      {emailFailures > 0 && <p className="notification-failure-banner" role="status">{emailFailures} email deliveries need attention. <button type="button" onClick={openEmailFailure}>Open delivery log</button></p>}
       {activeView === 'dashboard' && <header><div><span className="admin-kicker">Daily operations</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>}
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} />}
+        {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} focus={notificationFocus} />}
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
         {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
