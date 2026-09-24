@@ -48,6 +48,9 @@ try {
     $customRules['guided_replies']['ask_guests'] = 'CUSTOM GUEST QUESTION';
     checkFacebook(facebookConversationPrompt('awaiting_guests', $customRules) === 'CUSTOM GUEST QUESTION', 'Guided reply customization');
     checkFacebook(str_contains(facebookGuidedReply($customRules, 'pending_created', ['reference' => 'OD-TEST']), 'OD-TEST'), 'Guided placeholder replacement');
+    $sameDayStart = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
+    $sameDayDates = $sameDayStart->format('Y-m-d') . ' to ' . $sameDayStart->modify('+1 day')->format('Y-m-d');
+    checkFacebook(facebookConversationDates($sameDayDates) === [$sameDayStart->format('Y-m-d'), $sameDayStart->modify('+1 day')->format('Y-m-d')], 'Facebook accepts a booking inquiry beginning today');
     checkFacebook(facebookConversationDates('next weekend') !== null, 'Natural next-weekend dates');
     checkFacebook(facebookConversationDates('October 10 to 12') !== null, 'Natural month-name dates');
     checkFacebook(facebookConversationDates('next wekend') !== null, 'Misspelled relative dates');

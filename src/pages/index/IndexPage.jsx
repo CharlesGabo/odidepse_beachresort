@@ -132,6 +132,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   }
   const { copy, stays, services, roomPhotos } = useResort();
   const dialogRef = useRef(null);
+  const submitButtonRef = useRef(null);
   const leadPhoneDigits = String(initialGuest?.phone || '').replace(/\D/g, '').replace(/^(?:63|0)(?=\d{10}$)/, '');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [selectedStay, setSelectedStay] = useState(String(initialStay || ''));
@@ -143,8 +144,8 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const [calendarAvailability, setCalendarAvailability] = useState({ type: 'idle', days: {} });
   const [arrivalTime, setArrivalTime] = useState('14:00');
   const [departureTime, setDepartureTime] = useState('12:00');
-  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + (manual ? 0 : 86400000)));
-  const [calendarMonth, setCalendarMonth] = useState((initialDate || tomorrow).slice(0, 7));
+  const earliestBookingDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [calendarMonth, setCalendarMonth] = useState((initialDate || earliestBookingDate).slice(0, 7));
   const bookingActivities = services.some(item => /\bufo\b/i.test(item.title)) ? services : [...services, {
     id: 'ufo-inquiry', title: 'UFO rental', photo: null,
     copy: 'Add a UFO ride to your beach day for a fast, splash-filled group adventure.',
@@ -221,7 +222,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       setAvailability({ type: 'idle' });
       setArrivalTime(chatDraft?.arrivalTime || '14:00');
       setDepartureTime(chatDraft?.departureTime || '12:00');
-      setCalendarMonth((initialDate || tomorrow).slice(0, 7));
+      setCalendarMonth((initialDate || earliestBookingDate).slice(0, 7));
       dialog.showModal();
     }
     if (!open) {
@@ -229,6 +230,18 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !chatDraft) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      const submitButton = submitButtonRef.current;
+      if (!dialog || !submitButton) return;
+      dialog.scrollTo({ top: dialog.scrollHeight, behavior: 'smooth' });
+      submitButton.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, chatDraft?.token, availability.type]);
 
   useEffect(() => {
     if (!open || (!selectedStay && !selectedStayPlan.length) || !checkInDate || !checkOutDate) {
@@ -291,7 +304,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   };
 
   const chooseCalendarDate = value => {
-    if (value < tomorrow) return;
+    if (value < earliestBookingDate) return;
     if (isBlockedDate(value)) return;
     if (!checkInDate || checkOutDate || value <= checkInDate) {
       setCheckInDate(value);
@@ -303,7 +316,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
 
   const changeCalendarMonth = offset => {
     const next = new Date(calendarYear, calendarMonthNumber - 1 + offset, 1);
-    const earliest = new Date(`${tomorrow.slice(0, 7)}-01T12:00:00`);
+    const earliest = new Date(`${earliestBookingDate.slice(0, 7)}-01T12:00:00`);
     if (!manual && next < earliest) return;
     setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
   };
@@ -356,7 +369,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'We could not send your request.');
       form.reset();
-      setStatus({ type: 'success', message: manual ? `Booking ${data.reference} saved as a new request.` : `Request ${data.reference} received. Our team will contact you to discuss availability and rates.` });
+      setStatus({ type: 'success', message: manual ? `Booking ${data.reference} saved as a new request.` : `Request ${data.reference} received. A request-received email is on its way and may take a few minutes. Our team will contact you after reviewing availability and rates.` });
       onSaved?.(data);
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -398,7 +411,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
           <div className="booking-calendar-layout">
             <div className="booking-calendar" aria-label="Choose check-in and check-out dates">
               <div className="booking-calendar__toolbar">
-                <button type="button" onClick={() => changeCalendarMonth(-1)} disabled={!manual && calendarMonth <= tomorrow.slice(0, 7)} aria-label="Show previous month">‹</button>
+                <button type="button" onClick={() => changeCalendarMonth(-1)} disabled={!manual && calendarMonth <= earliestBookingDate.slice(0, 7)} aria-label="Show previous month">‹</button>
                 <strong>{calendarLabel}</strong>
                 <button type="button" onClick={() => changeCalendarMonth(1)} aria-label="Show next month">›</button>
               </div>
@@ -409,7 +422,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
                   const isCheckOut = day.key === checkOutDate;
                   const inRange = checkInDate && checkOutDate && day.key > checkInDate && day.key < checkOutDate;
                   const fullyBooked = calendarReady && calendarAvailability.days[day.key] === 0;
-                  const unavailable = !day.inMonth || day.key < tomorrow || isBlockedDate(day.key) || (selectingCheckOut && day.key > latestCheckOut);
+                  const unavailable = !day.inMonth || day.key < earliestBookingDate || isBlockedDate(day.key) || (selectingCheckOut && day.key > latestCheckOut);
                   return <button type="button" key={day.key} disabled={unavailable} className={`${fullyBooked ? 'is-unavailable' : ''} ${isCheckIn ? 'is-endpoint is-check-in' : ''} ${isCheckOut ? 'is-endpoint is-check-out' : ''} ${inRange ? 'is-in-range' : ''}`} aria-pressed={isCheckIn || isCheckOut} aria-label={`${readableDate(day.key)}${fullyBooked ? ', fully booked for overnight stay' : ''}${isCheckIn ? ', check-in' : ''}${isCheckOut ? ', check-out' : ''}`} onClick={() => chooseCalendarDate(day.key)}>{day.inMonth ? day.day : ''}</button>;
                 })}
               </div>
@@ -468,7 +481,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
         </aside>}
         {manual && <label className="field--wide"><input type="checkbox" name="send_customer_email" defaultChecked /> Send customer email when an email address is provided</label>}
         {status.type === 'error' && <p className="form-error field--wide" role="alert">{status.message}</p>}
-        <button className="button button--dark field--wide" disabled={status.type === 'loading'}>{manual ? (status.type === 'loading' ? 'Saving booking…' : 'Save booking') : (status.type === 'loading' ? copy.inquiry.sending : copy.inquiry.submit)} <Icon name="arrow" size={18} /></button>
+        <button ref={submitButtonRef} className="button button--dark field--wide" disabled={status.type === 'loading'}>{manual ? (status.type === 'loading' ? 'Saving booking…' : 'Save booking') : (status.type === 'loading' ? copy.inquiry.sending : copy.inquiry.submit)} <Icon name="arrow" size={18} /></button>
         <p className="form-note field--wide">{manual ? 'Saved bookings appear under New request. Confirm the booking after reviewing availability and arrangements.' : copy.inquiry["no_payment_is_taken_today_your_stay_is_confirmed_only_after_our_t"]}</p>
       </form>}
   </dialog>;

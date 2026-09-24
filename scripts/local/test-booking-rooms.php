@@ -12,6 +12,9 @@ if ($assignments[5] !== 3) throw new RuntimeException('Completed room must be re
 $a = array_replace($row, ['check_out' => '2026-09-16', 'message' => 'Preferred departure: 11:00']);
 $b = array_replace($row, ['check_in' => '2026-09-16', 'message' => 'Preferred arrival: 14:00']);
 if (bookingRoomOverlap($a, $b)) throw new RuntimeException('Non-overlapping boundary times rejected.');
+$legacyDeparture = array_replace($row, ['check_out' => '2026-09-16', 'message' => '']);
+$normalArrival = array_replace($row, ['check_in' => '2026-09-16', 'message' => 'Preferred arrival: 14:00']);
+if (bookingRoomOverlap($legacyDeparture, $normalArrival)) throw new RuntimeException('Legacy booking blocked normal same-day turnover.');
 if (!bookingRoomOverlap($row, $row)) throw new RuntimeException('Overlapping dates missed.');
 echo "Passed room assignment, completed-room reuse, pinned requests and time overlap checks.\n";
 if (in_array('--database', $argv ?? [], true)) {

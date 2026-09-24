@@ -161,7 +161,7 @@ try {
         $statement = $db->prepare('UPDATE bookings SET check_in = ?, check_out = ?, room_index = COALESCE(room_index, ?), updated_at = NOW() WHERE id = ?');
         $statement->execute([$checkInValue, $checkOutValue, $roomToPersist, $id]);
         $notification = ['customer' => 'unchanged'];
-        if ($booking['check_in'] !== $checkInValue || $booking['check_out'] !== $checkOutValue) $notification = notificationBookingEvent($db, $id, 'updated', (int) $_SESSION['admin_user']['id'], $staffNote);
+        if ($booking['check_in'] !== $checkInValue || $booking['check_out'] !== $checkOutValue) $notification = notificationBookingEvent($db, $id, 'updated', (int) $_SESSION['admin_user']['id'], $staffNote, previousBooking: $booking);
         $db->commit();
         notificationFlushAfterResponse();
         jsonResponse(['status' => 'success', 'reference' => $booking['reference_code'], 'notification' => $notification]);
@@ -261,7 +261,7 @@ try {
 
     $transitions = [
         'pending' => ['confirmed', 'cancelled'],
-        'confirmed' => ['checked_in'],
+        'confirmed' => ['checked_in', 'cancelled'],
         'checked_in' => ['completed'],
         'completed' => [],
         'cancelled' => [],

@@ -14,7 +14,7 @@ const statusLabels = {
   confirmed: 'Confirmed',
   checked_in: 'Checked in',
   completed: 'Completed',
-  no_show: 'No show',
+  no_show: 'No show · room held',
   cancelled: 'Cancelled',
 };
 
@@ -27,7 +27,10 @@ const statusActions = {
   ],
   confirmed: [{ status: 'checked_in', label: 'Check in', tone: 'primary' }],
   checked_in: [{ status: 'completed', label: 'Check out', tone: 'checked-in' }],
-  no_show: [{ status: 'checked_in', label: 'Correct to checked in', tone: 'primary' }],
+  no_show: [
+    { status: 'checked_in', label: 'Correct to checked in', tone: 'primary' },
+    { status: 'cancelled', label: 'Cancel booking', tone: 'danger' },
+  ],
 };
 
 function BookingStatusActions({ booking, updateStatus }) {
@@ -187,7 +190,7 @@ function allocateBookingsToUnits(bookings, unitCount, accommodationName) {
   }
   const cancelledBookings = bookings.filter(booking => booking.status === 'cancelled');
   const activeBookings = bookings.filter(booking => booking.status !== 'cancelled');
-  const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed']);
+  const blockingStatuses = new Set(['confirmed', 'checked_in', 'completed', 'no_show']);
   const overlaps = (first, second) => first.check_in <= second.check_out && first.check_out >= second.check_in;
   const byDate = (first, second) => first.check_in.localeCompare(second.check_in) || first.check_out.localeCompare(second.check_out) || String(first.id).localeCompare(String(second.id));
 
@@ -232,6 +235,15 @@ function getBookingNotes(message = '') {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return { arrival, departure, activities, note };
+}
+
+function sameDayTurnoverLabel(booking, unit) {
+  const departures = unit.bookings.filter(other => String(other.id) !== String(booking.id)
+    && other.status !== 'cancelled' && other.check_out === booking.check_in);
+  if (departures.length === 0) return '';
+  const departure = departures.map(other => getBookingNotes(other.message).departure || '12:00').sort().at(-1);
+  const arrival = getBookingNotes(booking.message).arrival || '14:00';
+  return `Same-day turnover · checkout ${formatBookingTime(departure)} → arrival ${formatBookingTime(arrival)}`;
 }
 
 const navItems = [
@@ -397,7 +409,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
   const calendarBookings = useMemo(() => bookings.filter(booking => (
     terminalBookingStatuses.includes(statusFilter)
       ? booking.status === statusFilter
-      : !terminalBookingStatuses.includes(booking.status) && (statusFilter === 'all' || booking.status === statusFilter)
+      : (booking.status === 'no_show' || !terminalBookingStatuses.includes(booking.status)) && (statusFilter === 'all' || booking.status === statusFilter)
   )), [bookings, statusFilter]);
   const resources = useMemo(() => {
     const accommodationOrder = [
@@ -422,7 +434,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         return (booking.stay_type || '').toLowerCase() === key;
       });
       const allocation = allocateBookingsToUnits(matchingBookings, unitCount, name);
-      const activeBookings = bookings.filter(booking => ['pending', 'confirmed', 'checked_in'].includes(booking.status)
+      const activeBookings = bookings.filter(booking => ['pending', 'confirmed', 'checked_in', 'no_show'].includes(booking.status)
         && ((catalogStay && Number(booking.stay_id) === Number(catalogStay.id)) || (booking.stay_type || '').toLowerCase() === key));
       const planningAllocation = allocateBookingsToUnits(activeBookings, unitCount, name);
       const planning = roomPlanning(planningAllocation.units, planningAllocation.overflowBookings);
@@ -636,7 +648,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       </div>
       {resources.map(resource => {
         const isExpanded = expandedGroups.has(resource.key);
-        const blockingStatuses = new Set(['confirmed', 'checked_in']);
+        const blockingStatuses = new Set(['confirmed', 'checked_in', 'no_show']);
         const bookingTouchesMonth = booking => booking.check_in <= monthEnd && booking.check_out >= monthStart;
         const occupiedUnits = resource.units.filter(unit => unit.bookings.some(booking => blockingStatuses.has(booking.status) && bookingTouchesMonth(booking))).length;
         const pendingRequests = resource.units.reduce((count, unit) => count + unit.bookings.filter(booking => booking.status === 'pending' && bookingTouchesMonth(booking)).length, 0);
@@ -658,8 +670,8 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
               {dateCells()}
               <div className="reservation-timeline__bars reservation-timeline__group-statuses">
                 {summarySegments.map(({ booking, start, end, lane }) => {
-                  const conflict = ['pending', 'confirmed', 'checked_in'].includes(booking.status) && summaryBookings.some(other => String(other.id) !== String(booking.id)
-                    && ['pending', 'confirmed', 'checked_in'].includes(other.status) && (!booking.calendar_room || booking.calendar_room === other.calendar_room) && bookingsOverlap(booking, other));
+                  const conflict = ['pending', 'confirmed', 'checked_in', 'no_show'].includes(booking.status) && summaryBookings.some(other => String(other.id) !== String(booking.id)
+                    && ['pending', 'confirmed', 'checked_in', 'no_show'].includes(other.status) && (!booking.calendar_room || booking.calendar_room === other.calendar_room) && bookingsOverlap(booking, other));
                   const fromFacebook = Number(booking.is_facebook_booking) === 1;
                   return <button type="button" className={`booking-calendar__occupancy-alert booking-calendar__occupancy-alert--${booking.status}${fromFacebook ? ' is-facebook-booking' : ''}${conflict ? ' is-conflict' : ''}${String(highlightedBookingId) === String(booking.id) ? ' is-booking-highlighted' : ''}`} key={`summary-${booking.id}-${start}-${end}`}
                     style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: lane + 1 }}
@@ -707,10 +719,13 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
                       {suggestion && <button type="button" className="booking-calendar__suggestion-move" disabled={moving} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); moveBooking(booking, resource, suggestion.unit); }}>Move to {suggestion.unit.name}</button>}
                     </div>;
                   })}
-                  {unitSuggestions.map(({ booking, unit: suggestedUnit, start, end }) => <div className="booking-calendar__suggestion-preview" key={`suggestion-${booking.id}-${unit.key}`} style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: 1 }}>
-                    <span>Suggested: #{resource.priorities.get(String(booking.id)) || 1} {booking.guest_name}</span>
-                    <button type="button" disabled={moving} onClick={() => moveBooking(booking, resource, suggestedUnit)}>Move here</button>
-                  </div>)}
+                  {unitSuggestions.map(({ booking, unit: suggestedUnit, start, end }) => {
+                    const turnover = sameDayTurnoverLabel(booking, suggestedUnit);
+                    return <div className="booking-calendar__suggestion-preview" key={`suggestion-${booking.id}-${unit.key}`} style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: 1 }} title={turnover || undefined}>
+                      <span><strong>Suggested: #{resource.priorities.get(String(booking.id)) || 1} {booking.guest_name}</strong>{turnover && <small>{turnover}</small>}</span>
+                      <button type="button" disabled={moving} onClick={() => moveBooking(booking, resource, suggestedUnit)}>Move here</button>
+                    </div>;
+                  })}
                 </div>
               </div>
             </div>;
@@ -736,7 +751,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
         </div>
         <div className="booking-calendar__legend" aria-label="Booking status legend">
           <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
-          {['pending', 'confirmed', 'checked_in'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
+          {['pending', 'confirmed', 'checked_in', 'no_show'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
         </div>
       </div>
       <div className="booking-calendar__toolbar">
@@ -771,7 +786,7 @@ function BookingCalendar({ bookings, accommodations, statusFilter, onStatusFilte
       </div>
       <div className="booking-calendar__legend booking-calendar-landscape__legend" aria-label="Filter landscape calendar by booking status">
         <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => onStatusFilterChange('all')}>All</button>
-        {['pending', 'confirmed', 'checked_in'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
+        {['pending', 'confirmed', 'checked_in', 'no_show'].map(status => <button type="button" key={status} aria-pressed={statusFilter === status} onClick={() => onStatusFilterChange(status)}><i className={`booking-calendar__status-dot booking-calendar__status-dot--${status}`} />{statusLabels[status]}</button>)}
       </div>
       {resourceSummary}
       {renderCalendarGrid(' in landscape view', true)}

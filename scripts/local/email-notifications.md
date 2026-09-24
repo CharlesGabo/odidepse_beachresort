@@ -50,9 +50,22 @@ delivery/open receipt; bounce tracking is not supplied by Gmail SMTP.
    powershell -NoProfile -File scripts/local/email-worker-loop.ps1
    ```
 
-   It runs every 30 seconds. The client-preview launcher starts and stops its own
-   email loop. The once-per-minute production cron is essential for recovery and
-   schedules; immediate request delivery is only a bounded best-effort attempt.
+   It runs every second and reuses its SMTP connection for each queued batch. The client-preview launcher starts and stops its own
+   email loop. On local Apache module PHP, booking requests return as soon as the
+   booking and email job are safely saved; the worker sends the email separately.
+   FastCGI environments may also attempt bounded delivery after closing the HTTP
+   response. The once-per-minute production cron remains essential for recovery
+   and scheduled messages.
+
+10. To deliberately send an additional operations digest for testing, stop the
+    loop and run:
+
+    ```powershell
+    C:\xampp\php\php.exe scripts/operations/email-worker.php --digest-now
+    ```
+
+    This manual option bypasses only the once-per-day digest deduplication. It
+    does not change the normal 7:00 AM Asia/Manila schedule.
 
 ## Coverage and controls
 

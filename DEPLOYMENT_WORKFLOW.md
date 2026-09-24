@@ -56,7 +56,7 @@ The launcher:
 5. Creates a temporary `trycloudflare.com` URL.
 6. Waits for Cloudflare DNS publication and verifies the public PHP health endpoint before displaying the URL.
 7. Runs the Facebook delivery worker every second while the preview is open, then stops it with the tunnel.
-8. Runs the email worker every 30 seconds while the preview is open, then stops it with the tunnel. SMTP is disabled by default; use `MAIL_TEST_RECIPIENT` for previews.
+8. Runs the email worker every second while the preview is open, then stops it with the tunnel. SMTP is disabled by default; use `MAIL_TEST_RECIPIENT` for previews.
 
 Send the displayed HTTPS URL to the client and keep the window, computer, internet connection, and XAMPP MySQL running. Press `Ctrl+C` to stop sharing.
 

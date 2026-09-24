@@ -1,7 +1,7 @@
 export function overlaps(a, b) {
   const time = (booking, label, fallback) => booking.message?.match(new RegExp(`Preferred ${label}:\\s*(\\d{2}:\\d{2})`, 'i'))?.[1] || fallback;
-  return `${a.check_in} ${time(a, 'arrival', '00:00')}` < `${b.check_out} ${time(b, 'departure', '23:59')}`
-    && `${b.check_in} ${time(b, 'arrival', '00:00')}` < `${a.check_out} ${time(a, 'departure', '23:59')}`;
+  return `${a.check_in} ${time(a, 'arrival', '14:00')}` < `${b.check_out} ${time(b, 'departure', '12:00')}`
+    && `${b.check_in} ${time(b, 'arrival', '14:00')}` < `${a.check_out} ${time(a, 'departure', '12:00')}`;
 }
 const oldestFirst = (a, b) => (a.created_at || '').localeCompare(b.created_at || '') || Number(a.id) - Number(b.id);
 export function roomPlanning(units, overflow = []) {

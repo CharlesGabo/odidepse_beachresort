@@ -3,6 +3,53 @@ declare(strict_types=1);
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/transport.php';
 
+function notificationDigestData(PDO $db, DateTimeImmutable $now): array
+{
+    $now = $now->setTimezone(new DateTimeZone('Asia/Manila'));
+    $today = $now->format('Y-m-d');
+    $tomorrow = $now->modify('+1 day')->format('Y-m-d');
+    $query = $db->prepare("SELECT reference_code,guest_name,status,check_in,check_out FROM bookings WHERE status IN ('pending','confirmed','checked_in') AND (status <> 'confirmed' OR check_in <= ?) ORDER BY check_in, id");
+    $query->execute([$tomorrow]);
+    $groups = [
+        'pending' => ['label' => 'Pending requests', 'items' => []],
+        'arriving_today' => ['label' => 'Arriving today', 'items' => []],
+        'checked_in' => ['label' => 'Checked in', 'items' => []],
+        'departing_today' => ['label' => 'Departing today', 'items' => []],
+        'overdue_departures' => ['label' => 'Overdue check-outs', 'items' => []],
+        'overdue_arrivals' => ['label' => 'Possible no-shows', 'items' => []],
+        'arriving_tomorrow' => ['label' => 'Arriving tomorrow', 'items' => []],
+    ];
+    foreach ($query->fetchAll() as $booking) {
+        $item = array_intersect_key($booking, array_flip(['reference_code', 'guest_name', 'check_in', 'check_out']));
+        if ($booking['status'] === 'pending') $groups['pending']['items'][] = $item;
+        if ($booking['status'] === 'checked_in') {
+            $groups['checked_in']['items'][] = $item;
+            if ($booking['check_out'] === $today) $groups['departing_today']['items'][] = $item;
+            if ($booking['check_out'] < $today) $groups['overdue_departures']['items'][] = $item;
+        }
+        if ($booking['status'] === 'confirmed') {
+            if ($booking['check_in'] === $today) $groups['arriving_today']['items'][] = $item;
+            if ($booking['check_in'] < $today) $groups['overdue_arrivals']['items'][] = $item;
+            if ($booking['check_in'] === $tomorrow) $groups['arriving_tomorrow']['items'][] = $item;
+        }
+    }
+    $emailIssues = (int) $db->query("SELECT COUNT(*) FROM email_jobs WHERE status IN ('failed','unknown')")->fetchColumn();
+    $facebookIssues = (int) $db->query("SELECT COUNT(*) FROM facebook_jobs WHERE status = 'failed'")->fetchColumn();
+    $summary = 'Operations for ' . $today . ' (Asia/Manila)';
+    foreach ($groups as $group) {
+        $rows = array_map(static fn(array $item): string => $item['reference_code'] . ' | ' . $item['guest_name'] . ' | ' . $item['check_in'] . ' to ' . $item['check_out'], $group['items']);
+        $summary .= "\n\n" . $group['label'] . ': ' . count($rows) . "\n" . implode("\n", array_slice($rows, 0, 50)) . (count($rows) > 50 ? "\nSee remaining records in admin." : '');
+    }
+    $summary .= "\n\nEmail failures / uncertain delivery: {$emailIssues}";
+    $summary .= "\nFacebook delivery failures: {$facebookIssues}";
+    return ['date' => $today, 'timezone' => 'Asia/Manila', 'groups' => $groups, 'email_issues' => $emailIssues, 'facebook_issues' => $facebookIssues, 'summary' => $summary];
+}
+
+function notificationDigestSummary(PDO $db, DateTimeImmutable $now): string
+{
+    return notificationDigestData($db, $now)['summary'];
+}
+
 function notificationSchedule(PDO $db, ?DateTimeImmutable $now = null): void
 {
     $now = ($now ?? new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->setTimezone(new DateTimeZone('Asia/Manila'));
@@ -16,24 +63,8 @@ function notificationSchedule(PDO $db, ?DateTimeImmutable $now = null): void
         foreach ($query->fetchAll() as $booking) {
             notificationQueue($db, 'customer.reminder', $booking['email'], ['booking' => notificationBookingSnapshot($booking), 'scheduled_date' => $today], 'reminder:' . $booking['id'] . ':' . $tomorrow, (int) $booking['id']);
         }
-        $query = $db->prepare("SELECT reference_code,guest_name,status,check_in,check_out FROM bookings WHERE status IN ('pending','confirmed','checked_in') AND (status <> 'confirmed' OR check_in <= ?) ORDER BY check_in, id");
-        $query->execute([$tomorrow]);
-        $groups = ['Pending requests' => [], 'Arriving today' => [], 'Checked in' => [], 'Departing today / overdue' => [], 'Overdue arrivals (review no-shows)' => [], 'Arriving tomorrow' => []];
-        foreach ($query->fetchAll() as $b) {
-            $line = $b['reference_code'] . ' | ' . $b['guest_name'] . ' | ' . $b['check_in'] . ' to ' . $b['check_out'];
-            if ($b['status'] === 'pending') $groups['Pending requests'][] = $line;
-            if ($b['status'] === 'checked_in') { $groups['Checked in'][] = $line; if ($b['check_out'] <= $today) $groups['Departing today / overdue'][] = $line; }
-            if ($b['status'] === 'confirmed') {
-                if ($b['check_in'] === $today) $groups['Arriving today'][] = $line;
-                if ($b['check_in'] < $today) $groups['Overdue arrivals (review no-shows)'][] = $line;
-                if ($b['check_in'] === $tomorrow) $groups['Arriving tomorrow'][] = $line;
-            }
-        }
-        $summary = 'Operations for ' . $today . ' (Asia/Manila)';
-        foreach ($groups as $title => $rows) $summary .= "\n\n" . $title . ': ' . count($rows) . "\n" . implode("\n", array_slice($rows, 0, 50)) . (count($rows) > 50 ? "\nSee remaining records in admin." : '');
-        $summary .= "\n\nEmail failures / uncertain delivery: " . $db->query("SELECT COUNT(*) FROM email_jobs WHERE status IN ('failed','unknown')")->fetchColumn();
-        $summary .= "\nFacebook delivery failures: " . $db->query("SELECT COUNT(*) FROM facebook_jobs WHERE status = 'failed'")->fetchColumn();
-        foreach (notificationAdminRecipients() as $recipient) notificationQueue($db, 'admin.digest', $recipient, ['summary' => $summary, 'scheduled_date' => $today], 'digest:' . $today);
+        $digest = notificationDigestData($db, $now);
+        foreach (notificationAdminRecipients() as $recipient) notificationQueue($db, 'admin.digest', $recipient, ['summary' => $digest['summary'], 'digest' => $digest, 'scheduled_date' => $today], 'digest:' . $today);
         if ($ownsTransaction) $db->commit();
     } catch (Throwable $error) { if ($ownsTransaction && $db->inTransaction()) $db->rollBack(); throw $error; }
 }

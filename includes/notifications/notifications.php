@@ -77,7 +77,11 @@ function notificationSavedRoomChanges(PDO $db, array $history, int $actor, strin
         }
         // Unit numbers are internal. Only notify a changed guest-facing accommodation.
         if ((int) $first[$bookingId]['stay_id'] !== (int) $current['stay_id'] || $first[$bookingId]['stay_type'] !== $current['stay_type']) {
-            notificationBookingEvent($db, (int) $bookingId, 'room_changed', $actor, $note, key: 'room-save:' . ($move['notification_key'] ?? hash('sha256', json_encode($move))));
+            $previousBooking = array_replace($current, [
+                'stay_id' => $first[$bookingId]['stay_id'],
+                'stay_type' => $first[$bookingId]['stay_type'],
+            ]);
+            notificationBookingEvent($db, (int) $bookingId, 'room_changed', $actor, $note, key: 'room-save:' . ($move['notification_key'] ?? hash('sha256', json_encode($move))), previousBooking: $previousBooking);
         }
     }
 }
@@ -115,18 +119,19 @@ function notificationQueue(PDO $db, string $type, string $recipient, array $payl
     return $id;
 }
 
-function notificationBookingEvent(PDO $db, int $bookingId, string $type, ?int $actor = null, string $note = '', string $reason = '', bool $customer = true, ?string $key = null): array
+function notificationBookingEvent(PDO $db, int $bookingId, string $type, ?int $actor = null, string $note = '', string $reason = '', bool $customer = true, ?string $key = null, ?array $previousBooking = null): array
 {
     if (!$db->inTransaction()) throw new LogicException('Booking notifications require a transaction.');
     if (!notificationSchemaAvailable($db)) return ['customer' => 'setup_required'];
     $query = $db->prepare('SELECT * FROM bookings WHERE id = ?'); $query->execute([$bookingId]); $booking = $query->fetch();
     if (!$booking) throw new RuntimeException('Booking missing.');
     $snapshot = notificationBookingSnapshot($booking);
+    $previous = $previousBooking !== null ? notificationBookingSnapshot($previousBooking) : null;
     $key ??= $type === 'created' ? 'created:' . $bookingId : bin2hex(random_bytes(16));
     $query = $db->prepare('INSERT INTO booking_events (booking_id,event_key,event_type,actor_id,staff_note,cancellation_reason,metadata_json) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)');
     $query->execute([$bookingId, $key, $type, $actor, $note, $reason, json_encode($snapshot, JSON_THROW_ON_ERROR)]);
     $eventId = (int) $db->lastInsertId();
-    $payload = ['booking' => $snapshot, 'note' => $note, 'reason' => $reason];
+    $payload = ['booking' => $snapshot, 'previous_booking' => $previous, 'note' => $note, 'reason' => $reason];
     $customerJob = notificationQueue($db, 'customer.' . $type, (string) $booking['email'], $payload, 'event:' . $eventId, $bookingId, $eventId, $customer);
     foreach (notificationAdminRecipients() as $recipient) notificationQueue($db, 'admin.' . $type, $recipient, $payload, 'event:' . $eventId, $bookingId, $eventId);
     $query = $db->prepare('SELECT status, error_code FROM email_jobs WHERE id = ?'); $query->execute([$customerJob]); $job = $query->fetch();
@@ -157,13 +162,16 @@ function notificationFlushAfterResponse(): void
     if (!notificationEnabled() || empty($GLOBALS['notification_immediate_ids'])) return;
     $ids = array_values($GLOBALS['notification_immediate_ids']);
     $GLOBALS['notification_immediate_ids'] = [];
+    // Apache module PHP cannot close the HTTP response before SMTP work begins.
+    // Leave these durable jobs for the worker so booking submissions return quickly.
+    if (!function_exists('fastcgi_finish_request')) return;
     register_shutdown_function(static function () use ($ids): void {
         try {
             $db = database();
             // Never send from a still-open/rolled-back booking transaction.
             if ($db->inTransaction()) return;
             if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
-            if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+            fastcgi_finish_request();
             require_once __DIR__ . '/worker.php';
             notificationRunWorker($db, $ids, false, 3);
         } catch (Throwable $error) { error_log('Email immediate delivery deferred: ' . get_class($error)); }

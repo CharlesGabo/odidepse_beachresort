@@ -24,34 +24,42 @@ function notificationSmtpSend(array $job): array
 {
     require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
     require_once __DIR__ . '/templates.php';
-    // A timeout after DATA may mean the provider already accepted the message.
-    $smtp = new class extends \PHPMailer\PHPMailer\SMTP {
-        public bool $dataStarted = false;
-        public bool $dataAccepted = false;
-        public function data($msg_data) {
-            $this->dataStarted = true;
-            $result = parent::data($msg_data);
-            $this->dataAccepted = $result;
-            return $result;
-        }
-    };
-    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-    $mail->setSMTPInstance($smtp);
-    $mail->isSMTP();
-    $mail->Host = (string) getenv('MAIL_HOST');
-    $mail->Port = (int) (getenv('MAIL_PORT') ?: 587);
-    $mail->SMTPAuth = true;
-    $mail->Username = (string) getenv('MAIL_USERNAME');
-    $mail->Password = (string) getenv('MAIL_PASSWORD');
-    $mail->SMTPSecure = getenv('MAIL_ENCRYPTION') ?: 'tls';
-    $mail->SMTPDebug = 0;
-    $mail->Timeout = 8;
-    $smtp->Timelimit = 12;
-    $mail->CharSet = 'UTF-8';
-    $mail->setFrom((string) getenv('MAIL_FROM_ADDRESS'), getenv('MAIL_FROM_NAME') ?: 'Odidepse Beach Resort');
-    $mail->addReplyTo(getenv('MAIL_REPLY_TO_ADDRESS') ?: (string) getenv('MAIL_FROM_ADDRESS'));
+    static $mail = null;
+    static $smtp = null;
+    if (!$mail instanceof \PHPMailer\PHPMailer\PHPMailer || !$smtp instanceof \PHPMailer\PHPMailer\SMTP) {
+        // A timeout after DATA may mean the provider already accepted the message.
+        $smtp = new class extends \PHPMailer\PHPMailer\SMTP {
+            public bool $dataStarted = false;
+            public bool $dataAccepted = false;
+            public function data($msg_data) {
+                $this->dataStarted = true;
+                $result = parent::data($msg_data);
+                $this->dataAccepted = $result;
+                return $result;
+            }
+        };
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $mail->setSMTPInstance($smtp);
+        $mail->isSMTP();
+        $mail->Host = (string) getenv('MAIL_HOST');
+        $mail->Port = (int) (getenv('MAIL_PORT') ?: 587);
+        $mail->SMTPAuth = true;
+        $mail->Username = (string) getenv('MAIL_USERNAME');
+        $mail->Password = (string) getenv('MAIL_PASSWORD');
+        $mail->SMTPSecure = getenv('MAIL_ENCRYPTION') ?: 'tls';
+        $mail->SMTPDebug = 0;
+        $mail->Timeout = 8;
+        $mail->SMTPKeepAlive = true;
+        $smtp->Timelimit = 12;
+        $mail->CharSet = 'UTF-8';
+        $mail->setFrom((string) getenv('MAIL_FROM_ADDRESS'), getenv('MAIL_FROM_NAME') ?: 'Odidepse Beach Resort');
+        $mail->addReplyTo(getenv('MAIL_REPLY_TO_ADDRESS') ?: (string) getenv('MAIL_FROM_ADDRESS'));
+    }
     $recipient = getenv('MAIL_TEST_RECIPIENT') ?: $job['recipient'];
     if (!notificationAddress($recipient)) return ['status' => 'failed', 'code' => 'invalid_recipient'];
+    $mail->clearAllRecipients();
+    $smtp->dataStarted = false;
+    $smtp->dataAccepted = false;
     $mail->addAddress($recipient);
     $payload = json_decode($job['payload_json'], true, 32, JSON_THROW_ON_ERROR);
     $render = notificationRender($job['event_type'], $payload);
@@ -63,10 +71,15 @@ function notificationSmtpSend(array $job): array
         $mail->send();
         return ['status' => 'succeeded', 'code' => null];
     } catch (Throwable) {
-        if ($smtp->dataAccepted) return ['status' => 'succeeded', 'code' => null];
+        $dataStarted = $smtp->dataStarted;
+        $dataAccepted = $smtp->dataAccepted;
         $code = (int) ($smtp->getError()['smtp_code'] ?? 0);
-        if ($smtp->dataStarted && $code === 0) return ['status' => 'unknown', 'code' => 'delivery_unconfirmed'];
+        $mail->smtpClose();
+        $mail = null;
+        $smtp = null;
+        if ($dataAccepted) return ['status' => 'succeeded', 'code' => null];
+        if ($dataStarted && $code === 0) return ['status' => 'unknown', 'code' => 'delivery_unconfirmed'];
         if ($code >= 500) return ['status' => 'failed', 'code' => 'smtp_rejected'];
         return ['status' => 'retry_wait', 'code' => 'smtp_temporary_failure'];
-    } finally { $mail->smtpClose(); }
+    }
 }

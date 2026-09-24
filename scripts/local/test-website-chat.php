@@ -27,6 +27,33 @@ try {
         websiteChatReply($db, $rateStart, $rateQuestion, $rules);
         chatCheck($rateStart['state'] === 'rates', $rateQuestion . ' starts the website rate flow');
     }
+    $sameDayStart = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
+    $sameDayChat = ['state' => 'booking', 'data' => [], 'history' => [], 'csrf' => 'same-day'];
+    websiteChatReply($db, $sameDayChat, $sameDayStart->format('Y-m-d') . ' to ' . $sameDayStart->modify('+1 day')->format('Y-m-d'), $rules);
+    chatCheck(($sameDayChat['data']['check_in'] ?? '') === $sameDayStart->format('Y-m-d'), 'Website chat accepts a booking request beginning today');
+    $overlapStart = $sameDayStart->modify('+520 days');
+    $overlapEnd = $overlapStart->modify('+1 day');
+    $bestFit = null;
+    foreach ($db->query("SELECT id,name,details FROM resort_stays WHERE enabled=1 AND archived=0 AND availability <> 'unavailable' ORDER BY sort_order,id")->fetchAll() as $stayRow) {
+        $stayDetails = json_decode($stayRow['details'], true, 32, JSON_THROW_ON_ERROR);
+        if (5 < (int) ($stayDetails['min_guests'] ?? 1) || 5 > (int) ($stayDetails['max_guests'] ?? 0) || ($stayDetails['style'] ?? 'standard') !== 'standard') continue;
+        $candidate = $stayRow + ['max_guests' => (int) $stayDetails['max_guests'], 'room_count' => (int) ($stayDetails['room_count'] ?? 1)];
+        if ($bestFit === null || [$candidate['max_guests'], $candidate['id']] < [$bestFit['max_guests'], $bestFit['id']]) $bestFit = $candidate;
+    }
+    chatCheck($bestFit !== null, 'A best-fit room exists for website overlap guidance');
+    $blockBestFit = $db->prepare("INSERT INTO bookings (reference_code,guest_name,email,phone,check_in,check_out,guests,stay_type,stay_id,message,status) VALUES (?,?,?,?,?,?,?,?,?,?,'confirmed')");
+    $overlapBlockerIds = [];
+    for ($room = 1; $room <= max(1, $bestFit['room_count']); $room++) {
+        $blockBestFit->execute(['WEB-OVERLAP-' . bin2hex(random_bytes(4)), 'Overlap verification', 'verify@example.test', '', $overlapStart->format('Y-m-d'), $overlapEnd->format('Y-m-d'), 5, $bestFit['name'], $bestFit['id'], 'Website overlap guidance test']);
+        $overlapBlockerIds[] = (int) $db->lastInsertId();
+    }
+    $overlapChat = ['state' => 'booking', 'data' => [], 'history' => [], 'csrf' => 'overlap'];
+    $overlapReply = websiteChatReply($db, $overlapChat, "Dates: {$overlapStart->format('Y-m-d')} to {$overlapEnd->format('Y-m-d')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 5\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567", $rules)['reply'];
+    chatCheck(str_contains($overlapReply, 'no longer available') && str_contains($overlapReply, 'overlap with a confirmed booking') && !empty($overlapChat['data']['availability_alternatives']), 'Website explains a best-fit room overlap before suggesting alternatives');
+    $customDateReply = websiteChatReply($db, $overlapChat, '1', $rules)['reply'];
+    chatCheck(str_contains($customDateReply, 'preferred new check-in and check-out dates') && empty($overlapChat['data']['availability_alternatives']), 'Website accepts a numbered unavailable-room alternative');
+    $deleteOverlapBlocker = $db->prepare('DELETE FROM bookings WHERE id = ?');
+    foreach ($overlapBlockerIds as $overlapBlockerId) $deleteOverlapBlocker->execute([$overlapBlockerId]);
     $start = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+500 days');
     $end = $start->modify('+2 days');
     $combinationChat = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'combination'];

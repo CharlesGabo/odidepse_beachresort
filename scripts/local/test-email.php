@@ -16,12 +16,28 @@ try {
     emailCheck(notificationAddress('guest@example.test'), 'Valid email');
     emailCheck(!notificationAddress("guest@example.test\r\nBcc:x@example.test"), 'Reject header injection');
     emailCheck(!notificationSafeUrl('javascript:alert(1)') && !notificationSafeUrl('https://user:secret@example.test'), 'Reject unsafe review URLs');
-    $snapshot = ['id' => 1, 'reference_code' => 'OD-TEST', 'guest_name' => '<script>alert(1)</script>', 'status' => 'pending', 'check_in' => '2030-01-01', 'check_out' => '2030-01-02', 'guests' => 2, 'stay_type' => 'Test room', 'service_name' => null];
+    $snapshot = ['id' => 1, 'reference_code' => 'OD-TEST', 'guest_name' => '<script>alert(1)</script>', 'status' => 'pending', 'check_in' => '2030-01-01', 'check_out' => '2030-01-02', 'preferred_arrival' => '14:00', 'guests' => 2, 'stay_type' => 'Test room', 'service_name' => 'ATV rental', 'requested_activities' => 'ATV rental'];
     foreach (notificationTypes() as $type => $label) {
         $render = notificationRender($type, ['booking' => $snapshot, 'note' => '<img src=x onerror=alert(1)>']);
         emailCheck(!str_contains($render['html'], '<script>') && !str_contains($render['html'], '<img '), 'HTML encoding: ' . $type);
         emailCheck(str_contains($render['text'], 'not confirmed') && !preg_match('/[\r\n]/', $render['subject']), 'Pending and subject safety: ' . $type);
     }
+    $render = notificationRender('customer.created', ['booking' => $snapshot]);
+    emailCheck(str_contains($render['html'], '#0b302c') && str_contains($render['html'], 'Wild coast. Warm welcome.'), 'Website palette and resort branding');
+    emailCheck(str_contains($render['html'], 'Tue, Jan 1, 2030') && str_contains($render['html'], '2:00 PM'), 'Guest-friendly date and time formatting');
+    emailCheck(substr_count($render['html'], 'ATV rental') === 1, 'Duplicate requested activity removed');
+    $render = notificationRender('customer.updated', ['booking' => $snapshot, 'previous_booking' => array_merge($snapshot, ['check_in' => '2029-12-31', 'stay_type' => 'Old room'])]);
+    emailCheck(str_contains($render['html'], 'Mon, Dec 31, 2029') && str_contains($render['html'], '&rarr;') && str_contains($render['text'], 'Old room -> Test room'), 'Changed values show previous and current details');
+    $digest = ['date' => '2030-01-01', 'timezone' => 'Asia/Manila', 'groups' => [
+        'pending' => ['label' => 'Pending requests', 'items' => [['reference_code' => 'OD-TEST', 'guest_name' => 'Test guest', 'check_in' => '2030-01-02', 'check_out' => '2030-01-03']]],
+        'arriving_today' => ['label' => 'Arriving today', 'items' => []], 'checked_in' => ['label' => 'Checked in', 'items' => []],
+        'departing_today' => ['label' => 'Departing today', 'items' => []], 'overdue_departures' => ['label' => 'Overdue check-outs', 'items' => []],
+        'overdue_arrivals' => ['label' => 'Possible no-shows', 'items' => []],
+        'arriving_tomorrow' => ['label' => 'Arriving tomorrow', 'items' => []],
+    ], 'email_issues' => 1, 'facebook_issues' => 0, 'summary' => 'Structured digest plain text'];
+    $render = notificationRender('admin.digest', ['digest' => $digest, 'summary' => $digest['summary'], 'scheduled_date' => '2030-01-01']);
+    emailCheck(str_contains($render['html'], 'Pending review') && str_contains($render['html'], 'Test guest') && str_contains($render['html'], 'Needs attention'), 'Digest dashboard overview and action sections');
+    emailCheck(str_contains($render['subject'], 'Tue, Jan 1, 2030') && str_contains($render['text'], 'Structured digest plain text'), 'Dated digest subject and plain-text fallback');
     $render = notificationRender('customer.completed', ['booking' => array_merge($snapshot, ['status' => 'completed'])]);
     emailCheck(!str_contains($render['html'], 'Share your feedback'), 'Blank review link omitted');
     $render = notificationRender('customer.completed', ['booking' => array_merge($snapshot, ['status' => 'completed']), 'review_url' => 'https://forms.gle/example']);

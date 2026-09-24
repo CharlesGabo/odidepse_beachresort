@@ -52,7 +52,7 @@ try {
     $checkIn = new DateTimeImmutable((string) ($data['check_in'] ?? ''), new DateTimeZone('Asia/Manila'));
     $checkOut = new DateTimeImmutable((string) ($data['check_out'] ?? ''), new DateTimeZone('Asia/Manila'));
     $today = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
-    if ($manualBooking ? $checkIn < $today : $checkIn <= $today) $errors['check_in'] = $manualBooking ? 'Check-in must be today or a future date.' : 'Check-in must be a future date.';
+    if ($checkIn < $today) $errors['check_in'] = 'Check-in must be today or a future date.';
     if ($checkOut <= $checkIn) $errors['check_out'] = 'Check-out must be after check-in.';
     if ($checkIn->diff($checkOut)->days > 30) $errors['check_out'] = 'A stay may not exceed 30 nights.';
     if ($checkIn->format('Y-m-d') !== (string) ($data['check_in'] ?? '') || $checkOut->format('Y-m-d') !== (string) ($data['check_out'] ?? '')) throw new Exception();

@@ -1520,7 +1520,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
         $serviceId = count($activityIds) === 1 ? $activityIds[0] : null;
         $serviceName = $serviceId !== null ? (($data['activity_names'][0] ?? '') ?: null) : null;
         if ($editingBookingId !== null) {
-            $bookingQuery = $db->prepare('SELECT id, reference_code, status FROM bookings WHERE id = ? FOR UPDATE');
+            $bookingQuery = $db->prepare('SELECT * FROM bookings WHERE id = ? FOR UPDATE');
             $bookingQuery->execute([$editingBookingId]);
             $booking = $bookingQuery->fetch();
             if (!$booking || $booking['status'] !== 'pending') {
@@ -1534,7 +1534,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules): string
             $update = $db->prepare('UPDATE bookings SET guest_name = ?, email = ?, phone = ?, check_in = ?, check_out = ?, guests = ?, stay_type = ?, stay_id = ?, stay_plan_json = ?, service_id = ?, service_name = ?, message = ? WHERE id = ? AND status = \'pending\'');
             $update->execute([$data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $stayId, $stayPlanJson, $serviceId, $serviceName, $bookingMessage, $editingBookingId]);
             require_once dirname(__DIR__) . '/notifications/notifications.php';
-            notificationBookingEvent($db, $editingBookingId, 'updated', key: 'messenger-update:' . $eventId);
+            notificationBookingEvent($db, $editingBookingId, 'updated', key: 'messenger-update:' . $eventId, previousBooking: $booking);
             $reference = (string) $booking['reference_code'];
             $data['reference'] = $reference;
             unset($data['editing_booking_id']);

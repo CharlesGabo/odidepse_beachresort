@@ -168,10 +168,30 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     }
     if (in_array($chat['state'], ['idle', 'completed'], true)) { $chat['data'] = []; $chat['state'] = $category === 'rates' ? 'rates' : 'booking'; }
     $data =& $chat['data'];
-    $details = facebookConversationDetails($body);
+    $alternativeSelection = isset($data['availability_alternatives']) && is_array($data['availability_alternatives'])
+        ? facebookConversationSelectStay($body, $data['availability_alternatives'])
+        : null;
+    if ($alternativeSelection !== null) {
+        if (($alternativeSelection['alternative_type'] ?? '') === 'custom_dates') {
+            unset($data['availability_alternatives'], $data['availability_choice_made'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos']);
+            $chat['state'] = 'booking';
+            return $reply('Please send your preferred new check-in and check-out dates. Example: September 16–19, 2026.');
+        }
+        $data['check_in'] = $alternativeSelection['check_in'];
+        $data['check_out'] = $alternativeSelection['check_out'];
+        facebookConversationApplyStaySelection($data, $alternativeSelection);
+        $data['availability_choice_made'] = true;
+        unset($data['availability_alternatives']);
+        $details = ['dates' => null, 'check_in_time' => null, 'check_out_time' => null, 'guests' => null, 'guest_name' => '', 'email' => '', 'phone' => ''];
+    } else {
+        $details = facebookConversationDetails($body);
+        if ($details['dates'] !== null || $details['guests'] !== null) {
+            unset($data['availability_choice_made'], $data['availability_alternatives'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos']);
+        }
+    }
     if ($details['dates']) {
         [$data['check_in'], $data['check_out']] = $details['dates']; unset($chat['draft']);
-        if ($data['check_in'] <= (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) unset($data['check_in'], $data['check_out']);
+        if ($data['check_in'] < (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) unset($data['check_in'], $data['check_out']);
     }
     foreach (['guests', 'check_in_time', 'check_out_time', 'email', 'phone'] as $field) {
         if ($details[$field] !== null && $details[$field] !== '') { $data[$field] = $details[$field]; unset($chat['draft']); }
@@ -194,6 +214,15 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     $ratesOnly = $chat['state'] === 'rates' && empty($data['guest_name']) && !preg_match('/\b(?:book|booking|reserve|reservation|magbook|mag-book)\b/iu', $body);
     $missing = facebookConversationMissingDetails($data, $ratesOnly, !$ratesOnly);
     if (isset($data['check_in'], $data['check_out'], $data['guests'])) {
+        if ((int) $data['guests'] <= 10 && empty($data['availability_choice_made'])) {
+            $availability = facebookConversationUnavailableAlternatives($db, (int) $data['guests'], $data['check_in'], $data['check_out']);
+            if ($availability !== null && $availability['options'] !== []) {
+                $data['availability_alternatives'] = $availability['options'];
+                $chat['state'] = 'booking';
+                unset($chat['draft']);
+                return $reply(facebookConversationUnavailableText($availability, $data['check_in'], $data['check_out']));
+            }
+        }
         $options = facebookConversationStayOptions($db, $data['guests'], $data['check_in'], $data['check_out'], null, 100);
         $data['options'] = $options;
         if ($options === []) { $chat['state'] = 'handoff'; return $reply(facebookGuidedReply($rules, 'no_options'), ['handoff' => true]); }

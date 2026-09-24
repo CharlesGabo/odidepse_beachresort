@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 function bookingRoomOverlap(array $a, array $b): bool
 {
-    // Missing times remain conservatively overlapping on a shared boundary date.
+    // Older bookings may not have stored times. Use the booking form's normal
+    // arrival and departure defaults so a same-day room turnover stays valid.
     $time = static function (array $booking, string $label, string $fallback): string {
         return preg_match('/Preferred ' . $label . ':\s*(\d{2}:\d{2})/i', (string) ($booking['message'] ?? ''), $m) ? $m[1] : $fallback;
     };
-    return $a['check_in'] . ' ' . $time($a, 'arrival', '00:00') < $b['check_out'] . ' ' . $time($b, 'departure', '23:59')
-        && $b['check_in'] . ' ' . $time($b, 'arrival', '00:00') < $a['check_out'] . ' ' . $time($a, 'departure', '23:59');
+    return $a['check_in'] . ' ' . $time($a, 'arrival', '14:00') < $b['check_out'] . ' ' . $time($b, 'departure', '12:00')
+        && $b['check_in'] . ' ' . $time($b, 'arrival', '14:00') < $a['check_out'] . ' ' . $time($a, 'departure', '12:00');
 }
 
 function bookingRoomAssignments(array $bookings, array $stays): array
