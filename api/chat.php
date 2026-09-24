@@ -33,7 +33,7 @@ try {
         if ($limited) jsonResponse(['status' => 'error', 'message' => 'Too many messages were sent at once. Please wait a few seconds, then continue.'], 429);
         $result = websiteChatReply($db, $_SESSION['chat'], trim($message), $rules);
         if ($input['action'] !== 'reset') websiteChatRecord($_SESSION['chat'], 'visitor', $message);
-        websiteChatRecord($_SESSION['chat'], 'assistant', $result['reply']);
+        websiteChatRecord($_SESSION['chat'], 'assistant', $result['reply'], $result['photos'] ?? [], $result['photoName'] ?? '');
     }
     jsonResponse(['status' => 'success', 'history' => $_SESSION['chat']['history'], 'csrf' => $_SESSION['chat']['csrf'], 'greeting' => websiteChatFallback($rules),
         'quickActions' => ['Booking', 'Rates', 'Amenities', 'Location'], 'aiAvailable' => (bool) getenv('GEMINI_API_KEY'), 'handoff' => $_SESSION['chat']['state'] === 'handoff'] + $result);

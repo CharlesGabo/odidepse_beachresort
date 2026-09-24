@@ -758,6 +758,29 @@ function facebookConversationUnavailableText(array $result, string $checkIn, str
     return implode("\n", $lines);
 }
 
+function facebookConversationEmptyDetails(): array
+{
+    return ['dates' => null, 'check_in_time' => null, 'check_out_time' => null, 'guests' => null, 'guest_name' => '', 'email' => '', 'phone' => ''];
+}
+
+function facebookConversationResolveAvailabilityChoice(array &$data, string $body): array
+{
+    $selection = isset($data['availability_alternatives']) && is_array($data['availability_alternatives'])
+        ? facebookConversationSelectStay($body, $data['availability_alternatives'])
+        : null;
+    if ($selection === null) return ['status' => 'none', 'details' => facebookConversationDetails($body)];
+    if (($selection['alternative_type'] ?? '') === 'custom_dates') {
+        unset($data['availability_alternatives'], $data['availability_choice_made'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos'], $data['room_photo_event_id']);
+        return ['status' => 'custom_dates', 'details' => facebookConversationEmptyDetails()];
+    }
+    $data['check_in'] = $selection['check_in'];
+    $data['check_out'] = $selection['check_out'];
+    facebookConversationApplyStaySelection($data, $selection);
+    $data['availability_choice_made'] = true;
+    unset($data['availability_alternatives']);
+    return ['status' => 'selected', 'details' => facebookConversationEmptyDetails()];
+}
+
 function facebookConversationOfferStays(PDO $db, int $conversationId, array $data, int $eventId, array $rules): string
 {
     $options = facebookConversationStayOptions($db, (int) $data['guests'], $data['check_in'], $data['check_out'], isset($data['editing_booking_id']) ? (int) $data['editing_booking_id'] : null);
@@ -1159,23 +1182,13 @@ function facebookStartHumanTakeover(PDO $db, string $pageId, string $senderId, i
 
 function facebookConversationConsolidatedReply(PDO $db, int $conversationId, array $data, int $eventId, string $body, array $rules, bool $ratesOnly = false): string
 {
-    $alternativeSelection = isset($data['availability_alternatives']) && is_array($data['availability_alternatives'])
-        ? facebookConversationSelectStay($body, $data['availability_alternatives'])
-        : null;
-    if ($alternativeSelection !== null) {
-        if (($alternativeSelection['alternative_type'] ?? '') === 'custom_dates') {
-            unset($data['availability_alternatives'], $data['availability_choice_made'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos'], $data['room_photo_event_id']);
-            facebookConversationSave($db, $conversationId, 'awaiting_booking_details', $data, $eventId);
-            return 'Please send your preferred new check-in and check-out dates. Example: September 16–19, 2026.';
-        }
-        $data['check_in'] = $alternativeSelection['check_in'];
-        $data['check_out'] = $alternativeSelection['check_out'];
-        facebookConversationApplyStaySelection($data, $alternativeSelection);
-        $data['availability_choice_made'] = true;
-        unset($data['availability_alternatives']);
-        $details = ['dates' => null, 'check_in_time' => null, 'check_out_time' => null, 'guests' => null, 'guest_name' => '', 'email' => '', 'phone' => ''];
-    } else {
-        $details = facebookConversationDetails($body);
+    $availabilityChoice = facebookConversationResolveAvailabilityChoice($data, $body);
+    if ($availabilityChoice['status'] === 'custom_dates') {
+        facebookConversationSave($db, $conversationId, 'awaiting_booking_details', $data, $eventId);
+        return 'Please send your preferred new check-in and check-out dates. Example: September 16–19, 2026.';
+    }
+    $details = $availabilityChoice['details'];
+    if ($availabilityChoice['status'] === 'none') {
         if ($details['dates'] !== null || $details['guests'] !== null) unset($data['availability_choice_made'], $data['availability_alternatives'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['room_photos']);
     }
     facebookConversationApplyOptionalDetails($db, $data, $body);
@@ -1225,7 +1238,7 @@ function facebookConversationConsolidatedReply(PDO $db, int $conversationId, arr
     $validKeys = array_map(static fn(array $option): string => (string) ($option['option_key'] ?? 'stay:' . $option['id']), $options);
     if ($selectedKey !== '' && !in_array($selectedKey, $validKeys, true)) unset($data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name']);
     $requestedSuggestion = preg_match('/\b(?:best\s*fit|recommend(?:ed|ation)?|suggest(?:ed|ion)?)\b/iu', $body) === 1;
-    $selection = facebookConversationSelectStay($body, $options);
+    $selection = $availabilityChoice['status'] === 'selected' ? null : facebookConversationSelectStay($body, $options);
     $automaticallySuggested = false;
     if ($selection === null && !isset($data['stay_id']) && empty($data['stay_plan'])) { $selection = $options[0]; $automaticallySuggested = true; }
     if ($selection !== null) {

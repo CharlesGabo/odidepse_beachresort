@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useResort } from '../../../../shared/resort/ResortContent.jsx';
+import { StayPhotoModal, stayPhotoSource } from '../../../../shared/stay-photos/StayPhotos.jsx';
 import './website-chat.css';
+
+function ChatText({ text }) {
+  return String(text || '').split(/(\*\*[^*]+\*\*)/g).map((part, index) => part.startsWith('**') && part.endsWith('**')
+    ? <strong key={index}>{part.slice(2, -2)}</strong>
+    : part);
+}
 
 export default function WebsiteChat({ onDraft, onBook, refresh }) {
   const { copy } = useResort();
@@ -11,6 +18,7 @@ export default function WebsiteChat({ onDraft, onBook, refresh }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [contactOpen, setContactOpen] = useState(false);
+  const [photoViewer, setPhotoViewer] = useState(null);
   const launcher = useRef(null);
   const input = useRef(null);
   const thread = useRef(null);
@@ -79,7 +87,14 @@ export default function WebsiteChat({ onDraft, onBook, refresh }) {
       <p className="website-chat-notice">AI may help with general questions. Bookings require staff approval. Please don’t share payment details.</p>
       <div className="website-chat-thread" ref={thread} role="log" aria-live="polite" aria-relevant="additions text">
         {!(data?.history?.length) && <p className="website-chat-bubble">{data?.greeting || 'Welcome! Loading your resort assistant…'}</p>}
-        {data?.history?.map((item, index) => <p className={`website-chat-bubble ${item.role === 'visitor' ? 'is-visitor' : ''}`} key={index}><span className="website-chat-speaker">{item.role === 'visitor' ? 'You' : 'Assistant'}</span>{item.text}</p>)}
+        {data?.history?.map((item, index) => <article className={`website-chat-bubble ${item.role === 'visitor' ? 'is-visitor' : ''}`} key={index}>
+          <span className="website-chat-speaker">{item.role === 'visitor' ? 'You' : 'Assistant'}</span><ChatText text={item.text} />
+          {item.role === 'assistant' && item.photos?.length > 0 && <div className="website-chat-photos" aria-label={`${item.photo_name || 'Suggested room'} photos`}>
+            {item.photos.map((photo, photoIndex) => <button type="button" onClick={() => setPhotoViewer({ photos: item.photos, name: item.photo_name || 'Suggested room', index: photoIndex })} aria-label={`Open ${item.photo_name || 'suggested room'} photo ${photoIndex + 1}`} key={photo}>
+              <img src={stayPhotoSource(photo)} alt={`${item.photo_name || 'Suggested room'}, photo ${photoIndex + 1}`} loading="lazy" decoding="async" />
+            </button>)}
+          </div>}
+        </article>)}
         {busy && <p role="status">Preparing your reply…</p>}
       </div>
       <div className="website-chat-actions">
@@ -92,5 +107,6 @@ export default function WebsiteChat({ onDraft, onBook, refresh }) {
       <form onSubmit={event => { event.preventDefault(); send(message); }}><label className="website-chat-speaker" htmlFor="website-chat-message">Your message</label><div><textarea ref={input} id="website-chat-message" rows="3" maxLength={2000} value={message} onChange={event => setMessage(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="Ask about rooms, or type BOOKING" /><button type="submit" disabled={busy || !data || !message.trim()}>Send</button></div></form>
       <button className="website-chat-reset" type="button" disabled={busy || !data} onClick={() => send('RESTART', 'reset')}>Start a new chat</button>
     </section>}
+    {photoViewer && <StayPhotoModal photos={photoViewer.photos} name={photoViewer.name} initialIndex={photoViewer.index} onClose={() => setPhotoViewer(null)} />}
   </div>;
 }

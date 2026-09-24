@@ -44,9 +44,15 @@ function websiteChatFallback(array $rules, string $category = 'general'): string
     return trim((string) ($rules['templates'][$category] ?? '')) ?: (trim((string) ($rules['templates']['general'] ?? '')) ?: 'Please contact our resort team for assistance.');
 }
 
-function websiteChatRecord(array &$chat, string $role, string $text): void
+function websiteChatRecord(array &$chat, string $role, string $text, array $photos = [], string $photoName = ''): void
 {
-    $chat['history'][] = ['role' => $role, 'text' => mb_substr($text, 0, 4000)];
+    $entry = ['role' => $role, 'text' => mb_substr($text, 0, 4000)];
+    $safePhotos = array_slice(array_values(array_filter($photos, static fn(mixed $photo): bool => is_string($photo) && $photo !== '' && mb_strlen($photo) <= 255)), 0, 3);
+    if ($role === 'assistant' && $safePhotos !== []) {
+        $entry['photos'] = $safePhotos;
+        $entry['photo_name'] = mb_substr(trim($photoName) ?: 'Suggested room', 0, 120);
+    }
+    $chat['history'][] = $entry;
     $chat['history'] = array_slice($chat['history'], -30);
 }
 
@@ -168,23 +174,13 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     }
     if (in_array($chat['state'], ['idle', 'completed'], true)) { $chat['data'] = []; $chat['state'] = $category === 'rates' ? 'rates' : 'booking'; }
     $data =& $chat['data'];
-    $alternativeSelection = isset($data['availability_alternatives']) && is_array($data['availability_alternatives'])
-        ? facebookConversationSelectStay($body, $data['availability_alternatives'])
-        : null;
-    if ($alternativeSelection !== null) {
-        if (($alternativeSelection['alternative_type'] ?? '') === 'custom_dates') {
-            unset($data['availability_alternatives'], $data['availability_choice_made'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos']);
-            $chat['state'] = 'booking';
-            return $reply('Please send your preferred new check-in and check-out dates. Example: September 16–19, 2026.');
-        }
-        $data['check_in'] = $alternativeSelection['check_in'];
-        $data['check_out'] = $alternativeSelection['check_out'];
-        facebookConversationApplyStaySelection($data, $alternativeSelection);
-        $data['availability_choice_made'] = true;
-        unset($data['availability_alternatives']);
-        $details = ['dates' => null, 'check_in_time' => null, 'check_out_time' => null, 'guests' => null, 'guest_name' => '', 'email' => '', 'phone' => ''];
-    } else {
-        $details = facebookConversationDetails($body);
+    $availabilityChoice = facebookConversationResolveAvailabilityChoice($data, $body);
+    if ($availabilityChoice['status'] === 'custom_dates') {
+        $chat['state'] = 'booking';
+        return $reply('Please send your preferred new check-in and check-out dates. Example: September 16–19, 2026.');
+    }
+    $details = $availabilityChoice['details'];
+    if ($availabilityChoice['status'] === 'none') {
         if ($details['dates'] !== null || $details['guests'] !== null) {
             unset($data['availability_choice_made'], $data['availability_alternatives'], $data['stay_id'], $data['stay_plan'], $data['stay_option_key'], $data['stay_name'], $data['stay_suggested'], $data['room_photos']);
         }
@@ -226,7 +222,7 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
         $options = facebookConversationStayOptions($db, $data['guests'], $data['check_in'], $data['check_out'], null, 100);
         $data['options'] = $options;
         if ($options === []) { $chat['state'] = 'handoff'; return $reply(facebookGuidedReply($rules, 'no_options'), ['handoff' => true]); }
-        $selected = facebookConversationSelectStay($body, $options);
+        $selected = $availabilityChoice['status'] === 'selected' ? null : facebookConversationSelectStay($body, $options);
         foreach (!$selected ? resortEntities($db, 'stays', false) : [] as $listed) {
             if (mb_stripos($body, $listed['name']) !== false) {
                 $matches = array_values(array_filter($options, static fn(array $option): bool => $option['id'] === (int) $listed['id']));
@@ -253,7 +249,7 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
     unset($chat['draft']);
     return $reply(facebookConversationSummary($data, $rules, [
         'show_both_contacts' => true,
-        'hide_room_photos' => true,
+        'hide_room_photos' => false,
         'extra_lines' => !empty($data['stay_plan']) ? [] : [
             'Rate: ' . ($data['rate'] ?: 'Staff will provide the rate'),
         ],
@@ -264,5 +260,5 @@ function websiteChatReply(PDO $db, array &$chat, string $body, array $rules, ?ca
             . "\n• BACK lets you change your booking details."
             . "\n• CANCEL stops the booking process."
             . "\n\nYour request remains pending until staff approves it. A pending request does not reserve a room.",
-    ]));
+    ]), ['photos' => array_slice($data['room_photos'] ?? [], 0, 3), 'photoName' => $data['stay_name']]);
 }

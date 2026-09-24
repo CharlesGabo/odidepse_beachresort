@@ -50,8 +50,16 @@ try {
     $overlapChat = ['state' => 'booking', 'data' => [], 'history' => [], 'csrf' => 'overlap'];
     $overlapReply = websiteChatReply($db, $overlapChat, "Dates: {$overlapStart->format('Y-m-d')} to {$overlapEnd->format('Y-m-d')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 5\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567", $rules)['reply'];
     chatCheck(str_contains($overlapReply, 'no longer available') && str_contains($overlapReply, 'overlap with a confirmed booking') && !empty($overlapChat['data']['availability_alternatives']), 'Website explains a best-fit room overlap before suggesting alternatives');
-    $customDateReply = websiteChatReply($db, $overlapChat, '1', $rules)['reply'];
-    chatCheck(str_contains($customDateReply, 'preferred new check-in and check-out dates') && empty($overlapChat['data']['availability_alternatives']), 'Website accepts a numbered unavailable-room alternative');
+    $availabilityData = $overlapChat['data'];
+    chatCheck(count($availabilityData['availability_alternatives']) >= 3, 'Website overlap fixture provides a third numbered alternative');
+    $thirdAlternative = $availabilityData['availability_alternatives'][2];
+    $thirdChoiceResult = websiteChatReply($db, $overlapChat, '3', $rules);
+    chatCheck($overlapChat['state'] === 'review' && ($overlapChat['data']['stay_name'] ?? '') === $thirdAlternative['name'] && !str_contains($thirdChoiceResult['reply'], facebookGuidedReply($rules, 'ask_booking_details')), 'Website and Messenger share numbered alternative selection behavior');
+    chatCheck(($thirdChoiceResult['photos'] ?? []) !== [] && ($thirdChoiceResult['photos'] ?? []) === array_slice($thirdAlternative['photos'] ?? [], 0, 3), 'Website review returns the selected room photos');
+    websiteChatRecord($overlapChat, 'assistant', $thirdChoiceResult['reply'], $thirdChoiceResult['photos'] ?? [], $thirdChoiceResult['photoName'] ?? '');
+    chatCheck(($overlapChat['history'][0]['photos'] ?? []) === ($thirdChoiceResult['photos'] ?? []), 'Website chat history retains selected room photos');
+    $customDateChoice = facebookConversationResolveAvailabilityChoice($availabilityData, '1');
+    chatCheck($customDateChoice['status'] === 'custom_dates' && empty($availabilityData['availability_alternatives']), 'Shared availability resolver accepts the custom-date option');
     $deleteOverlapBlocker = $db->prepare('DELETE FROM bookings WHERE id = ?');
     foreach ($overlapBlockerIds as $overlapBlockerId) $deleteOverlapBlocker->execute([$overlapBlockerId]);
     $start = (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->modify('+500 days');

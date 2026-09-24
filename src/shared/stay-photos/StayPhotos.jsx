@@ -4,8 +4,8 @@ import './stay-photos.css';
 
 export const stayPhotoSource = id => photoAssets[id] || `/api/stay-photo.php?id=${encodeURIComponent(id)}`;
 
-export function StayPhotoCarousel({ photos = [], name }) {
-  const [index, setIndex] = useState(0);
+export function StayPhotoCarousel({ photos = [], name, initialIndex = 0 }) {
+  const [index, setIndex] = useState(initialIndex);
   const current = Math.min(index, Math.max(0, photos.length - 1));
   if (!photos.length) return <p className="stay-photo-empty">No room photos yet. Add photos below.</p>;
   const move = amount => setIndex((current + amount + photos.length) % photos.length);
@@ -16,14 +16,14 @@ export function StayPhotoCarousel({ photos = [], name }) {
   </div>;
 }
 
-export function StayPhotoModal({ photos, name, onClose }) {
+export function StayPhotoModal({ photos, name, onClose, initialIndex = 0 }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.showModal(); }, []);
   return <dialog ref={ref} className="stay-photo-modal" aria-label={`${name} photo gallery`} onClose={onClose} onCancel={onClose} onClick={event => {
     if (event.target !== event.currentTarget) return;
     const r = event.currentTarget.getBoundingClientRect();
     if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) ref.current.close();
-  }}><div className="stay-photo-modal__heading"><h2>{name}</h2><button type="button" onClick={() => ref.current.close()} aria-label="Close photo gallery">×</button></div><StayPhotoCarousel photos={photos} name={name} /></dialog>;
+  }}><div className="stay-photo-modal__heading"><h2>{name}</h2><button type="button" onClick={() => ref.current.close()} aria-label="Close photo gallery">×</button></div><StayPhotoCarousel photos={photos} name={name} initialIndex={initialIndex} /></dialog>;
 }
 
 export function StayPhotoBackground({ photos, step = 0 }) {
