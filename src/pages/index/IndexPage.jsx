@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AdminPage from '../admin/AdminPage.jsx';
 import WebsiteChat from './features/chatbot/WebsiteChat.jsx';
 import StayCapacityCard from './features/stays/StayCapacityCard.jsx';
-import { StayPhotoBackground, stayPhotoSource } from '../../shared/stay-photos/StayPhotos.jsx';
+import { StayPhotoBackground, StayPhotoModal, stayPhotoSource } from '../../shared/stay-photos/StayPhotos.jsx';
 import ResortGallery, { GuestStories } from './features/gallery/ResortGallery.jsx';
 import WeatherSection from './features/weather/WeatherSection.jsx';
 import './styles/guest-features.css';
 import heroVideoLeft from '../../assets/photos/videos/AQNCi_7_62Mv61gK2al1G0wsEeWObbCY0mz8j6VCDiUrSlCXt77tyZkEMiOutmuIwNBGxnvbetK9cpIscFAGZmo6n_v5cPZaday73ZagnsPc2g.mp4';
 import heroVideoCenter from '../../assets/photos/videos/AQNhv0XRkIAq4fPmr3uSGu_XmkB8Lhx3F82TT6Wk6O_GGkpE_L7jhcSrh2FQGp2Zl3KHAy-jbFHSKzVZrF_p8fdTuHG2r9HsD_TYHdb14tjqdw.mp4';
 import heroVideoRight from '../../assets/photos/videos/AQOkF-xowAbopqdtYWya5DseSgK-cP_49HcfPjtzShRHLTk5x8Yf9AnML9x9a2ioRxXvBM1uRMq-pA2ZUl4TjsjdDYoAbwX1SJgkUBO8jCPNTw.mp4';
-import { ResortProvider, useResort } from '../../shared/resort/ResortContent.jsx';
+import { formatPrice, ResortProvider, useResort } from '../../shared/resort/ResortContent.jsx';
 
 const heroVideos = [heroVideoLeft, heroVideoCenter, heroVideoRight];
 const loopingHeroVideos = [...heroVideos, ...heroVideos];
@@ -57,6 +57,8 @@ function Icon({ name, size = 20 }) {
     gmail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6M4 17l5.5-5M20 17l-5.5-5" /></>,
     pin: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
     wave: <><path d="M2 15c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2M2 19c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></>,
+    guests: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -125,9 +127,9 @@ function CompactTimePicker({ label, value, onChange }) {
   </div>;
 }
 
-function BookingModal({ open, onClose, initialStay = '', initialDate = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved, initialGuest = null, facebookLeadId = null, chatDraft = null }) {
+function BookingModal({ open, onClose, initialStay = '', initialStayPlan = [], initialDate = '', initialCheckOut = '', initialGuests = '', initialMessage = '', initialService = '', manual = false, csrfToken = '', onSaved, initialGuest = null, facebookLeadId = null, chatDraft = null }) {
   if (chatDraft) {
-    initialStay = chatDraft.stayId; initialDate = chatDraft.checkIn; initialMessage = chatDraft.message;
+    initialStay = chatDraft.stayId; initialDate = chatDraft.checkIn; initialCheckOut = chatDraft.checkOut; initialGuests = chatDraft.guests; initialMessage = chatDraft.message;
     initialGuest = { guest_name: chatDraft.guestName, email: chatDraft.email, phone: chatDraft.phone };
   }
   const { copy, stays, services, roomPhotos } = useResort();
@@ -136,10 +138,10 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
   const leadPhoneDigits = String(initialGuest?.phone || '').replace(/\D/g, '').replace(/^(?:63|0)(?=\d{10}$)/, '');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [selectedStay, setSelectedStay] = useState(String(initialStay || ''));
-  const [selectedStayPlan, setSelectedStayPlan] = useState(chatDraft?.stayPlan || []);
+  const [selectedStayPlan, setSelectedStayPlan] = useState(chatDraft?.stayPlan || initialStayPlan);
   const [selectedActivities, setSelectedActivities] = useState(initialService ? [String(initialService)] : []);
   const [checkInDate, setCheckInDate] = useState(initialDate);
-  const [checkOutDate, setCheckOutDate] = useState('');
+  const [checkOutDate, setCheckOutDate] = useState(initialCheckOut);
   const [availability, setAvailability] = useState({ type: 'idle' });
   const [calendarAvailability, setCalendarAvailability] = useState({ type: 'idle', days: {} });
   const [arrivalTime, setArrivalTime] = useState('14:00');
@@ -215,10 +217,10 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     const dialog = dialogRef.current;
     if (open && dialog && !dialog.open) {
       setSelectedStay(String(initialStay || ''));
-      setSelectedStayPlan(chatDraft?.stayPlan || []);
+      setSelectedStayPlan(chatDraft?.stayPlan || initialStayPlan);
       setSelectedActivities(chatDraft ? chatDraft.activityIds.map(String) : initialService ? [String(initialService)] : []);
       setCheckInDate(initialDate);
-      setCheckOutDate(chatDraft?.checkOut || '');
+      setCheckOutDate(initialCheckOut);
       setAvailability({ type: 'idle' });
       setArrivalTime(chatDraft?.arrivalTime || '14:00');
       setDepartureTime(chatDraft?.departureTime || '12:00');
@@ -467,7 +469,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
             <div className="field field--wide"><label htmlFor="guest-name">{copy.inquiry["full_name"]}</label><input id="guest-name" name="guest_name" defaultValue={initialGuest?.guest_name || ''} autoComplete="name" maxLength="100" required placeholder="Juan dela Cruz" /></div>
             <div className="field"><label htmlFor="email">{copy.inquiry["email_address"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><input id="email" type="email" name="email" defaultValue={initialGuest?.email || ''} autoComplete="email" maxLength="190" required={!manual} placeholder="you@example.com" /></div>
             <div className="field"><label htmlFor="phone">{copy.inquiry["mobile_number"]}{manual && <span>{copy.inquiry["optional"]}</span>}</label><div className="phone-prefix-field"><span aria-hidden="true">+63</span><input id="phone" name="phone" defaultValue={/^\d{10}$/.test(leadPhoneDigits) ? leadPhoneDigits : ''} autoComplete="tel-national" inputMode="numeric" pattern="[0-9]{10}" maxLength="10" required={!manual} placeholder="9XX XXX XXXX" aria-describedby="phone-prefix-note" /></div><small id="phone-prefix-note">{manual ? 'Optional. If provided, enter the 10 digits after +63.' : 'Enter the 10 digits after +63.'}</small></div>
-            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required defaultValue={chatDraft?.guests ?? selectedStayDetails?.guests ?? 2} /></div>
+            <div className="field"><label htmlFor="guests">{copy.inquiry["guests"]}</label><input key={`guests-${initialGuests || selectedStayDetails?.id || 'default'}`} id="guests" name="guests" type="number" min={selectedStayDetails?.min_guests ?? 1} max={selectedStayDetails?.max_guests ?? 100} step="1" required defaultValue={initialGuests || selectedStayDetails?.guests || 2} /></div>
         <div className="field field--wide"><label htmlFor="message">{manual ? 'Additional Information' : copy.inquiry["anything_we_should_know"]}<span>{copy.inquiry["optional"]}</span></label><textarea key={initialMessage} defaultValue={initialMessage} id="message" name="message" maxLength="1000" rows="3" placeholder="Celebrations, food preferences, or a little about your trip…" /></div>
           </div>
         </section>
@@ -492,6 +494,157 @@ function ManualBookingModal(props) {
   return <ResortProvider><BookingModal {...props} manual /></ResortProvider>;
 }
 
+function QuickBooking({ stays, onBook, onChat }) {
+  const minimumDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [guests, setGuests] = useState('2');
+  const [search, setSearch] = useState({ type: 'idle', stays: [] });
+  const [photoGallery, setPhotoGallery] = useState(null);
+  const availabilityRequest = useRef(null);
+  const checkInInput = useRef(null);
+  const checkOutInput = useRef(null);
+  const checkOutMinimum = checkIn ? (() => {
+    const nextDay = new Date(`${checkIn}T12:00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return dateKey(nextDay);
+  })() : minimumDate;
+  const checkOutMaximum = checkIn ? (() => {
+    const finalDay = new Date(`${checkIn}T12:00:00`);
+    finalDay.setDate(finalDay.getDate() + 30);
+    return dateKey(finalDay);
+  })() : '';
+
+  useEffect(() => () => availabilityRequest.current?.abort(), []);
+
+  const resetSearch = () => {
+    availabilityRequest.current?.abort();
+    setSearch({ type: 'idle', stays: [] });
+  };
+
+  const updateCheckIn = value => {
+    setCheckIn(value);
+    const maximum = new Date(`${value}T12:00:00`);
+    maximum.setDate(maximum.getDate() + 30);
+    if (checkOut && (checkOut <= value || checkOut > dateKey(maximum))) setCheckOut('');
+    resetSearch();
+  };
+
+  const openDatePicker = (event, inputRef) => {
+    const input = inputRef.current;
+    if (!input || event.target === input || typeof input.showPicker !== 'function') return;
+    event.preventDefault();
+    input.focus();
+    try { input.showPicker(); } catch { input.click(); }
+  };
+
+  const findAvailableStays = async event => {
+    event.preventDefault();
+    availabilityRequest.current?.abort();
+    const controller = new AbortController();
+    availabilityRequest.current = controller;
+    setSearch({ type: 'loading', stays: [] });
+    try {
+      const availability = await Promise.all(stays.map(async stay => {
+        const parameters = new URLSearchParams({ stay_id: stay.id, check_in: checkIn, check_out: checkOut });
+        const response = await fetch(`/api/availability.php?${parameters}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Availability could not be checked.');
+        return { ...stay, availableUnits: Number(result.available) };
+      }));
+      const guestCount = Number(guests);
+      const evaluatedStays = availability.map(stay => {
+        const maximumGuests = Number(stay.max_guests);
+        const minimumGuests = Number(stay.min_guests || 1);
+        const standardRoom = stay.style === 'standard';
+        const configuredUnits = standardRoom ? Math.max(1, Number(stay.room_count) || 1) : 1;
+        const roomsNeeded = standardRoom ? Math.ceil(guestCount / maximumGuests) : 1;
+        const fitsGuestRange = standardRoom
+          ? guestCount >= minimumGuests && Number.isFinite(maximumGuests) && maximumGuests > 0
+          : guestCount >= minimumGuests && guestCount <= maximumGuests;
+        const fitsStayType = (stay.style !== 'group' || guestCount > 10) && (stay.style !== 'exclusive' || guestCount >= 88);
+        const fitsConfiguredCapacity = !standardRoom || roomsNeeded <= configuredUnits;
+        const guestLabel = standardRoom ? `Up to ${maximumGuests} guests per room` : minimumGuests > 1 ? `${minimumGuests}–${maximumGuests} guests` : `Up to ${maximumGuests} guests`;
+        let searchStatus = 'available';
+        let unavailableMessage = '';
+        if (!fitsGuestRange || !fitsStayType || !fitsConfiguredCapacity) {
+          searchStatus = 'guest-mismatch';
+          if (standardRoom) unavailableMessage = `Your group needs ${roomsNeeded} rooms, but this room type has ${configuredUnits}`;
+          else if (stay.style === 'exclusive') unavailableMessage = `Available only for groups of ${minimumGuests}–${maximumGuests} guests`;
+          else unavailableMessage = `Best for groups of 11–${maximumGuests} guests`;
+        } else if (stay.availableUnits < roomsNeeded) {
+          searchStatus = 'date-conflict';
+          unavailableMessage = stay.availableUnits === 0 ? 'Fully booked for these dates' : `Only ${stay.availableUnits} of ${roomsNeeded} required rooms available`;
+        }
+        return { ...stay, maximumGuests, configuredUnits, roomsNeeded, guestLabel, searchStatus, unavailableMessage };
+      }).filter(stay => stay.searchStatus !== 'guest-mismatch')
+        .sort((left, right) => Number(left.searchStatus !== 'available') - Number(right.searchStatus !== 'available') || Number(left.id) - Number(right.id));
+      setSearch({ type: 'success', stays: evaluatedStays });
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      setSearch({ type: 'error', stays: [], message: error.message || 'Availability could not be checked right now.' });
+    } finally {
+      if (availabilityRequest.current === controller) availabilityRequest.current = null;
+    }
+  };
+
+  const availableStayCount = search.stays.filter(stay => stay.searchStatus === 'available').length;
+
+  return <section className="quick-booking" id="booking-search" aria-labelledby="quick-booking-title">
+    <div className="quick-booking__heading" data-reveal>
+      <span className="eyebrow">A simpler way to start</span>
+      <h2 id="quick-booking-title">Plan your <em>beach getaway.</em></h2>
+      <p>Choose your dates and group size, then continue to the booking request.</p>
+    </div>
+    <form className="quick-booking__form" onSubmit={findAvailableStays}>
+      <label onClick={event => openDatePicker(event, checkInInput)}>
+        <Icon name="calendar" size={22} />
+        <span><small>Check-in</small><input ref={checkInInput} type="date" min={minimumDate} value={checkIn} onChange={event => updateCheckIn(event.target.value)} required /></span>
+      </label>
+      <label onClick={event => openDatePicker(event, checkOutInput)}>
+        <Icon name="calendar" size={22} />
+        <span><small>Check-out</small><input ref={checkOutInput} type="date" min={checkOutMinimum} max={checkOutMaximum} value={checkOut} onChange={event => { setCheckOut(event.target.value); resetSearch(); }} required /></span>
+      </label>
+      <label>
+        <Icon name="guests" size={22} />
+        <span><small>Guests</small><input type="number" min="1" max="100" step="1" value={guests} onChange={event => { setGuests(event.target.value); resetSearch(); }} required /></span>
+      </label>
+      <button className="button button--dark" type="submit" disabled={search.type === 'loading'}>{search.type === 'loading' ? 'Checking…' : 'Search'} <Icon name="arrow" size={17} /></button>
+    </form>
+    <p className="quick-booking__chat">Not sure which stay fits your group? <button type="button" onClick={onChat}>Use our chatbot for a personalized inquiry <Icon name="arrow" size={15} /></button></p>
+    <div className={`quick-booking__results quick-booking__results--${search.type}`} aria-live="polite" aria-busy={search.type === 'loading'}>
+      {search.type === 'loading' && <p>Finding available rooms for your stay…</p>}
+      {search.type === 'error' && <p role="alert">{search.message}</p>}
+      {search.type === 'success' && search.stays.length === 0 && <div className="quick-booking__empty"><h3>No rooms found</h3><p>Ask the chatbot to help plan an alternative stay.</p><button type="button" className="text-link" onClick={onChat}>Plan with the chatbot <Icon name="arrow" size={16} /></button></div>}
+      {search.type === 'success' && search.stays.length > 0 && <>
+        <div className="quick-booking__results-heading"><div><span className="eyebrow">Room availability</span><h3>{availableStayCount ? 'Choose your stay' : 'Compare all stays'}</h3></div><p>{availableStayCount} of {search.stays.length} {search.stays.length === 1 ? 'option fits' : 'options fit'} {guests} {Number(guests) === 1 ? 'guest' : 'guests'} and your dates</p></div>
+        <div className={`quick-booking__track${search.stays.length <= 3 ? ' is-centered' : ''}`}>
+          {search.stays.map(stay => {
+            const photos = Array.isArray(stay.photos) ? stay.photos.filter(Boolean) : [];
+            const unavailable = stay.searchStatus !== 'available';
+            const statusLabel = stay.searchStatus === 'date-conflict' ? 'Date conflict' : '';
+            return <article className={`quick-booking-card${unavailable ? ' is-unavailable' : ''}`} key={stay.id}>
+              <button className="quick-booking-card__photo" type="button" disabled={!photos.length} onClick={() => photos.length && setPhotoGallery({ photos, name: stay.name })} aria-label={photos.length ? `View ${stay.name} photos${unavailable ? `; ${statusLabel.toLowerCase()}` : ''}` : `${stay.name} has no photos`}>
+                {photos.length ? <img src={stayPhotoSource(photos[0])} alt={`${stay.name} accommodation`} loading="lazy" decoding="async" /> : <span>No photos available</span>}
+                {unavailable ? <i className={`quick-booking-card__status is-${stay.searchStatus}`}>{statusLabel}</i> : photos.length > 1 && <i>{photos.length} photos</i>}
+              </button>
+              <div className="quick-booking-card__body">
+                {stay.badge && <span className="quick-booking-card__badge">{stay.badge}</span>}
+                <h4>{stay.name}</h4>
+                <p className="quick-booking-card__capacity">{stay.guestLabel}</p>
+                <p className="quick-booking-card__description">{stay.summary}</p>
+                <div className="quick-booking-card__details"><span>{stay.roomsNeeded} {stay.roomsNeeded === 1 ? 'room' : 'rooms'} needed</span>{unavailable ? <strong className="quick-booking-card__unavailable">{stay.unavailableMessage}</strong> : <span>{stay.availableUnits} available for these dates</span>}<strong>{formatPrice(stay)}</strong></div>
+                {!unavailable && <button type="button" className="text-link" onClick={() => onBook(stay, checkIn, checkOut, guests)}>Choose {stay.roomsNeeded === 1 ? 'this stay' : 'these rooms'} <Icon name="arrow" size={15} /></button>}
+              </div>
+            </article>;
+          })}
+        </div>
+      </>}
+    </div>
+    {photoGallery && <StayPhotoModal photos={photoGallery.photos} name={photoGallery.name} onClose={() => setPhotoGallery(null)} />}
+  </section>;
+}
+
 function PublicSite({ onHeroReady }) {
   const [chatDraft, setChatDraft] = useState(null);
   const [chatRefresh, setChatRefresh] = useState(0);
@@ -500,9 +653,13 @@ function PublicSite({ onHeroReady }) {
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [selectedStay, setSelectedStay] = useState('');
+  const [selectedStayPlan, setSelectedStayPlan] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedCheckOut, setSelectedCheckOut] = useState('');
+  const [selectedGuests, setSelectedGuests] = useState('');
   const [selectedMessage, setSelectedMessage] = useState('');
   const [selectedService, setSelectedService] = useState('');
+  const [chatOpenRequest, setChatOpenRequest] = useState(0);
   const [stayPhotoStep, setStayPhotoStep] = useState(0);
   const heroRef = useRef(null);
 
@@ -536,12 +693,12 @@ function PublicSite({ onHeroReady }) {
     return () => removeEventListener('pointermove', move);
   }, []);
 
-  const openBooking = (stay = '', date = '', message = '', service = '') => { setChatDraft(null); setSelectedService(service); setSelectedStay(stay); setSelectedDate(date); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
+  const openBooking = (stay = '', date = '', message = '', service = '', checkOut = '', guests = '', stayPlan = []) => { setChatDraft(null); setSelectedService(service); setSelectedStay(stay); setSelectedStayPlan(stayPlan); setSelectedDate(date); setSelectedCheckOut(checkOut); setSelectedGuests(guests); setSelectedMessage(message); setBookingOpen(true); setMenuOpen(false); };
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
   return <div className="site-shell" id="top">
-    <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#story">{copy.navigation["our_story"]}</a><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">Activities</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#guest-stories">{copy.navigation["guest_stories"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
-    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#story" onClick={() => setMenuOpen(false)}>{copy.navigation["our_story"]}</a><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>Activities</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
+    <header className={`site-header ${headerScrolled || menuOpen ? 'is-scrolled' : ''}`}><Logo light /><nav className="desktop-nav" aria-label="Main navigation"><a href="#stays">{copy.navigation["stay"]}</a><a href="#experiences">Activities</a><a href="#weather">{copy.navigation["weather"]}</a><a href="#guest-stories">{copy.navigation["guest_stories"]}</a><a href="#location">{copy.navigation["find_us"]}</a></nav><button className="button button--light header-book" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" size={17} /></button><button className="icon-button menu-button" type="button" aria-expanded={menuOpen} aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} /></button></header>
+    <div className={`mobile-menu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}><nav><a href="#stays" onClick={() => setMenuOpen(false)}>{copy.navigation["stay"]}</a><a href="#experiences" onClick={() => setMenuOpen(false)}>Activities</a><a href="#gallery" onClick={() => setMenuOpen(false)}>{copy.navigation["gallery"]}</a><a href="#weather" onClick={() => setMenuOpen(false)}>{copy.navigation["weather"]}</a><a href="#guest-stories" onClick={() => setMenuOpen(false)}>{copy.navigation["guest_stories"]}</a><a href="#location" onClick={() => setMenuOpen(false)}>{copy.navigation["find_us"]}</a></nav><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.navigation["plan_your_stay"]}<Icon name="arrow" /></button></div>
     <main>
       <div className="hero-intro">
       <section className="hero hero--groups" ref={heroRef}>
@@ -551,22 +708,19 @@ function PublicSite({ onHeroReady }) {
           <h1>{copy.hero["your_beach_escape"]}<br /><em>{copy.hero["25_seconds"]}</em><br />{copy.hero["from_the_shore"]}</h1>
           <p>{copy.hero["stay_stream_sing_and_grill_with_your_favorite_people_from_a_small"]}</p>
           <div className="hero-actions"><button className="button button--coral" type="button" onClick={() => openBooking()}>{copy.hero["plan_your_stay"]}<Icon name="arrow" /></button><a className="text-link text-link--light" href="#stays">{copy.hero["explore_rooms"]}<Icon name="arrow" size={17} /></a></div>
-        </div><a className="scroll-cue" href="#story"><span>{copy.hero["discover_more"]}</span><i /></a>
+        </div><a className="scroll-cue" href="#booking-search"><span>{copy.hero["discover_more"]}</span><i /></a>
       </section>
       <section className="quick-highlights" aria-label="Your stay at a glance">
         <dl>{highlights.map(item => <div key={item.title}><Icon name={item.icon} size={26} /><dt>{item.title}</dt><dd>{item.detail}</dd></div>)}</dl>
       </section>
       </div>
-      <section className="manifesto section resort-intro" id="story" data-reveal>
-        <div className="section-label"><span>01</span>{copy.story["better_together"]}</div>
-        <div className="manifesto__grid"><h2>{copy.story["beach_days"]}<br /><em>{copy.story["your_people"]}</em></h2><div className="manifesto__copy"><p className="lead">{copy.story["a_little_sea_air_a_lot_of_time_together"]}</p><p>{copy.story["odidepse_puts_you_a_25_second_walk_from_the_beach_with_air_condit"]}</p><p>{copy.story["bring_the_family_gather_the_barkada_or_plan_something_bigger_make"]}</p><a className="text-link" href="#amenities">{copy.story["see_what_s_included"]}<Icon name="arrow" size={17} /></a></div></div>
-      </section>
+      <QuickBooking stays={stays} onBook={(stay, checkIn, checkOut, guests) => openBooking(stay.roomsNeeded === 1 ? stay.id : '', checkIn, '', '', checkOut, guests, stay.roomsNeeded > 1 ? [{ stay_id: Number(stay.id), quantity: stay.roomsNeeded, capacity: stay.maximumGuests }] : [])} onChat={() => setChatOpenRequest(value => value + 1)} />
       <section className="amenities section" id="amenities" aria-labelledby="amenities-title">
         <div className="section-heading" data-reveal><div><span className="eyebrow">{copy.amenities["the_little_extras_included"]}</span><h2 id="amenities-title">{copy.amenities["settle_in"]}<br /><em>{copy.amenities["we_ve_got_you"]}</em></h2></div><p>{copy.amenities["pack_for_the_beach_enjoy_free_wi_fi_entertainment_and_the_shared_"]}</p></div>
         <div className="amenity-grid">{amenityGroups.map(group => <article className="amenity-card" key={group.title} data-reveal><h3>{group.title}</h3><p>{group.intro}</p><ul>{group.items.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
       </section>
       <section className="stays section" id="stays" aria-labelledby="stays-title">
-        <div className="section-heading" data-reveal><div><div className="section-label"><span>02</span>{copy.stays["rooms_group_stays"]}</div><h2 id="stays-title">{copy.stays["room_for"]}<br /><em>{copy.stays["your_crew"]}</em></h2></div><p>{copy.stays["from_5_guest_rooms_to_an_exclusive_building_for_88_100_guests_tel"]}</p></div>
+        <div className="section-heading" data-reveal><div><div className="section-label"><span>01</span>{copy.stays["rooms_group_stays"]}</div><h2 id="stays-title">{copy.stays["room_for"]}<br /><em>{copy.stays["your_crew"]}</em></h2></div><p>{copy.stays["from_5_guest_rooms_to_an_exclusive_building_for_88_100_guests_tel"]}</p></div>
         <div className="capacity-grid">{stays.map(stay => <StayCapacityCard key={stay.id} stay={stay} copy={copy.stays} photoStep={stayPhotoStep} onBook={() => openBooking(stay.id)} />)}</div><p className="capacity-note">{copy.stays["room_counts_describe_accommodation_options_not_live_availability_"]}</p>
       </section>
       <ResortGallery />
@@ -577,7 +731,7 @@ function PublicSite({ onHeroReady }) {
         </div>
       </section>
       <section className="experiences section" id="experiences" aria-labelledby="activities-title">
-        <div className="section-heading" data-reveal><div><div className="section-label"><span>04</span>{copy.experiences["a_little_more_adventure"]}</div><h2 id="activities-title">{copy.experiences["make_some"]}<br /><em>{copy.experiences["waves"]}</em></h2></div><p>{copy.experiences["take_your_beach_day_up_a_notch_ask_us_about_rental_availability_w"]}</p></div>
+        <div className="section-heading" data-reveal><div><div className="section-label"><span>03</span>{copy.experiences["a_little_more_adventure"]}</div><h2 id="activities-title">{copy.experiences["make_some"]}<br /><em>{copy.experiences["waves"]}</em></h2></div><p>{copy.experiences["take_your_beach_day_up_a_notch_ask_us_about_rental_availability_w"]}</p></div>
         <div className="activity-grid">{experiences.map(item => <article className="activity-card" key={item.id} data-reveal><div className={`activity-card__visual ${!item.photo ? 'activity-card__visual--icon' : ''}`} {...(item.photos.length > 1 ? { role: 'img', 'aria-label': `${item.title} photo slideshow` } : {})}>{item.photos.length > 1 ? <StayPhotoBackground photos={item.photos} step={stayPhotoStep} /> : item.photo ? <img src={item.photo.src} alt={item.photo.alt} loading="lazy" decoding="async" /> : <><Icon name={item.icon} size={84} /><span>{item.image_caption}</span></>}</div><div className="activity-card__body"><h3>{item.title}</h3><p>{item.copy}</p><span className="activity-availability">{item.availabilityLabel}</span><button className="text-link" type="button" onClick={() => openBooking('', '', `I’d like to ask about ${item.title} availability.`, item.id)}>{copy.experiences["ask_about_this_activity"]}<Icon name="arrow" size={17} /></button></div></article>)}</div>
       </section>
       <WeatherSection onBook={date => openBooking('', date)} />
@@ -594,7 +748,7 @@ function PublicSite({ onHeroReady }) {
           <a className="location__map-label" href={copy.links.maps} target="_blank" rel="noreferrer"><Icon name="pin" size={18} /><span><strong>{copy.location["odidepse_beach_resort"]}</strong><small>{copy.location["3355_4p_san_felipe_zambales"]}</small></span></a>
         </div>
         <div className="location__content" data-reveal>
-          <div className="section-label section-label--light"><span>07</span>{copy.location["the_way_here"]}</div>
+          <div className="section-label section-label--light"><span>06</span>{copy.location["the_way_here"]}</div>
           <h2>{copy.location["far_enough"]}<br />{copy.location["to_feel"]}<em>{copy.location["away"]}</em></h2>
           <p>{copy.location["find_us_along_purok_8_coastal_road_in_brgy_sto_ni_o_where_san_fel"]}</p>
           <dl><div><dt>{copy.location["plus_code"]}</dt><dd>{copy.location["3355_4p_san_felipe_zambales_1"]}</dd></div><div><dt>{copy.location["from_manila"]}</dt><dd>{copy.location["approx_4_hours"]}</dd></div><div><dt>{copy.location["transfers"]}</dt><dd>{copy.location["available_on_request"]}</dd></div></dl>
@@ -605,8 +759,8 @@ function PublicSite({ onHeroReady }) {
     </main>
     <button type="button" className={`scroll-to-top${headerScrolled ? ' is-visible' : ''}`} aria-label="Scroll to top" aria-hidden={!headerScrolled} tabIndex={headerScrolled ? 0 : -1} onClick={scrollToTop}><Icon name="arrow" size={20} /></button>
     <footer className="footer"><div className="footer__top"><Logo light /><p>{copy.footer["wild_coast_warm_welcome"]}<br />{copy.footer["san_felipe_zambales"]}</p><div className="footer__social"><a href={copy.links.email}>{copy.footer["email_us"]}</a><a href={copy.links.email} aria-label="Email us"><Icon name="gmail" /></a></div></div><div className="footer__bottom"><span>© {new Date().getFullYear()} {copy.footer.copyright_name}</span><span>{copy.footer["made_with_care_by_the_coast"]}</span></div></footer>
-    <WebsiteChat refresh={chatRefresh} onBook={() => openBooking()} onDraft={draft => { setChatDraft(draft); setBookingOpen(true); }} />
-    <BookingModal key={chatDraft?.token || 'regular'} chatDraft={chatDraft} open={bookingOpen} onClose={() => setBookingOpen(false)} onSaved={() => setChatRefresh(value => value + 1)} initialStay={selectedStay} initialDate={selectedDate} initialMessage={selectedMessage} initialService={selectedService} />
+    <WebsiteChat refresh={chatRefresh} openRequest={chatOpenRequest} onBook={() => openBooking()} onDraft={draft => { setChatDraft(draft); setBookingOpen(true); }} />
+    <BookingModal key={chatDraft?.token || 'regular'} chatDraft={chatDraft} open={bookingOpen} onClose={() => setBookingOpen(false)} onSaved={() => setChatRefresh(value => value + 1)} initialStay={selectedStay} initialStayPlan={selectedStayPlan} initialDate={selectedDate} initialCheckOut={selectedCheckOut} initialGuests={selectedGuests} initialMessage={selectedMessage} initialService={selectedService} />
   </div>;
 }
 

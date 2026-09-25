@@ -127,7 +127,7 @@ export default function WeatherSection({ onBook }) {
   const compactSceneSymbol = current?.symbol;
   const expandedSceneSymbol = expandedThemeSymbol;
   return <section className={`weather-section section ${expanded ? 'weather-section--expanded' : 'weather-section--compact'}`} id="weather" aria-labelledby="weather-title">
-    <div className="section-heading"><div><div className="section-label"><span>05</span>{copy.weather["a_little_outlook"]}</div><h2 id="weather-title">{copy.weather["meet_the"]}<em>{copy.weather["forecast"]}</em></h2></div><p>{copy.weather["sun_on_your_mind_get_a_feel_for_the_next_seven_days_before_choosi"]}</p></div>
+    <div className="section-heading"><div><div className="section-label"><span>04</span>{copy.weather["a_little_outlook"]}</div><h2 id="weather-title">{copy.weather["meet_the"]}<em>{copy.weather["forecast"]}</em></h2></div><p>{copy.weather["sun_on_your_mind_get_a_feel_for_the_next_seven_days_before_choosi"]}</p></div>
     {!expanded && <div className={`weather-compact weather-panel weather-panel--themed weather-theme--${weatherTheme(compactSceneSymbol)}`}>
       <WeatherScene symbol={compactSceneSymbol} />
       <button ref={compactRef} type="button" className="weather-compact__open" aria-label="View 7-day forecast" aria-expanded={false} aria-controls="weather-details" onClick={toggleForecast} />

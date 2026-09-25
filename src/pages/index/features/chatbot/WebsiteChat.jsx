@@ -9,7 +9,7 @@ function ChatText({ text }) {
     : part);
 }
 
-export default function WebsiteChat({ onDraft, onBook, refresh }) {
+export default function WebsiteChat({ onDraft, onBook, refresh, openRequest = 0 }) {
   const { copy } = useResort();
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -42,6 +42,9 @@ export default function WebsiteChat({ onDraft, onBook, refresh }) {
   useEffect(() => {
     if (open && window.matchMedia('(min-width: 769px) and (pointer: fine)').matches) input.current?.focus();
   }, [open]);
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
   useEffect(() => {
     if (!input.current) return;
     input.current.style.height = '';

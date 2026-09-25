@@ -43,7 +43,7 @@ export function ResortProvider({ children }) {
     return { revision: snapshot.revision, copy,
       highlights: snapshot.sections.highlights, amenityGroups: snapshot.sections.amenities, occasions: snapshot.sections.occasions, reviews: snapshot.sections.reviews,
       roomPhotos: photos.filter(p => p.id.startsWith('room_')), customerPhotos: photos.filter(p => p.id.startsWith('guest_')),
-      stays: snapshot.stays.map(stay => ({ ...stay, featured: stay.style === 'group', exclusive: stay.style === 'exclusive', detail: stay.detail.replaceAll('{room_count}', String(stay.room_count)).replaceAll('{room_word}', stay.room_count === 1 ? 'room' : 'rooms'), description: [stay.description, stay.availability_text, formatPrice(stay)].filter(Boolean).join(' ') })),
+      stays: snapshot.stays.map(stay => ({ ...stay, summary: stay.description, featured: stay.style === 'group', exclusive: stay.style === 'exclusive', detail: stay.detail.replaceAll('{room_count}', String(stay.room_count)).replaceAll('{room_word}', stay.room_count === 1 ? 'room' : 'rooms'), description: [stay.description, stay.availability_text, formatPrice(stay)].filter(Boolean).join(' ') })),
       services: snapshot.services.map(item => {
         const activityPhotos = Array.isArray(item.photos) && item.photos.length ? item.photos : item.asset ? [item.asset] : [];
         const coverId = activityPhotos[0];
