@@ -249,9 +249,8 @@ function sameDayTurnoverLabel(booking, unit) {
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'overview' },
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
-  { id: 'stays', label: 'Stays', icon: 'home' },
+  { id: 'resort', label: 'Stays & Activities', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
-  { id: 'services', label: 'Activities', icon: 'home' },
   { id: 'facebook', label: 'Facebook Automations', icon: 'automation' },
   { id: 'notifications', label: 'Email notifications', icon: 'mail' },
 ];
@@ -1443,7 +1442,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
   }, [onLogout]);
 
   useEffect(() => { load(); }, [load]);
-  useVisibilityPolling(load, { enabled: ['dashboard', 'bookings', 'stays', 'services', 'facebook'].includes(activeView) });
+  useVisibilityPolling(load, { enabled: ['dashboard', 'bookings', 'resort', 'facebook'].includes(activeView) });
   useEffect(() => { document.title = `${navItems.find(item => item.id === activeView)?.label} · Odidepse Admin`; }, [activeView]);
 
   const updateStatus = async (id, status, details = {}) => {
@@ -1510,7 +1509,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} focus={notificationFocus} />}
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
-        {['stays','services'].includes(activeView) && <ResortManager key={activeView} kind={activeView} csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
+        {activeView === 'resort' && <ResortManager csrfToken={csrfToken} onLogout={onLogout} bookings={bookings} />}
         {activeView === 'guests' && <GuestsView bookings={bookings} />}
         {activeView === 'facebook' && <FacebookAutomations csrfToken={csrfToken} onLogout={onLogout} BookingRequestModal={BookingRequestModal} bookings={bookings} updateStatus={updateStatus} updateDates={updateDates} onOpenBooking={id => {
           const booking = bookings.find(item => Number(item.id) === Number(id));

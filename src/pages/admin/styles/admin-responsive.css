@@ -20,7 +20,7 @@
   .admin-shell .booking-modal .booking-calendar__toolbar { grid-template-columns:40px minmax(0,1fr) 40px; }
   .admin-shell .booking-modal .booking-calendar__toolbar strong { white-space:normal; }
   .admin-shell :is(input,select,textarea):not([type=checkbox]):not([type=radio]) { min-width:0; max-width:100%; font-size:16px; }
-  .admin-shell :is(.booking-status-action,.booking-manage-button,.filter-row button,.booking-subnav button,.booking-history-export,.resort-editor__actions button,.fb-tabs button) { min-height:44px; }
+  .admin-shell :is(.booking-status-action,.booking-manage-button,.filter-row button,.booking-subnav button,.resort-subnav button,.booking-history-export,.resort-editor__actions button,.fb-tabs button) { min-height:44px; }
 }
 
 @media (max-width:650px) {
@@ -38,6 +38,8 @@
   .admin-shell .calendar-move-warning__actions button { min-height:44px; }
   .admin-shell .resort-editor__actions { flex-wrap:nowrap; width:100%; overflow-x:auto; padding-bottom:4px; overscroll-behavior-x:contain; scrollbar-width:thin; }
   .admin-shell .resort-editor__actions > button { flex:1 0 max-content; min-height:44px; white-space:nowrap; }
+  .admin-shell .resort-subnav { width:100%; }
+  .admin-shell .resort-subnav button { flex:1; }
   .admin-shell .fb-tabs { flex-wrap:nowrap; width:100%; overflow-x:auto; padding-bottom:12px; overscroll-behavior-x:contain; scrollbar-width:thin; }
   .admin-shell .fb-tabs button { flex:0 0 auto; white-space:nowrap; }
   .admin-shell .fb-pagination { flex-wrap:wrap; gap:8px; }

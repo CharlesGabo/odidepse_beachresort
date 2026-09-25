@@ -38,7 +38,8 @@ function ActivityFields({ value, onChange }) {
   </div>;
 }
 
-export default function ResortManager({ kind, csrfToken, onLogout, bookings = [] }) {
+export default function ResortManager({ csrfToken, onLogout, bookings = [] }) {
+  const [kind,setKind] = useState('stays');
   const [data,setData] = useState(null);
   const [selected,setSelected] = useState(null);
   const [draft,setDraft] = useState(null);
@@ -60,7 +61,7 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     } catch(exception){setError(exception.message || 'Could not load resort data.');}
     finally{if(!background)setBusy(false);}
   },[onLogout]);
-  useEffect(()=>{load();},[load,kind]);
+  useEffect(()=>{load();},[load]);
   useVisibilityPolling(() => {
     if(!draft&&!busy&&!uploading)return load({background:true});
     return undefined;
@@ -96,6 +97,11 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     finally{setBusy(false);}
   };
   const closeEditor=()=>{if(uploading||busy)return;setDraft(null);setSelected(null);setConflict(false);};
+  const switchKind=nextKind=>{
+    if(nextKind===kind||busy||uploading)return;
+    if(draft&&!window.confirm('Discard unsaved edits and open the other section?'))return;
+    setDraft(null);setSelected(null);setConflict(false);setNotice('');setError('');setPhotoMode(false);setKind(nextKind);
+  };
   const closeEditorFromBackdrop=event=>{
     if(event.target!==event.currentTarget||busy||uploading)return;
     const bounds=event.currentTarget.getBoundingClientRect();
@@ -109,8 +115,12 @@ export default function ResortManager({ kind, csrfToken, onLogout, bookings = []
     <div className="resort-editor__actions"><button className="admin-mock-button" disabled={busy||uploading||conflict}>{uploading?'Uploading…':busy?'Saving…':'Save and publish'}</button><button className="admin-mock-button" type="button" disabled={busy||uploading} onClick={closeEditor}>Cancel</button></div>
   </form>;
   const title=kind==='stays'?'Your stays':'Activities';
-  return <section className="admin-view resort-manager" aria-label={title}>
-    <div className="admin-view__heading"><div><span className="admin-kicker">Public resort information</span><h2>{title}</h2></div><div className="resort-editor__actions"><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>{if(!draft || window.confirm('Discard edits and reload the latest data?'))load();}}>Reload latest data</button>{data&&<button className="admin-mock-button" type="button" disabled={busy} onClick={create}>Add {kind==='stays'?'stay':'activity'}</button>}</div></div>
+  return <section className="admin-view resort-manager" aria-labelledby="resort-manager-heading">
+    <nav className="resort-subnav" aria-label="Stays and activities sections">
+      <button type="button" className={kind==='stays'?'active':''} aria-current={kind==='stays'?'page':undefined} disabled={busy||uploading} onClick={()=>switchKind('stays')}>Stays</button>
+      <button type="button" className={kind==='services'?'active':''} aria-current={kind==='services'?'page':undefined} disabled={busy||uploading} onClick={()=>switchKind('services')}>Activities</button>
+    </nav>
+    <div className="admin-view__heading"><div><span className="admin-kicker">Stays &amp; Activities</span><h2 id="resort-manager-heading">{title}</h2></div><div className="resort-editor__actions"><button className="admin-mock-button" type="button" disabled={busy} onClick={()=>{if(!draft || window.confirm('Discard edits and reload the latest data?'))load();}}>Reload latest data</button>{data&&<button className="admin-mock-button" type="button" disabled={busy} onClick={create}>Add {kind==='stays'?'stay':'activity'}</button>}</div></div>
     <p>Availability is managed manually. Saving publishes changes immediately. Disabled or archived offers are hidden; unavailable offers remain open for inquiries.</p>
     {notice&&<p className="admin-notice" role="status">{notice}</p>}{error&&<p className="admin-error" role="alert">{error}</p>}
     {!data?<p role="status">{busy?'Loading resort information…':'Use Reload latest data to try again.'}</p>:<>

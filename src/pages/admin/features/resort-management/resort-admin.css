@@ -39,6 +39,11 @@
   .operations-dashboard,.booking-card.is-calendar-highlighted,.booking-history-table tr.is-calendar-highlighted td { animation: none; }
 }
 .resort-manager > p { color: var(--muted); font-size: 14px; }
+.resort-subnav { display:flex; gap:6px; width:max-content; max-width:100%; margin-bottom:18px; padding:5px; border:1px solid var(--line); border-radius:10px; background:white; }
+.resort-subnav button { min-height:40px; padding:0 20px; border:0; border-radius:7px; color:var(--muted); background:transparent; font-size:11px; font-weight:700; cursor:pointer; }
+.resort-subnav button:hover:not(:disabled) { color:var(--deep); background:#f1f4f1; }
+.resort-subnav button.active { color:white; background:var(--deep); }
+.resort-subnav button:disabled { cursor:wait; opacity:.65; }
 .filter-row { align-items:center; }
 .filter-row > button { flex:0 0 auto; }
 .calendar-move-help { color:var(--muted); font-size:12px; }
