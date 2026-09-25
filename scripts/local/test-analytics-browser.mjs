@@ -12,17 +12,25 @@ let browser, socket;
 try {
   const api = async (route, options = {}) => {
     const response = await fetch(`${base}/api/admin/${route}`, { ...options, signal: AbortSignal.timeout(10000), headers: { Cookie: `odidepse_admin=${session.session_id}`, Accept: 'application/json', ...(options.headers || {}) } });
-    return { status: response.status, body: await response.json() };
+    const text = await response.text();
+    let body; try { body = JSON.parse(text); } catch { throw new Error(`${route}: ${response.status} ${text.slice(0, 1000)}`); }
+    return { status: response.status, body };
   };
   assert.equal((await fetch(`${base}/api/admin/analytics.php`)).status, 401);
+  assert.equal((await fetch(`${base}/api/admin/analytics-detail.php?metric=booked`)).status, 401);
   assert.equal((await fetch(`${base}/api/admin/booking-finance.php`)).status, 401);
   assert.equal((await api('analytics.php',{method:'DELETE'})).status,405);
   assert.equal((await api('analytics.php?source=invalid')).status,422);
   assert.equal((await api('booking-finance.php',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);
   const report=await api('analytics.php'); assert.equal(report.status,200);
+  const detail=await api('analytics-detail.php?metric=booked'); assert.equal(detail.status,200);
+  assert.equal(detail.body.detail.value,report.body.report.metrics.booked,'Booking detail matches KPI');
+  assert.ok(detail.body.detail.rows.every(row=>row.booking_id && row.reference && row.guest && !('email' in row) && !('mobile' in row)),'Detail rows identify bookings without contact data');
+  assert.equal((await api('analytics-detail.php?metric=invalid')).status,422);
   const bookings=await api('bookings.php'); assert.equal(bookings.status,200);
   const id=Number(bookings.body.bookings[0]?.id); assert.ok(id);
-  assert.equal((await api(`booking-finance.php?booking_id=${id}`)).status,200);
+  const finance=await api(`booking-finance.php?booking_id=${id}`); assert.equal(finance.status,200);
+  assert.equal(bookings.body.bookings[0].finance_balance,finance.body.finance.balance,'History balance matches the finance ledger');
   assert.equal((await api('booking-finance.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrf_token},body:JSON.stringify({booking_id:id,revision:-1,action:'set_total',amount:'0.00',reason:'Stale request, must never be written'})})).status,409);
   browser=spawn('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
   let port;
@@ -44,6 +52,18 @@ try {
   await evaluate("document.querySelector('button[title=Analytics]').click()");
   await waitFor("Boolean(document.querySelector('.bi-kpis')) && !document.querySelector('.bi-results.is-stale')");
   assert.equal(await evaluate("document.querySelectorAll('.bi-kpi').length"),8);
+  assert.equal(await evaluate("document.querySelectorAll('.bi-kpi-trigger').length"),8,'All KPI cards are interactive');
+  await evaluate("document.querySelector('.bi-kpi-trigger').click()");
+  await waitFor("Boolean(document.querySelector('.bi-detail-modal[open] .bi-detail-modal__summary'))");
+  assert.equal(await evaluate("document.querySelector('.bi-detail-modal h2').textContent"),'Booked value');
+  assert.equal(await evaluate("document.querySelectorAll('.bi-detail-modal tbody tr').length"),detail.body.detail.rows.length,'Modal lists source bookings');
+  await evaluate("document.querySelector('.bi-detail-modal__head button').click()");
+  await waitFor("!document.querySelector('.bi-detail-modal')");
+  await evaluate("document.querySelectorAll('.bi-kpi-trigger')[6].click()");
+  await waitFor("Boolean(document.querySelector('.bi-detail-modal[open] .bi-detail-modal__summary'))");
+  assert.equal(await evaluate("document.querySelector('.bi-detail-modal h2').textContent"),'Average booking value');
+  await evaluate("document.querySelector('.bi-detail-modal__head button').click()");
+  await waitFor("!document.querySelector('.bi-detail-modal')");
   assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth+1'),'Desktop fits');
   const liveValue = await evaluate("document.querySelector('.bi-kpi strong').textContent");
   await evaluate("document.querySelector('.bi-mock-button').click()");
@@ -52,6 +72,12 @@ try {
   assert.equal(await evaluate("document.querySelector('.bi-toolbar button:nth-last-child(2)').disabled"),true,'Mock CSV export disabled');
   assert.equal(await evaluate("document.querySelector('.bi-toolbar button:last-child').disabled"),true,'Mock print disabled');
   assert.ok(await evaluate("[...document.querySelectorAll('.bi-panel table tbody th')].some(cell => cell.textContent === document.querySelector('.bi-filters select[name=stay_id] option:nth-child(2)')?.textContent)"),'Mock accommodation uses catalog name');
+  await evaluate("document.querySelector('.bi-kpi-trigger').click()");
+  await waitFor("Boolean(document.querySelector('.bi-detail-modal[open] .bi-detail-modal__mock-note'))");
+  assert.ok(await evaluate("document.querySelectorAll('.bi-detail-modal tbody tr').length > 0"),'Mock KPI lists sample bookings');
+  assert.equal(await evaluate("document.querySelectorAll('.bi-detail-modal__booking-link').length"),0,'Mock references do not open real bookings');
+  await evaluate("document.querySelector('.bi-detail-modal__head button').click()");
+  await waitFor("!document.querySelector('.bi-detail-modal')");
   await evaluate("[...document.querySelectorAll('.bi-toolbar button')].find(button => button.textContent === 'Show live data').click()");
   await waitFor("!document.querySelector('.bi-mock-banner')");
   assert.equal(await evaluate("document.querySelector('.bi-kpi strong').textContent"),liveValue,'Live report restored');
@@ -60,13 +86,48 @@ try {
   await send('Emulation.setEmulatedMedia',{media:'print'});
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.bi-toolbar')).display"),'none','Print hides actions');
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.admin-sidebar')).display"),'none','Print hides navigation');
+  assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.bi-kpi-trigger')).display"),'none','Print keeps KPI values');
   await send('Emulation.setEmulatedMedia',{media:''});
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:850,deviceScaleFactor:1,mobile:false});
   assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth+1'),'Mobile fits');
+  await evaluate("document.querySelector('.bi-kpi-trigger').click()");
+  await waitFor("Boolean(document.querySelector('.bi-detail-modal[open] .bi-detail-modal__summary'))");
+  assert.ok(await evaluate("(()=>{const box=document.querySelector('.bi-detail-modal').getBoundingClientRect();return box.left>=0&&box.right<=innerWidth+1;})()"),'Mobile KPI modal fits');
+  await evaluate("document.querySelector('.bi-detail-modal__head button').click()");
+  await waitFor("!document.querySelector('.bi-detail-modal')");
   await evaluate("document.querySelector('.admin-mobile-nav button[title=Bookings]').click()");
   await waitFor("Boolean(document.querySelector('.booking-request-view, .booking-card'))");
+  await evaluate("[...document.querySelectorAll('.booking-subnav button')].find(button=>button.textContent==='Booking History').click()");
+  await waitFor("Boolean(document.querySelector('.booking-history-date-filters'))");
+  const historyCount=await evaluate("document.querySelectorAll('.booking-history-cards .booking-card').length");
+  assert.equal(await evaluate("document.querySelectorAll('.booking-history-cards .booking-card__balance').length"),historyCount,'Mobile history cards show balances');
+  const expectedBalances=bookings.body.bookings.filter(booking=>['completed','no_show','cancelled'].includes(booking.status)&&Number(booking.finance_balance)>0).length;
+  await evaluate("(()=>{const select=document.querySelectorAll('.booking-history-date-filters select')[1];const set=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set;set.call(select,'due');select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await waitFor(`document.querySelectorAll('.booking-history-cards .booking-card').length===${expectedBalances}`);
+  await evaluate("(()=>{const select=document.querySelectorAll('.booking-history-date-filters select')[1];const set=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set;set.call(select,'all');select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await waitFor(`document.querySelectorAll('.booking-history-cards .booking-card').length===${historyCount}`);
   const viewOpened=await evaluate("(()=>{const b=[...document.querySelectorAll('.booking-card button')].find(b=>/view/i.test(b.textContent));if(b){b.click();return true;}return false;})()");
-  if(viewOpened){await waitFor("Boolean(document.querySelector('.booking-finance__totals'))");assert.ok(await evaluate("document.querySelector('.admin-request-modal').scrollWidth <= document.querySelector('.admin-request-modal').clientWidth+1"),'Finance modal fits');assert.ok(await evaluate("(()=>{const main=document.querySelector('.admin-request-modal__main');const cards=[...main.children];return cards.findIndex(card=>card.textContent.includes('Request details'))<cards.findIndex(card=>card.classList.contains('request-contact'))&&cards.findIndex(card=>card.classList.contains('request-contact'))<cards.findIndex(card=>card.classList.contains('admin-request-modal__status'));})()"),'Contact and status follow request details');}
+  if(viewOpened){
+    await waitFor("Boolean(document.querySelector('.booking-finance__totals'))");
+    assert.ok(await evaluate("document.querySelector('.admin-request-modal').scrollWidth <= document.querySelector('.admin-request-modal').clientWidth+1"),'Finance modal fits');
+    assert.ok(await evaluate("(()=>{const main=document.querySelector('.admin-request-modal__main');const cards=[...main.children];return cards.findIndex(card=>card.textContent.includes('Request details'))<cards.findIndex(card=>card.classList.contains('request-contact'));})()"),'Contact follows request details');
+    assert.equal(await evaluate("Boolean(document.querySelector('.admin-request-modal__status'))"),false,'Separate status card removed');
+    assert.ok(await evaluate("Boolean(document.querySelector('.admin-request-modal__guest-actions .booking-status'))"),'Status appears in guest banner');
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.admin-request-modal__guest-actions .booking-status')).display"),'none','Status remains visible on mobile');
+    assert.ok(await evaluate("(()=>{const guest=document.querySelector('.admin-request-modal__guest');return !guest.classList.contains('admin-request-modal__guest--checked_in')||[...guest.querySelectorAll('.booking-status-action')].some(button=>button.textContent==='Check out');})()"),'Checked-in checkout action appears in guest banner');
+    await send('Emulation.setDeviceMetricsOverride',{width:1024,height:850,deviceScaleFactor:1,mobile:false});
+    assert.ok(await evaluate("(()=>{const card=document.querySelector('.request-panel--stay').getBoundingClientRect();const checkout=document.querySelectorAll('.request-date-route input')[1].getBoundingClientRect();return checkout.left>=card.left&&checkout.right<=card.right;})()"),'Checkout fits inside Stay summary at desktop width');
+    await evaluate("document.querySelector('.admin-request-modal__close').click()");
+  }
+  if(detail.body.detail.rows.length){
+    await evaluate("document.querySelector('button[title=Analytics]').click()");
+    await waitFor("Boolean(document.querySelector('.bi-kpis')) && !document.querySelector('.bi-results.is-stale')");
+    await evaluate("document.querySelector('.bi-kpi-trigger').click()");
+    await waitFor("Boolean(document.querySelector('.bi-detail-modal[open] .bi-detail-modal__booking-link'))");
+    await evaluate("document.querySelector('.bi-detail-modal__booking-link').click()");
+    await waitFor("Boolean(document.querySelector('.admin-request-modal[open]'))");
+    assert.equal(await evaluate("document.querySelector('.admin-request-modal[open]')?.textContent.includes('Request details')"),true,'Source reference opens booking details');
+  }
   assert.deepEqual(errors,[],'No browser runtime exceptions');
   console.log(`Passed authenticated API/proxy, authorization, CSRF, stale finance revision, desktop/mobile analytics and print layout. Screenshot: ${imagePath}`);
 } finally {

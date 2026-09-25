@@ -1,17 +1,37 @@
 .booking-finance { margin-top: 20px; border: 1px solid #ddd8ce; border-radius: 14px; padding: 20px; background: #fffefb; color: #263d36; }
 .booking-finance__heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .booking-finance h3,.booking-finance h4 { margin: 8px 0 14px; }
-.booking-finance__totals { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.booking-finance__totals { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 14px 0 18px; }
+.booking-finance__totals > div { min-width: 0; padding: 12px; border: 1px solid #e4ebe6; border-radius: 9px; background: white; }
+.booking-finance__totals > .booking-finance__balance { grid-column: 1 / -1; background: #eaf5ef; border-color: #c9e3d4; }
+.booking-finance__metric-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; }
+.booking-finance__metric-head dt { min-width: 0; }
+.booking-finance .booking-finance__metric-head button { min-height: 24px; padding: 2px 6px; border: 0; background: transparent; color: #17614f; font-size: 11px; font-weight: 700; text-decoration: underline; }
 .booking-finance__totals dt { font-size: 12px; color: #57665e; }
-.booking-finance__totals dd { margin: 4px 0; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.booking-finance__totals dd { margin: 4px 0; font-size: clamp(14px,1.5vw,18px); font-weight: 700; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.booking-finance__balance dd { color: #17614f; font-size: 25px; }
+.booking-finance__edit { margin-bottom: 16px; padding: 14px; border: 1px solid #d7e6db; border-radius: 9px; background: #fff; }
+.booking-finance__edit h4 { margin: 0; }
+.booking-finance__form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.booking-finance__primary { padding: 15px; border: 1px solid #d7e6db; border-radius: 10px; background: #f7fbf8; }
+.booking-finance__primary h4 { margin: 0 0 5px; }
+.booking-finance__primary > p { margin: 0; color: #52675b; }
+.booking-finance__hint { display: block; color: #62746a; font-size: 11px; line-height: 1.45; }
+.booking-finance__state { padding: 12px; border-radius: 8px; background: #eff4ec; color: #385948; }
 .booking-finance form { display: grid; gap: 12px; margin: 14px 0; }
 .booking-finance label { display: grid; gap: 6px; font-size: 13px; }
 .booking-finance input,.booking-finance select { min-width: 0; width: 100%; padding: 10px; background: white; border: 1px solid #c9cfc8; border-radius: 6px; font: inherit; color: inherit; }
 .booking-finance button,.booking-finance-dialog > div > button,.booking-finance-confirm { padding: 10px 14px; border: 1px solid #bbc7be; background: #eff4ec; border-radius: 7px; color: #254a3b; cursor: pointer; font: inherit; font-size: 12px; }
+.booking-finance button.booking-finance__primary-button { color: white; background: #17614f; border-color: #17614f; font-weight: 700; }
+.booking-finance button.booking-finance__primary-button:hover { background: #0e4e3e; }
 .booking-finance button:disabled,.booking-finance-confirm:disabled { opacity: .5; cursor: default; }
 .booking-finance summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+.booking-finance__refund-action,.booking-finance__history { margin-top: 16px; border-top: 1px solid #e4ebe6; }
+.booking-finance__refund-action > button { margin-top: 12px; }
+.booking-finance__refund-action form { padding: 14px; border: 1px solid #e4ebe6; border-radius: 9px; background: white; }
+.booking-finance__refund-action form p { margin: 0; }
+.booking-finance__history details { padding-left: 10px; border-left: 2px solid #d7e6db; }
 .booking-finance p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
-.booking-finance__notice { padding: 12px; background: #f9edcc; border-radius: 8px; }
 .booking-finance__entries article { padding: 15px 0; border-top: 1px solid #e5e5dc; }
 .booking-finance__entries .is-voided { color: #6f746e; }
 .booking-finance-dialog { width: min(660px,calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; border: 0; border-radius: 18px; background: #faf9f4; }
@@ -20,3 +40,4 @@
 .booking-finance-confirm { margin-top: 18px; }
 .booking-finance :focus-visible { outline: 2px solid #277f62; outline-offset: 3px; }
 @media(max-width:600px) { .booking-finance { padding: 14px; } .booking-finance__heading { flex-wrap: wrap; } }
+@media(max-width:480px) { .booking-finance__totals { grid-template-columns: minmax(0,1fr); } .booking-finance__totals dd { font-size: 20px; } }

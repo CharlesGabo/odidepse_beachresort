@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require_once dirname(__DIR__, 2) . '/includes/analytics/analytics.php';
+require_once dirname(__DIR__, 2) . '/includes/analytics/analytics-detail.php';
 function analyticsCheck(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
 function analyticsReject(callable $action, string $message): void {
     try { $action(); } catch (InvalidArgumentException|RuntimeException $error) { return; }
@@ -17,6 +17,9 @@ analyticsCheck(bookingReportingEstimate(array_replace($base,['stay_id'=>null]),$
 analyticsCheck(bookingReportingEstimate($base,[array_replace($stays[0],['price'=>null])])[0] === null,'Missing rates remain unknown');
 analyticsCheck(bookingReportingEstimate(array_replace($base,['check_out'=>'2025-02-30']),$stays)[0] === null,'Invalid dates rejected');
 analyticsCheck(financeDecimal(-123) === '-1.23','Negative cash formats correctly');
+analyticsCheck(financeRemaining('3000.00','5000.00',200000)==='1000.00','Agreed price balance subtracts net payments');
+analyticsCheck(financeRemaining(null,'5000.00',50000)==='4500.00','Estimate provides provisional balance');
+analyticsCheck(financeRemaining(null,null,0)===null,'Unknown price is not a zero balance');
 analyticsReject(fn()=>financeCents('1e4'),'Scientific notation rejected');
 analyticsReject(fn()=>analyticsFilters(['preset'=>'custom','from'=>'2025-02-30','to'=>'2026-01-01'],'2026-09-25','2025-01-01'),'Invalid filter date');
 $filters = analyticsFilters(['preset'=>'custom','from'=>'2025-11-01','to'=>'2026-01-31'],'2026-09-25','2025-01-01');
@@ -44,6 +47,27 @@ $year=analyticsReport($bookings,$payments,$activities,$stays,array_replace($filt
 analyticsCheck(count($year['series'])===2 && $year['metrics']===$m,'Yearly aggregation preserves totals');
 $filtered=analyticsReport($bookings,$payments,$activities,$stays,array_replace($filters,['activity_id'=>2]),'2026-09-25');
 analyticsCheck($filtered['metrics']['requests']===1 && $filtered['metrics']['booked']==='3000.00','Activity filter applies to finance and demand');
+$detailData = ['bookings'=>array_map(static fn($booking)=>$booking + ['reference_code'=>'TEST-' . $booking['id'],'guest_name'=>'Test Guest'], $bookings),
+    'payments'=>$payments,'activities'=>$activities,'stays'=>$stays,'filters'=>$filters,'today'=>'2026-09-25'];
+$detailSum = static function(array $rows): int {
+    return array_sum(array_map(static function(array $row): int {
+        $value = (string) $row['contribution'];
+        return str_starts_with($value, '-') ? -financeCents(substr($value, 1)) : financeCents($value);
+    }, $rows));
+};
+foreach (['booked','net','outstanding','pipeline'] as $metric) {
+    analyticsCheck($detailSum(analyticsDetailRows($detailData, $metric)) === financeCents($m[$metric]), "$metric detail reconciles with report");
+}
+$countSum = static fn(array $rows): int => array_sum(array_column($rows, 'contribution'));
+analyticsCheck($countSum(analyticsDetailRows($detailData, 'requests')) === $m['requests'], 'Request details reconcile');
+analyticsCheck($countSum(analyticsDetailRows($detailData, 'guests')) === $m['guests'], 'Guest details reconcile');
+analyticsCheck($countSum(analyticsDetailRows($detailData, 'cancelled')) === $m['cancelled_requests'], 'Cancellation numerator reconciles');
+analyticsCheck(count(analyticsDetailRows($detailData, 'cancelled')) === $m['requests'], 'Cancellation denominator reconciles');
+analyticsCheck(count(analyticsDetailRows($detailData, 'average')) === $m['priced_bookings'], 'Average booking denominator reconciles');
+analyticsCheck($detailSum(analyticsDetailRows($detailData, 'average')) === financeCents($m['booked']), 'Average booking numerator reconciles');
+$activityDetail = array_replace($detailData, ['filters'=>array_replace($filters, ['activity_id'=>2])]);
+analyticsCheck($detailSum(analyticsDetailRows($activityDetail, 'booked')) === financeCents($filtered['metrics']['booked']), 'Activity-filtered details reconcile');
+analyticsReject(fn()=>analyticsDetailRows($detailData, 'invalid'), 'Unknown detail metric rejected');
 $rolling=analyticsFilters([], '2026-09-25', '2025-01-01');
 analyticsCheck($rolling['from']==='2025-10-01' && $rolling['to']==='2026-09-25','Rolling twelve calendar months');
-echo "Passed analytics calculations, date filters, money, estimates, multi-room plans, activity demand, status cohorts and monthly/yearly totals.\n";
+echo "Passed analytics calculations, booking-source KPI details, date filters, money, estimates, multi-room plans, activity demand, status cohorts and monthly/yearly totals.\n";

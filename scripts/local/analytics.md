@@ -36,13 +36,25 @@ are approximations, not historical agreed charges.
 
 ## Using the report and finance
 
-Open Bookings → View → Finance to review an estimate, save an agreed total and
-record payments/refunds. Agreed totals require a reason; zero is permitted for
-complimentary stays. Record only actual transactions. Set the agreed total before
-recording payments; amounts above the remaining balance and refunds above net
-collections are rejected. Incorrect entries are voided with a reason and retained.
+Open Bookings → View → Finance. If no price is agreed yet, confirm the booking price;
+the saved room estimate is an editable starting amount. An ordinary first price
+confirmation receives a standard audit reason automatically. A complimentary (zero)
+price and later price changes require a staff explanation. The main payment form
+then starts with the remaining balance; staff must change it for a partial payment
+and record only money actually received. Use Edit on the agreed-total card to
+revise the price; a separate refund action appears when money has been collected.
+Payments above the remaining balance and refunds above net
+collections are rejected with the maximum allowed amount shown. Incorrect entries
+are voided with a reason and retained in transaction history.
 Concurrent changes return a conflict; use Reload ledger and review before retrying.
 Finance changes do not send booking emails or change reservation status.
+
+Booking History shows the remaining amount from the agreed price, or the saved
+room estimate if no price was agreed, less non-void net payments. Its **With balance**
+filter finds positive amounts; unknown prices are shown as such, not as paid.
+Estimated amounts are labeled, and balances on cancelled or no-show bookings are
+marked for review rather than treated as confirmed debts. The history export includes
+the balance and its price basis.
 
 The estimate is a one-time room-only snapshot. Catalog changes and later room/date
 edits do not silently rewrite it. Review the agreed total after those edits.
@@ -60,6 +72,12 @@ metadata. Client-supplied prices or source labels are never accepted.
 CSV contains active filters and monthly financial rows. Print / PDF uses the
 browser print dialog and includes the applied filter context. No external reporting
 service, AI provider or chart library is used. Expenses and profit are not tracked.
+Each overview KPI card opens a booking breakdown modal showing the source booking,
+guest, status, relevant date, amount or count, and price basis. Booking references
+open the existing booking details. Net cash lists individual payments and refunds;
+average booking value lists its priced-booking numerator, while cancellation rate
+lists every request in its denominator and marks cancelled requests. The breakdown
+uses the same report filters and is available only to an authenticated admin.
 
 For visual testing, **Generate mock** creates an illustrative report in the browser
 from the current filtered report periods and the stay/activity catalog names returned
@@ -68,6 +86,9 @@ by the authenticated analytics API. **Regenerate mock** makes another sample;
 catalog entries are saved. The page displays a mock warning and disables CSV and
 Print / PDF while sample figures are shown, so sample financials cannot be exported
 as a live report.
+Mock KPI modals show browser-only sample bookings and transactions whose row values
+add up to the displayed mock figures. Sample references are not links to real
+bookings and the modal clearly labels them as illustrative.
 
 ## Verification
 
@@ -84,9 +105,12 @@ website-chat and Facebook tests when changing shared booking capture.
 
 Endpoints: authenticated GET `/api/admin/analytics.php` accepts `preset`, `from`,
 `to`, `group` (month/year), `status`, `source`, `stay_id` and `activity_id`.
+Authenticated GET `/api/admin/analytics-detail.php` accepts the same filters plus
+`metric` and `page`, returning up to 25 booking or transaction rows per page.
 Authenticated GET/POST `/api/admin/booking-finance.php` reads one booking or applies
 `set_total`, `record`, or `void`. Writes require the existing CSRF token and finance
-revision. Reports exclude guest names/contact information. Requests are bounded to
+revision. Summary reports exclude guest names/contact information; the admin-only
+detail response includes guest names but not contact information. Requests are bounded to
 50,000 relevant bookings; excessive requests receive a narrower-range instruction.
 
 ## Release and rollback

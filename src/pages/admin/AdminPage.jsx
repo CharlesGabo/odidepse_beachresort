@@ -57,6 +57,20 @@ function formatBookingDate(value, compact = false) {
   ).format(date);
 }
 
+const phpAmount = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value));
+const hasHistoryBalance = booking => booking.finance_balance != null && Number(booking.finance_balance) > 0;
+
+function HistoryBalance({ booking }) {
+  const balance = booking.finance_balance;
+  const value = balance == null ? null : Number(balance);
+  const review = booking.status === 'cancelled' || booking.status === 'no_show';
+  const tone = value === null ? 'unknown' : value > 0 ? 'due' : value < 0 ? 'credit' : 'clear';
+  const description = booking.finance_basis === 'unavailable' ? 'Finance unavailable' : value === null ? 'Price not set'
+    : value > 0 ? `${booking.finance_basis === 'estimated' ? 'Est. ' : ''}${phpAmount(balance)} ${review ? 'to review' : 'balance'}`
+      : value < 0 ? `${phpAmount(Math.abs(value))} credit to review` : 'No balance';
+  return <span className={`booking-balance booking-balance--${tone}`}>{description}</span>;
+}
+
 function getBookingNights(booking) {
   const checkIn = new Date(`${booking.check_in}T12:00:00`);
   const checkOut = new Date(`${booking.check_out}T12:00:00`);
@@ -892,8 +906,11 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
       <button type="button" className="admin-request-modal__close" onClick={onClose} aria-label="Close request details">×</button>
     </div>
     <div className={`admin-request-modal__guest admin-request-modal__guest--${booking.status}`}>
-      <div><span>Guest</span><strong>{booking.guest_name}</strong><small>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</small></div>
-      <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+      <div className="admin-request-modal__guest-info"><span>Guest</span><strong>{booking.guest_name}</strong><small>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</small></div>
+      <div className="admin-request-modal__guest-actions">
+        <span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span>
+        <BookingStatusActions booking={booking} updateStatus={updateStatus} />
+      </div>
     </div>
     <div className="admin-request-modal__layout">
       <div className="admin-request-modal__main">
@@ -927,10 +944,6 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
           <div className="request-panel__heading"><span>Contact</span><strong>Reach the guest</strong></div>
           <a href={`mailto:${booking.email}`}><AdminIcon name="mail" /><span><small>Email</small>{booking.email}</span></a>
           <a href={`tel:${booking.phone}`}><AdminIcon name="phone" /><span><small>Mobile</small>{booking.phone}</span></a>
-        </section>
-        <section className="admin-request-modal__status"><span>Manage status</span><small>Continue this reservation through its next available step.</small>
-          <BookingStatusActions booking={booking} updateStatus={updateStatus} />
-          {!statusActions[booking.status] && <strong className="booking-status-workflow-complete">{statusLabels[booking.status]}</strong>}
         </section>
       </div>
       <aside className="admin-request-modal__aside">
@@ -985,6 +998,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeQuery, setActiveQuery] = useState('');
   const [historyFilter, setHistoryFilter] = useState('all');
+  const [historyBalanceFilter, setHistoryBalanceFilter] = useState('all');
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyDateMode, setHistoryDateMode] = useState('all');
   const [historyDateValue, setHistoryDateValue] = useState('');
@@ -1001,6 +1015,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     setManualBookingOpen(Boolean(navigationIntent.openManualBooking));
     const id = navigationIntent.bookingId ? String(navigationIntent.bookingId) : null;
     const targetBooking = id ? bookings.find(item => String(item.id) === id) : null;
+    if (navigationIntent.openBooking && targetBooking) setSelectedBookingId(targetBooking.id);
     const targetIsHistory = terminalBookingStatuses.includes(targetBooking?.status);
     const focusCalendar = navigationIntent.focus === 'calendar';
     if (focusCalendar) {
@@ -1009,6 +1024,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     } else if (targetIsHistory) {
       setBookingChildView('history');
       setHistoryFilter('all');
+      setHistoryBalanceFilter('all');
       setHistoryQuery('');
     } else {
       setBookingChildView('requests');
@@ -1049,6 +1065,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
   const visibleHistoryBookings = useMemo(() => bookings.filter(item => (
     terminalBookingStatuses.includes(item.status)
     && (historyFilter === 'all' || item.status === historyFilter)
+    && (historyBalanceFilter === 'all' || hasHistoryBalance(item))
     && (historyDateMode === 'all'
       || (historyDateMode === 'range'
         ? (!historyDateValue || item.check_in >= historyDateValue) && (!historyDateEnd || item.check_in <= historyDateEnd)
@@ -1061,7 +1078,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     (b.check_out || '').localeCompare(a.check_out || '')
     || (b.check_in || '').localeCompare(a.check_in || '')
     || String(b.id).localeCompare(String(a.id))
-  )), [bookings, historyFilter, historyQuery, historyDateMode, historyDateValue, historyDateEnd]);
+  )), [bookings, historyFilter, historyBalanceFilter, historyQuery, historyDateMode, historyDateValue, historyDateEnd]);
   const historySummary = useMemo(() => {
     const uniqueGuests = new Set(visibleHistoryBookings.map(item => (item.email || item.guest_name || '').trim().toLowerCase()).filter(Boolean));
     const checkIns = visibleHistoryBookings.map(item => item.check_in).filter(Boolean).sort();
@@ -1073,6 +1090,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       completed: visibleHistoryBookings.filter(item => item.status === 'completed').length,
       noShow: visibleHistoryBookings.filter(item => item.status === 'no_show').length,
       cancelled: visibleHistoryBookings.filter(item => item.status === 'cancelled').length,
+      withBalance: visibleHistoryBookings.filter(hasHistoryBalance).length,
       firstCheckIn: checkIns[0] || '',
       lastCheckOut: checkOuts.at(-1) || '',
     };
@@ -1096,6 +1114,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       ['Booking History Summary', ''],
       ['Generated', new Date().toLocaleString('en-PH')],
       ['Status filter', historyFilter === 'all' ? 'All history' : statusLabels[historyFilter]],
+      ['Balance filter', historyBalanceFilter === 'all' ? 'All balances' : 'With balance'],
       ['Date filter (check-in)', dateFilter],
       ['Search', historyQuery || 'None'],
       ['Matching bookings', historySummary.bookings],
@@ -1104,9 +1123,10 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       ['Completed', historySummary.completed],
       ['No show', historySummary.noShow],
       ['Cancelled', historySummary.cancelled],
+      ['With positive balance', historySummary.withBalance],
       ['Coverage', historySummary.firstCheckIn ? `${historySummary.firstCheckIn} to ${historySummary.lastCheckOut}` : 'No matching dates'],
     ];
-    const detailHeaders = ['Reference', 'Guest', 'Email', 'Phone', 'Stay', 'Accommodation / room', 'Party', 'Check-in', 'Check-out', 'Status', 'Source'];
+    const detailHeaders = ['Reference', 'Guest', 'Email', 'Phone', 'Stay', 'Accommodation / room', 'Party', 'Check-in', 'Check-out', 'Balance (PHP)', 'Balance basis', 'Status', 'Source'];
     const bookingExportRow = booking => [
       booking.reference_code,
       booking.guest_name,
@@ -1117,6 +1137,8 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       Number(booking.guests) || 0,
       booking.check_in,
       booking.check_out,
+      booking.finance_balance == null ? '' : Number(booking.finance_balance),
+      booking.finance_basis === 'estimated' ? 'Room estimate' : booking.finance_basis === 'agreed' ? 'Agreed total' : booking.finance_basis === 'unavailable' ? 'Finance unavailable' : 'Price not set',
       statusLabels[booking.status] || booking.status,
       Number(booking.is_facebook_booking) === 1 ? 'Facebook Page' : 'Website / Manual',
     ];
@@ -1125,9 +1147,9 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       rows: visibleHistoryBookings.filter(booking => booking.status === status).map(bookingExportRow),
     })).filter(group => group.rows.length > 0);
     const summaryColumns = '<Column ss:AutoFitWidth="0" ss:Width="145"/><Column ss:AutoFitWidth="0" ss:Width="250"/>';
-    const detailWidths = [110, 145, 190, 110, 155, 110, 55, 90, 90, 85, 105];
+    const detailWidths = [110, 145, 190, 110, 155, 110, 55, 90, 90, 110, 100, 85, 105];
     const detailColumns = detailWidths.map(width => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`).join('');
-    const detailSections = detailGroups.map((group, index) => `<Row ss:Height="24"><Cell ss:MergeAcross="10" ss:StyleID="Section${group.status}"><Data ss:Type="String">${escapeSpreadsheetXml(statusLabels[group.status])} (${group.rows.length})</Data></Cell></Row>${spreadsheetRow(detailHeaders, 'Header')}${group.rows.map(row => spreadsheetRow(row, 'Body')).join('')}${index < detailGroups.length - 1 ? '<Row ss:Height="10"/>' : ''}`).join('');
+    const detailSections = detailGroups.map((group, index) => `<Row ss:Height="24"><Cell ss:MergeAcross="12" ss:StyleID="Section${group.status}"><Data ss:Type="String">${escapeSpreadsheetXml(statusLabels[group.status])} (${group.rows.length})</Data></Cell></Row>${spreadsheetRow(detailHeaders, 'Header')}${group.rows.map(row => spreadsheetRow(row, 'Body')).join('')}${index < detailGroups.length - 1 ? '<Row ss:Height="10"/>' : ''}`).join('');
     const workbook = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1"/><Interior ss:Color="#E8F0EC" ss:Pattern="Solid"/></Style><Style ss:ID="Body"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10"/></Style><Style ss:ID="Sectioncompleted"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#53635E" ss:Pattern="Solid"/></Style><Style ss:ID="Sectionno_show"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#75551F" ss:Pattern="Solid"/></Style><Style ss:ID="Sectioncancelled"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#A9473F" ss:Pattern="Solid"/></Style></Styles><Worksheet ss:Name="Summary"><Table>${summaryColumns}${summaryRows.map((row, index) => spreadsheetRow(row, index === 0 ? 'Header' : 'Body')).join('')}</Table></Worksheet><Worksheet ss:Name="Booking History"><Table>${detailColumns}${detailSections}</Table></Worksheet></Workbook>`;
     const url = URL.createObjectURL(new Blob([`\uFEFF${workbook}`], { type: 'application/vnd.ms-excel;charset=utf-8' }));
     const link = document.createElement('a');
@@ -1215,6 +1237,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
         <div><span>Stay</span><strong>{booking.stay_type || booking.service_name || 'Flexible stay'}</strong></div>
         <div><span>Party</span><strong>{booking.guests} {Number(booking.guests) === 1 ? 'guest' : 'guests'}</strong></div>
       </div>
+      {idPrefix === 'booking-mobile' && <div className="booking-card__balance"><span>Finance</span><HistoryBalance booking={booking} /></div>}
       <div className="booking-card__footer">
         <div className="booking-card__dates">
           <div><span>Check-in</span><strong>{formatBookingDate(booking.check_in, true)}</strong></div>
@@ -1303,6 +1326,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
       </div>
       <div className="booking-history-date-filters">
         <label><span>Filter by check-in</span><select value={historyDateMode} onChange={event => { setHistoryDateMode(event.target.value); setHistoryDateValue(''); setHistoryDateEnd(''); }}><option value="all">All dates</option><option value="date">Exact date</option><option value="month">Month</option><option value="year">Year</option><option value="range">Date range</option></select></label>
+        <label><span>Balance</span><select value={historyBalanceFilter} onChange={event => setHistoryBalanceFilter(event.target.value)}><option value="all">All balances</option><option value="due">With balance</option></select></label>
         {historyDateMode === 'date' && <label><span>Date</span><input type="date" value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)} /></label>}
         {historyDateMode === 'month' && <label><span>Month</span><input type="month" value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)} /></label>}
         {historyDateMode === 'year' && <label><span>Year</span><select value={historyDateValue} onChange={event => setHistoryDateValue(event.target.value)}><option value="">Choose year</option>{historyYears.map(year => <option key={year} value={year}>{year}</option>)}</select></label>}
@@ -1318,10 +1342,10 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
         <article><span>No show</span><strong>{historySummary.noShow}</strong></article>
         <article><span>Cancelled</span><strong>{historySummary.cancelled}</strong></article>
       </div>
-      {historySummary.firstCheckIn && <p className="booking-history-coverage">Showing stays from {formatBookingDate(historySummary.firstCheckIn)} through {formatBookingDate(historySummary.lastCheckOut)}.</p>}
+      {historySummary.firstCheckIn && <p className="booking-history-coverage">Showing stays from {formatBookingDate(historySummary.firstCheckIn)} through {formatBookingDate(historySummary.lastCheckOut)}. {historySummary.withBalance} with a positive balance. Estimates are room-only; cancelled and no-show balances need review.</p>}
       <div className="booking-history-table-wrap">
         <table className="booking-history-table">
-          <thead><tr><th>Reference</th><th>Guest</th><th>Contact</th><th>Stay</th><th>Accommodation / room</th><th>Party</th><th>Check-in</th><th>Check-out</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Reference</th><th>Guest</th><th>Contact</th><th>Stay</th><th>Accommodation / room</th><th>Party</th><th>Check-in</th><th>Check-out</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
             {visibleHistoryBookings.map(booking => <tr key={booking.id} id={`booking-${booking.id}`} className={highlightedBookingId === String(booking.id) ? 'is-calendar-highlighted' : ''}>
               <td><strong>{booking.reference_code}</strong>{Number(booking.is_facebook_booking) === 1 && <small>Facebook Page</small>}</td>
@@ -1332,10 +1356,11 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
               <td>{booking.guests}</td>
               <td>{formatBookingDate(booking.check_in, true)}</td>
               <td>{formatBookingDate(booking.check_out, true)}</td>
+              <td><HistoryBalance booking={booking} /></td>
               <td><span className={`booking-status booking-status--${booking.status}`}>{statusLabels[booking.status]}</span></td>
               <td><div className="booking-history-table__actions"><BookingStatusActions booking={booking} updateStatus={updateStatus} /><button className="booking-history-view" type="button" onClick={() => setSelectedBookingId(booking.id)}>View</button></div></td>
             </tr>)}
-            {visibleHistoryBookings.length === 0 && <tr><td className="booking-history-table__empty" colSpan="10"><strong>No booking history found.</strong><span>Completed, no-show, and cancelled bookings will appear here.</span></td></tr>}
+            {visibleHistoryBookings.length === 0 && <tr><td className="booking-history-table__empty" colSpan="11"><strong>No booking history found.</strong><span>Try changing the status, balance, date, or search filters.</span></td></tr>}
           </tbody>
         </table>
       </div>
@@ -1511,7 +1536,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       {activeView === 'dashboard' && <header><div><span className="admin-kicker">Daily operations</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>}
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
-        {activeView === 'analytics' && <AnalyticsPage onLogout={onLogout} />}
+        {activeView === 'analytics' && <AnalyticsPage onLogout={onLogout} onOpenBooking={bookingId => { navigate('bookings'); setNavigationIntent({ bookingId, openBooking: true }); }} />}
         {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} focus={notificationFocus} />}
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}

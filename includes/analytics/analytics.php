@@ -131,7 +131,7 @@ function analyticsReport(array $bookings, array $payments, array $activities, ar
         'unmapped' => $unmapped, 'generated_at' => (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format(DATE_ATOM)];
 }
 
-function analyticsLoad(PDO $db, array $input): array
+function analyticsLoadData(PDO $db, array $input, bool $includeIdentity = false): array
 {
     if (!bookingReportingReady($db)) throw new RuntimeException('Analytics setup is required. Apply the analytics migration and backfill.', 503);
     $db->exec("SET time_zone = '+08:00'");
@@ -143,10 +143,12 @@ function analyticsLoad(PDO $db, array $input): array
     $stays = $db->query('SELECT id,name,price,price_mode,price_unit FROM resort_stays ORDER BY sort_order,id')->fetchAll();
     $services = $db->query('SELECT id,name FROM resort_services ORDER BY sort_order,id')->fetchAll();
     foreach (['stay_id' => $stays, 'activity_id' => $services] as $key => $catalog) if ($filters[$key] && !in_array($filters[$key], array_map('intval', array_column($catalog, 'id')), true)) throw new InvalidArgumentException('Selected catalog item does not exist.');
-    // Bounded relevant history; no names, contact details, notes or payment references reach this report.
+    // Bounded relevant history. Guest identity is selected only for the authenticated detail endpoint;
+    // contact details, notes, and payment references are never loaded for analytics.
     $db->beginTransaction();
     try {
-        $q = $db->prepare('SELECT id,check_in,check_out,guests,stay_id,stay_type,stay_plan_json,status,created_at,agreed_total,estimated_total,booking_source FROM bookings b WHERE (created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)) OR check_in BETWEEN ? AND ? OR EXISTS (SELECT 1 FROM booking_payments p WHERE p.booking_id=b.id AND p.paid_on BETWEEN ? AND ?) LIMIT 50001');
+        $identityColumns = $includeIdentity ? ',reference_code,guest_name' : '';
+        $q = $db->prepare('SELECT id,check_in,check_out,guests,stay_id,stay_type,stay_plan_json,status,created_at,agreed_total,estimated_total,booking_source' . $identityColumns . ' FROM bookings b WHERE (created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)) OR check_in BETWEEN ? AND ? OR EXISTS (SELECT 1 FROM booking_payments p WHERE p.booking_id=b.id AND p.paid_on BETWEEN ? AND ?) LIMIT 50001');
         $q->execute([$filters['from'],$filters['to'],$filters['from'],$filters['to'],$filters['from'],$filters['to']]);
         $bookings = $q->fetchAll();
         if (count($bookings) > 50000) throw new InvalidArgumentException('Select a shorter period to report on fewer than 50,000 bookings.');
@@ -161,6 +163,12 @@ function analyticsLoad(PDO $db, array $input): array
         }
         $db->commit();
     } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    return compact('bookings','payments','activities','stays','services','filters','today');
+}
+
+function analyticsLoad(PDO $db, array $input): array
+{
+    ['bookings' => $bookings, 'payments' => $payments, 'activities' => $activities, 'stays' => $stays, 'services' => $services, 'filters' => $filters, 'today' => $today] = analyticsLoadData($db, $input);
     $report = analyticsReport($bookings, $payments, $activities, $stays, $filters, $today);
     $report['options'] = ['stays' => array_map(static fn($r) => ['id' => (int) $r['id'], 'name' => $r['name']], $stays), 'activities' => array_map(static fn($r) => ['id' => (int) $r['id'], 'name' => $r['name']], $services)];
     return $report;

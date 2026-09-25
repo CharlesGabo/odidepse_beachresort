@@ -36,6 +36,12 @@ function financeBalances(array $entries): array
     return ['paid' => $paid, 'refunded' => $refunded, 'net' => $paid - $refunded];
 }
 
+function financeRemaining(?string $agreedTotal, ?string $estimatedTotal, int $netCents): ?string
+{
+    $total = $agreedTotal ?? $estimatedTotal;
+    return $total === null ? null : financeDecimal(financeCents($total) - $netCents);
+}
+
 function financeSnapshot(PDO $db, int $bookingId): array
 {
     $query = $db->prepare('SELECT agreed_total, estimated_total, estimate_basis, currency, finance_revision, status FROM bookings WHERE id = ?');
@@ -50,7 +56,7 @@ function financeSnapshot(PDO $db, int $bookingId): array
     $query->execute([$bookingId]);
     return $booking + ['paid' => financeDecimal($balance['paid']), 'refunded' => financeDecimal($balance['refunded']),
         'net_collected' => financeDecimal($balance['net']),
-        'balance' => ($booking['agreed_total'] ?? $booking['estimated_total']) === null ? null : financeDecimal(financeCents($booking['agreed_total'] ?? $booking['estimated_total']) - $balance['net']),
+        'balance' => financeRemaining($booking['agreed_total'], $booking['estimated_total'], $balance['net']),
         'entries' => $entries, 'audit' => $query->fetchAll()];
 }
 
@@ -88,7 +94,8 @@ function financeMutate(PDO $db, int $id, int $actor, array $data): void
             $kind = $data['kind'] ?? '';
             if (!in_array($kind, ['payment', 'refund'], true) || $amount <= 0) throw new InvalidArgumentException('Choose payment or refund and enter a positive amount.');
             if ($kind === 'payment' && $booking['status'] === 'cancelled') throw new InvalidArgumentException('Cancelled bookings can only receive refunds.');
-            if (($kind === 'payment' && $net + $amount > $total) || ($kind === 'refund' && $amount > $net)) throw new InvalidArgumentException('The amount exceeds the available balance.');
+            if ($kind === 'payment' && $net + $amount > $total) throw new InvalidArgumentException('You can record up to ₱' . number_format(($total - $net) / 100, 2) . ' for this payment.');
+            if ($kind === 'refund' && $amount > $net) throw new InvalidArgumentException('You can refund up to ₱' . number_format($net / 100, 2) . ' from this booking.');
             $date = $data['paid_on'] ?? null;
             $parsed = is_string($date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone('Asia/Manila')) : false;
             if (!$parsed || $parsed->format('Y-m-d') !== $date || $date < '2000-01-01' || $parsed > new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'))) throw new InvalidArgumentException('Choose a valid payment date, no later than today.');

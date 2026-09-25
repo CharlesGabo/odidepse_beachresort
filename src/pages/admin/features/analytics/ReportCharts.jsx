@@ -1,17 +1,19 @@
 import { useId } from 'react';
-import { label, money, number } from './reportExport.js';
+import { label, money, monthLabel, number } from './reportExport.js';
 
 export const colors = ['#6366f1', '#14b8a6', '#f59e0b', '#f43f5e', '#0ea5e9', '#94a3b8'];
 
-export function Trend({ title, caption, rows, lines, currency = false, bars = false }) {
+export function Trend({ title, caption, rows, lines, currency = false, percent = false, bars = false, showData = false }) {
   const id = useId();
-  const values = rows.flatMap(row => lines.map(line => Number(row[line.key]) || 0));
+  const hasValue = value => value !== null && value !== undefined && Number.isFinite(Number(value));
+  const values = rows.flatMap(row => lines.map(line => row[line.key]).filter(hasValue).map(Number));
   const min = Math.min(0, ...values); const max = Math.max(1, ...values);
   const span = max - min; const low = min < 0 ? min - span * .08 : 0; const high = max + span * .1;
   const x = index => 64 + (index + .5) * 600 / Math.max(1, rows.length);
   const y = value => 220 - (value - low) / (high - low) * 185;
-  const tick = value => currency ? `₱${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}` : number(value);
-  const format = currency ? money : number;
+  const tick = value => currency ? `₱${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}` : percent ? `${number(value)}%` : number(value);
+  const format = percent ? value => value === null ? '—' : `${number(value)}%` : currency ? money : number;
+  const chartTable = <div className="bi-table-wrap" tabIndex="0"><table><caption>{title}</caption><thead><tr><th>Period</th>{lines.map(line => <th key={line.key}>{line.label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.period}><th scope="row">{monthLabel(row.period)}</th>{lines.map(line => <td key={line.key}>{format(row[line.key])}</td>)}</tr>)}</tbody></table></div>;
   return <article className="bi-panel bi-trend" aria-labelledby={id}>
     <header><div><h3 id={id}>{title}</h3><p>{caption}</p></div><span className="bi-panel-mark" aria-hidden="true">•••</span></header>
     <div className="bi-legend">{lines.map((line, index) => <span key={line.key}><i style={{ background: colors[index] }} />{line.label}</span>)}</div>
@@ -21,9 +23,10 @@ export function Trend({ title, caption, rows, lines, currency = false, bars = fa
       {Array.from({ length: 5 }, (_, i) => low + (high - low) * i / 4).map((v, i) => <g key={i}><line x1="64" x2="665" y1={y(v)} y2={y(v)} stroke="#e2e8f0" strokeDasharray="3 5" /><text x="55" y={y(v) + 4} textAnchor="end">{tick(v)}</text></g>)}
       {rows.map((row, i) => (i % Math.max(1, Math.ceil(rows.length / 12)) === 0 || i === rows.length - 1) && <text key={row.period} x={x(i)} y="247" textAnchor="middle">{row.period.length === 4 ? row.period : new Date(`${row.period}-01T12:00:00`).toLocaleDateString('en', { month: 'short', year: rows.length > 12 ? '2-digit' : undefined })}</text>)}
       {lines.map((line, lineIndex) => <g key={line.key}>
-        {!bars && lineIndex === 0 && rows.length > 1 && <polygon fill={`url(#${id}-fill)`} points={`${x(0)},${y(0)} ${rows.map((row, i) => `${x(i)},${y(Number(row[line.key]))}`).join(' ')} ${x(rows.length - 1)},${y(0)}`} />}
-        {!bars && <polyline fill="none" stroke={colors[lineIndex]} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={line.dashed ? '6 4' : undefined} points={rows.map((row, i) => `${x(i)},${y(Number(row[line.key]))}`).join(' ')} />}
+        {!bars && lineIndex === 0 && rows.length > 1 && rows.every(row => hasValue(row[line.key])) && <polygon fill={`url(#${id}-fill)`} points={`${x(0)},${y(0)} ${rows.map((row, i) => `${x(i)},${y(Number(row[line.key]))}`).join(' ')} ${x(rows.length - 1)},${y(0)}`} />}
+        {!bars && <path fill="none" stroke={colors[lineIndex]} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={line.dashed ? '6 4' : undefined} d={rows.map((row, i) => hasValue(row[line.key]) ? `${i > 0 && hasValue(rows[i - 1][line.key]) ? 'L' : 'M'}${x(i)},${y(Number(row[line.key]))}` : '').join(' ')} />}
         {rows.map((row, i) => {
+          if (!hasValue(row[line.key])) return null;
           const value = Number(row[line.key]); const width = Math.max(.5, Math.min(24, 460 / Math.max(1, rows.length) / lines.length));
           const tip = `${row.period} · ${line.label}: ${format(value)}`;
           return bars ? <rect key={row.period} x={x(i) + (lineIndex - lines.length / 2) * width} y={Math.min(y(0), y(value))} width={width * .8} height={Math.max(1, Math.abs(y(value) - y(0)))} rx="2.5" fill={colors[lineIndex]}><title>{tip}</title></rect>
@@ -31,7 +34,7 @@ export function Trend({ title, caption, rows, lines, currency = false, bars = fa
         })}
       </g>)}
     </svg>
-    <details className="bi-chart-data"><summary>View chart data</summary><div className="bi-table-wrap" tabIndex="0"><table><caption>{title}</caption><thead><tr><th>Period</th>{lines.map(line => <th key={line.key}>{line.label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.period}><th>{row.period}</th>{lines.map(line => <td key={line.key}>{format(row[line.key])}</td>)}</tr>)}</tbody></table></div></details>
+    {showData ? <div className="bi-chart-data"><h4>Period values</h4>{chartTable}</div> : <details className="bi-chart-data"><summary>View chart data</summary>{chartTable}</details>}
   </article>;
 }
 

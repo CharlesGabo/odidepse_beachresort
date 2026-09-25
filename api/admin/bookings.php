@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 2) . '/includes/shared/auth.php';
 require_once dirname(__DIR__, 2) . '/includes/shared/database.php';
 require_once dirname(__DIR__, 2) . '/includes/resort/resort.php';
 require_once dirname(__DIR__, 2) . '/includes/bookings/booking-rooms.php';
+require_once dirname(__DIR__, 2) . '/includes/bookings/booking-reporting.php';
 require_once dirname(__DIR__, 2) . '/includes/automations/facebook-automations.php';
 require_once dirname(__DIR__, 2) . '/includes/notifications/notifications.php';
 
@@ -15,14 +16,27 @@ requireAdmin();
 try {
     $db = database();
     if ($method === 'GET') {
+        $financeReady = bookingReportingReady($db);
+        $financeColumns = $financeReady ? 'b.agreed_total, b.estimated_total, COALESCE(finance.net_cents, 0) AS finance_net_cents,'
+            : 'NULL AS agreed_total, NULL AS estimated_total, 0 AS finance_net_cents,';
+        $financeJoin = $financeReady ? "LEFT JOIN (SELECT booking_id, SUM(CASE WHEN kind = 'payment' THEN amount * 100 ELSE -amount * 100 END) AS net_cents
+                FROM booking_payments WHERE voided_at IS NULL GROUP BY booking_id) finance ON finance.booking_id = b.id" : '';
         $statement = $db->query("SELECT b.id, b.reference_code, b.guest_name, b.email, b.phone, b.check_in, b.check_out, b.guests, b.stay_type, b.stay_id, b.service_id, b.service_name, b.message, b.room_index,
             CASE WHEN b.status = 'confirmed' AND b.check_in < CURDATE() THEN 'no_show' ELSE b.status END AS status, b.created_at, b.updated_at,
+            $financeColumns
             EXISTS(SELECT 1 FROM facebook_events e WHERE e.booking_id = b.id AND e.source = 'facebook') AS is_facebook_booking
-            FROM bookings b ORDER BY b.created_at DESC");
+            FROM bookings b
+            $financeJoin
+            ORDER BY b.created_at DESC");
         $rows = $statement->fetchAll();
         $allocationRows = array_map(static function ($row) { if ($row['status'] === 'no_show') $row['status'] = 'confirmed'; return $row; }, $rows);
         $assignments = bookingRoomAssignments($allocationRows, resortEntities($db, 'stays', true));
-        foreach ($rows as &$row) $row['calendar_room'] = $assignments[$row['id']] ?? null;
+        foreach ($rows as &$row) {
+            $row['calendar_room'] = $assignments[$row['id']] ?? null;
+            $row['finance_basis'] = !$financeReady ? 'unavailable' : ($row['agreed_total'] !== null ? 'agreed' : ($row['estimated_total'] !== null ? 'estimated' : 'unpriced'));
+            $row['finance_balance'] = financeRemaining($row['agreed_total'], $row['estimated_total'], (int) $row['finance_net_cents']);
+            unset($row['agreed_total'], $row['estimated_total'], $row['finance_net_cents']);
+        }
         unset($row);
         $accommodations = array_map(
             static fn(array $stay): array => [

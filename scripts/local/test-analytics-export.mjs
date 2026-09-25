@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { csvCell, reportCsv } from '../../src/pages/admin/features/analytics/reportExport.js';
+import { csvCell, monthLabel, reportCsv } from '../../src/pages/admin/features/analytics/reportExport.js';
+assert.equal(monthLabel('2025-10'), 'October 2025');
+assert.equal(monthLabel('2026-01'), 'January 2026');
 assert.equal(csvCell('=SUM(1,2)'), '"\'=SUM(1,2)"');
 assert.equal(csvCell('  @formula'), '"\'  @formula"');
 assert.equal(csvCell('-200.50'), '"-200.50"');
@@ -7,4 +9,5 @@ assert.equal(csvCell('Name "quoted"'), '"Name ""quoted"""');
 const csv = reportCsv({filters:{from:'2026-01-01',to:'2026-01-31'},generated_at:'2026-01-31',monthly:[{period:'2026-01',net:'-200.50'}],metrics:{net:'-200.50'}});
 assert.ok(csv.startsWith('\uFEFF'));
 assert.ok(csv.includes('Estimated value') && csv.includes('"-200.50"'));
+assert.ok(csv.includes('"January 2026"'));
 console.log('Passed CSV formula protection, quoting, negative cash and report headers.');

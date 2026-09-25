@@ -27,7 +27,10 @@ try {
     financeMutate($db,$id,$actor,['action'=>'set_total','amount'=>'3000.00','reason'=>'Test agreed price','revision'=>0]);
     analyticsReject(fn()=>financeMutate($db,$id,$actor,['action'=>'set_total','amount'=>'4000.00','reason'=>'Stale','revision'=>0]),'Stale finance revision rejected');
     financeMutate($db,$id,$actor,['action'=>'record','kind'=>'payment','amount'=>'2000.00','paid_on'=>'2026-01-01','method'=>'cash','revision'=>1]);
-    analyticsReject(fn()=>financeMutate($db,$id,$actor,['action'=>'record','kind'=>'refund','amount'=>'2000.01','paid_on'=>'2026-01-01','method'=>'cash','note'=>'Excess','revision'=>2]),'Excess refund rejected');
+    try { financeMutate($db,$id,$actor,['action'=>'record','kind'=>'payment','amount'=>'1000.01','paid_on'=>'2026-01-01','method'=>'cash','revision'=>2]); throw new RuntimeException('Excess payment accepted.'); }
+    catch (InvalidArgumentException $error) { analyticsCheck($error->getMessage()==='You can record up to ₱1,000.00 for this payment.','Payment limit explains the maximum'); }
+    try { financeMutate($db,$id,$actor,['action'=>'record','kind'=>'refund','amount'=>'2000.01','paid_on'=>'2026-01-01','method'=>'cash','note'=>'Excess','revision'=>2]); throw new RuntimeException('Excess refund accepted.'); }
+    catch (InvalidArgumentException $error) { analyticsCheck($error->getMessage()==='You can refund up to ₱2,000.00 from this booking.','Refund limit explains the maximum'); }
     analyticsReject(fn()=>financeMutate($db,$id,$actor,['action'=>'record','kind'=>'payment','amount'=>'100.00','paid_on'=>'2099-01-01','method'=>'cash','revision'=>2]),'Future payment date rejected');
     financeMutate($db,$id,$actor,['action'=>'record','kind'=>'refund','amount'=>'500.00','paid_on'=>'2026-01-02','method'=>'cash','note'=>'Partial refund','revision'=>2]);
     $snapshot=financeSnapshot($db,$id);

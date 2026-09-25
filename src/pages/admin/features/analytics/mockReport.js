@@ -33,6 +33,7 @@ export function generateMockReport(liveReport, seed = 1) {
   const status = Object.fromEntries(statusNames.map(name => [name, 0]));
   const sources = Object.fromEntries(sourceNames.map(name => [name, 0]));
   const accommodationTotals = Object.fromEntries(stayOptions.map(stay => [stay.name, { name: stay.name, stays: 0, guests: 0, booked: 0, nights: 0 }]));
+  const mockBreakdown = {};
 
   const monthly = liveReport.monthly.map(({ period }, index) => {
     const seasonal = 1 + .28 * Math.sin(index * Math.PI / 6);
@@ -54,6 +55,7 @@ export function generateMockReport(liveReport, seed = 1) {
     const net = amount(paid - refunded);
     const pipeline = amount((statusSplit.pending || 0) * (6500 + Math.round(random() * 4500)));
     const staySplit = distribute(stays, stayOptions.map(stay => stay.name), random);
+    mockBreakdown[period] = { statuses: statusSplit, stays: staySplit };
     let assignedBooked = 0; let assignedGuests = 0;
     stayOptions.forEach((stay, stayIndex) => {
       const count = staySplit[stay.name];
@@ -90,5 +92,5 @@ export function generateMockReport(liveReport, seed = 1) {
   }));
 
   return { ...liveReport, generated_at: new Date().toISOString(), metrics, series, monthly, status, sources,
-    activities, accommodations, unmapped: 0, mock: true };
+    activities, accommodations, unmapped: 0, mock: true, mockBreakdown };
 }

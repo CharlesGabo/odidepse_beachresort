@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Breakdown, Trend, colors } from './ReportCharts.jsx';
 import { generateMockReport } from './mockReport.js';
-import { columns, downloadReport, label, money, number } from './reportExport.js';
+import AnalyticsDetailModal from './AnalyticsDetailModal.jsx';
+import { columns, downloadReport, label, money, monthLabel, number } from './reportExport.js';
 import './analytics.css';
 import './tremor-dashboard.css';
 
@@ -9,9 +10,10 @@ const defaults = { preset: 'rolling', group: 'month', source: 'all', status: 'al
 const sources = ['all', 'website', 'website_chat', 'facebook', 'manual', 'unknown'];
 const statuses = ['all', 'pending', 'confirmed', 'checked_in', 'completed', 'cancelled', 'no_show'];
 
-export default function AnalyticsPage({ onLogout }) {
+export default function AnalyticsPage({ onLogout, onOpenBooking }) {
   const [draft, setDraft] = useState(defaults); const [filters, setFilters] = useState(defaults);
   const [liveReport, setReport] = useState(null); const [mockSeed, setMockSeed] = useState(null);
+  const [selectedMetric, setSelectedMetric] = useState(null);
   const [busy, setBusy] = useState(true); const [error, setError] = useState(''); const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     const controller = new AbortController(); setBusy(true); setError('');
@@ -62,7 +64,7 @@ export default function AnalyticsPage({ onLogout }) {
         ['Guests expected / hosted',number(m.guests),`${number(m.stays)} accepted stays · by check-in date`, 'guests'],
         ['Average booking value',money(m.average_value),'Priced accepted stays only', 'average'],
         ['Cancellation rate',m.cancellation_rate === null ? '—' : `${number(m.cancellation_rate)}%`,'Current outcomes of requests in period', 'cancelled'],
-      ].map(([title,value,note,key],i) => <article className="bi-kpi" key={key} style={{ '--tile-color': colors[i % colors.length] }}><span>{title}</span><strong>{value}</strong><small>{note}</small><div className="bi-kpi-rule" /></article>)}</div>
+      ].map(([title,value,note,key],i) => <article className={`bi-kpi${selectedMetric === key ? ' is-selected' : ''}`} key={key} style={{ '--tile-color': colors[i % colors.length] }}><button type="button" className="bi-kpi-trigger" aria-haspopup="dialog" disabled={stale} onClick={() => setSelectedMetric(key)}><span>{title}</span><strong>{value}</strong><small>{note}</small><span className="bi-kpi-hint">View source bookings →</span></button><div className="bi-kpi-rule" /></article>)}</div>
       <div className="bi-quality"><strong>Financial coverage</strong><span>{money(m.agreed)} agreed · {money(m.estimated)} estimated across {number(m.estimated_bookings)} stays · {number(m.unpriced)} accepted stays without a value</span><span>Catalog estimates exclude activity charges. Review amounts in Booking details → Finance.</span></div>
       {!m.requests && !m.stays && Number(m.paid) === 0 && Number(m.refunded) === 0 && <p className="bi-notice">No matching requests, accepted stays, or cash transactions. Try another reporting period or reset the filters.</p>}
       <div className="bi-section-heading"><div><p className="bi-section-kicker">TRENDS</p><h2>How the resort is performing</h2></div><span>Bookings, revenue and guest volume over time</span></div>
@@ -78,7 +80,7 @@ export default function AnalyticsPage({ onLogout }) {
         <Breakdown title="Where bookings come from" caption="Request creation date · unknown legacy sources remain visible" values={report.sources} />
         <article className="bi-panel"><header><div><h3>Most requested activities</h3><p>Demand from requests created in this period</p></div></header>{report.activities.length ? <ul className="bi-activity-list">{report.activities.map((activity,i) => <li key={activity.name}><span className="bi-rank">{String(i+1).padStart(2,'0')}</span><div><strong>{activity.name}</strong><small>{number(activity.guests)} guests in requesting parties</small></div><b>{number(activity.requests)}<small>requests</small></b></li>)}</ul> : <p className="bi-empty">No recorded activity requests in this period.</p>}<p className="bi-footnote">Party size indicates potential demand, not confirmed participants or activity sales.</p></article>
       </div>
-      <article className="bi-panel bi-financial"><header><div><h3>Monthly financial report</h3><p>PHP · booking values by check-in month; collections by transaction month</p></div><span className="bi-report-tag">FINANCIAL SUMMARY</span></header><div className="bi-table-wrap" tabIndex="0" aria-label="Monthly financial report, scroll for more columns"><table><caption>Monthly financial report in Philippine pesos</caption><thead><tr>{columns.map(([key,title]) => <th key={key} scope="col">{title}</th>)}</tr></thead><tbody>{report.monthly.map(row => <tr key={row.period}>{columns.map(([key,,currency]) => key === 'period' ? <th scope="row" key={key}>{row[key]}</th> : <td key={key}>{currency ? money(row[key]) : number(row[key])}</td>)}</tr>)}</tbody><tfoot><tr>{columns.map(([key,,currency]) => <td key={key}>{key === 'period' ? 'Total' : currency ? money(m[key]) : number(m[key])}</td>)}</tr></tfoot></table></div></article>
+      <article className="bi-panel bi-financial"><header><div><h3>Monthly financial report</h3><p>PHP · booking values by check-in month; collections by transaction month</p></div><span className="bi-report-tag">FINANCIAL SUMMARY</span></header><div className="bi-table-wrap" tabIndex="0" aria-label="Monthly financial report, scroll for more columns"><table><caption>Monthly financial report in Philippine pesos</caption><thead><tr>{columns.map(([key,title]) => <th key={key} scope="col">{title}</th>)}</tr></thead><tbody>{report.monthly.map(row => <tr key={row.period}>{columns.map(([key,,currency]) => key === 'period' ? <th scope="row" key={key}>{monthLabel(row[key])}</th> : <td key={key}>{currency ? money(row[key]) : number(row[key])}</td>)}</tr>)}</tbody><tfoot><tr>{columns.map(([key,,currency]) => <td key={key}>{key === 'period' ? 'Total' : currency ? money(m[key]) : number(m[key])}</td>)}</tr></tfoot></table></div></article>
       <article className="bi-panel"><header><div><h3>Accommodation performance</h3><p>Accepted stays by check-in date · combined room bookings shown once</p></div></header><div className="bi-table-wrap" tabIndex="0"><table><caption>Accommodation performance</caption><thead><tr><th>Accommodation / room combination</th><th>Stays</th><th>Guests</th><th>Booked value</th><th>Average nights</th></tr></thead><tbody>{report.accommodations.map(stay => <tr key={stay.name}><th scope="row">{stay.name}</th><td>{number(stay.stays)}</td><td>{number(stay.guests)}</td><td>{money(stay.booked)}</td><td>{number(stay.average_nights)}</td></tr>)}{!report.accommodations.length && <tr><td colSpan="5">No accepted stays in this period.</td></tr>}</tbody></table></div></article>
       <details className="bi-methodology"><summary>Report definitions & data notes</summary>
         <p>Rolling 12 months starts on the first day of the month eleven months ago and ends today. All history ends today; use current year or custom dates to include future stays. All dates use Asia/Manila.</p>
@@ -88,5 +90,6 @@ export default function AnalyticsPage({ onLogout }) {
         <p>Activity counts use recorded selections, including cancelled requests. Legacy labeled notes are matched only to exact catalog names. One party may request several activities; totals across activities are not unique guests. {report.unmapped} accepted stays could not be mapped to catalog inventory.</p>
       </details>
     </div>}
+    {report && selectedMetric && <AnalyticsDetailModal key={selectedMetric} metric={selectedMetric} report={report} onClose={() => setSelectedMetric(null)} onLogout={onLogout} onOpenBooking={onOpenBooking} />}
   </section>;
 }

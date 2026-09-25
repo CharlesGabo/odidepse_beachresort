@@ -56,13 +56,43 @@
   box-shadow: 0 1px 3px rgba(15,23,42,.035), 0 8px 24px rgba(15,23,42,.02);
 }
 .bi-kpi { min-height: 151px; padding: 18px 19px; }
-.bi-kpi > span { font-size: 12px; color: #475569; }
-.bi-kpi > strong { color: #0f172a; font-size: clamp(22px, 2.2vw, 31px); font-weight: 700; margin: 12px 0 7px; }
+.bi-page .bi-kpi-trigger { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 112px; padding: 0 0 15px; border: 0; border-radius: 0; background: transparent; color: inherit; box-shadow: none; text-align: left; }
+.bi-page .bi-kpi-trigger:hover { border: 0; background: transparent; box-shadow: none; }
+.bi-kpi-trigger > span:first-child { font-size: 12px; color: #475569; }
+.bi-kpi-trigger > strong { display: block; color: #0f172a; font-size: clamp(22px, 2.2vw, 31px); font-weight: 700; letter-spacing: -.045em; line-height: 1.2; margin: 12px 0 7px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.bi-kpi-trigger .bi-kpi-hint { display: block; margin-top: auto; color: #4f46e5; font-size: 10px; font-weight: 700; }
+.bi-kpi.is-selected { border-color: #a5b4fc; box-shadow: 0 0 0 2px #e0e7ff, 0 8px 24px rgba(79,70,229,.06); }
 .bi-kpi small { color: #94a3b8; font-size: 10.5px; }
 .bi-kpi-rule { left: 19px; bottom: 16px; width: 30px; height: 3px; border-radius: 5px; opacity: .8; }
 .bi-kpi small { padding-bottom: 15px; }
 .bi-quality { border: 1px solid #d1fae5; border-radius: 9px; background: #f0fdf7; padding: 13px 17px; margin: 16px 0 0; color: #517366; }
 .bi-quality strong { color: #047857; }
+.bi-detail-modal { box-sizing: border-box; width: min(980px, calc(100% - 28px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid #dbe2eb; border-radius: 14px; color: #0f172a; background: #fff; box-shadow: 0 24px 70px rgba(15,23,42,.28); overflow: auto; font-family: inherit; }
+.bi-detail-modal::backdrop { background: rgba(15,23,42,.58); }
+.bi-detail-modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 22px 26px; border-bottom: 1px solid #e2e8f0; }
+.bi-detail-modal__head p { margin: 0 0 5px; color: #6366f1; font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.bi-detail-modal__head h2 { margin: 0 0 5px; font-size: 23px; letter-spacing: -.03em; }
+.bi-detail-modal__head span { color: #64748b; font-size: 11px; }
+.bi-page .bi-detail-modal__head button { min-width: 34px; min-height: 34px; padding: 0; border-radius: 50%; font-size: 22px; line-height: 1; }
+.bi-detail-modal__summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 14px; padding: 21px 26px 5px; }
+.bi-detail-modal__summary strong { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.04em; }
+.bi-detail-modal__summary span,.bi-detail-modal__note { color: #64748b; font-size: 12px; }
+.bi-detail-modal__note { margin: 0; padding: 6px 26px 14px; line-height: 1.5; }
+.bi-detail-modal__mock-note { margin: 18px 26px 0; padding: 12px 14px; border: 1px solid #f0d88c; border-radius: 8px; background: #fffbeb; color: #78500d; }
+.bi-detail-modal__mock-note strong { margin-right: 7px; letter-spacing: .06em; }
+.bi-detail-modal__table-wrap { margin: 16px 26px 22px; max-width: calc(100% - 52px); overflow: auto; border: 1px solid #e2e8f0; border-radius: 9px; }
+.bi-detail-modal table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 11px; }
+.bi-detail-modal th,.bi-detail-modal td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+.bi-detail-modal thead th { position: sticky; top: 0; color: #64748b; background: #f8fafc; font-size: 10px; text-transform: uppercase; }
+.bi-detail-modal tbody tr:hover { background: #f8faff; }
+.bi-detail-modal td:nth-child(3) { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.bi-detail-modal td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.bi-page .bi-detail-modal__booking-link { min-height: 0; padding: 0; border: 0; color: #4f46e5; background: transparent; box-shadow: none; text-decoration: underline; }
+.bi-detail-modal__pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 26px 24px; }
+.bi-detail-modal__pager span { margin-right: auto; color: #64748b; font-size: 11px; }
+.bi-detail-modal__state,.bi-detail-modal__error,.bi-detail-modal__empty { margin: 18px 26px 24px; padding: 20px; border-radius: 9px; background: #f8fafc; color: #64748b; font-size: 12px; }
+.bi-detail-modal__error { color: #9f342b; background: #fff1ef; }
+.bi-detail-modal__empty strong { color: #334155; }
 .bi-mock-banner { display: flex; flex-wrap: wrap; gap: 4px 9px; align-items: center; margin: 0 0 18px; padding: 12px 15px; border: 1px solid #c7d2fe; border-radius: 9px; color: #3730a3; background: #eef2ff; font-size: 11px; }
 .bi-mock-banner strong { font-size: 10px; letter-spacing: .08em; }
 .bi-chart-grid, .bi-breakdown-grid { gap: 15px; margin-bottom: 0; }
@@ -100,6 +130,13 @@
 .bi-methodology summary { color: #334155; }
 @media (max-width: 1150px) { .bi-heading { align-items: flex-start; } }
 @media (max-width: 650px) {
+  .bi-detail-modal__head { padding: 18px; }
+  .bi-detail-modal__summary { padding: 18px 18px 4px; }
+  .bi-detail-modal__note { padding-inline: 18px; }
+  .bi-detail-modal__mock-note { margin-inline: 18px; padding-inline: 12px; }
+  .bi-detail-modal__table-wrap { margin-inline: 18px; max-width: calc(100% - 36px); }
+  .bi-detail-modal__pager { padding-inline: 18px; }
+  .bi-detail-modal__state,.bi-detail-modal__error,.bi-detail-modal__empty { margin-inline: 18px; }
   .admin-shell--analytics .admin-main { padding: 20px 14px 110px; }
   .bi-heading { gap: 17px; margin-bottom: 22px; }
   .bi-toolbar { width: 100%; }
@@ -108,7 +145,7 @@
   .bi-section-heading > span { display: none; }
   .bi-kpis { gap: 9px; }
   .bi-kpi { min-height: 134px; padding: 14px; }
-  .bi-kpi > strong { font-size: clamp(19px, 5vw, 24px); }
+  .bi-kpi-trigger > strong { font-size: clamp(19px, 5vw, 24px); }
   .bi-kpi small { font-size: 10px; }
   .bi-kpi-rule { left: 14px; bottom: 12px; }
   .bi-panel { padding: 17px; }
@@ -116,6 +153,10 @@
 }
 @media print {
   .admin-shell--analytics { background: white; }
+  .bi-detail-modal { display: none !important; }
+  .bi-page .bi-kpi-trigger { display: flex; min-height: 0; padding: 0; }
+  .bi-kpi-trigger .bi-kpi-hint { display: none; }
+  .bi-kpi-trigger > strong { font-size: 20px; }
   .bi-section-heading { margin: 10px 0 6px; }
   .bi-section-heading > span, .bi-section-kicker { display: none; }
   .bi-kpi, .bi-panel { box-shadow: none; }
