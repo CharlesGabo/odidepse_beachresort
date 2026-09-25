@@ -7,6 +7,8 @@ import { overlaps, roomPlanning } from './features/bookings/bookingRoomPlanning.
 import useVisibilityPolling from './features/polling/useVisibilityPolling.js';
 import Notifications from './features/notifications/Notifications.jsx';
 import BookingEmailConfirmation from './features/notifications/BookingEmailConfirmation.jsx';
+import AnalyticsPage from './features/analytics/AnalyticsPage.jsx';
+import BookingFinance, { BookingFinanceContext } from './features/bookings/BookingFinance.jsx';
 import './styles/admin-responsive.css';
 
 const statusLabels = {
@@ -248,6 +250,7 @@ function sameDayTurnoverLabel(booking, unit) {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'overview' },
+  { id: 'analytics', label: 'Analytics', icon: 'analytics' },
   { id: 'bookings', label: 'Bookings', icon: 'calendar' },
   { id: 'resort', label: 'Stays & Activities', icon: 'home' },
   { id: 'guests', label: 'Guests', icon: 'users' },
@@ -257,6 +260,7 @@ const navItems = [
 
 function AdminIcon({ name }) {
   const paths = {
+    analytics: <><path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4" /></>,
     automation: <><rect x="3" y="4" width="18" height="13" rx="3" /><path d="m7 17-2 4 7-4M8 9h8M8 12h5" /></>,
     overview: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
@@ -919,8 +923,6 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
           </dl>
           <div className="request-note"><span>Message from guest</span><p>{request.note || 'No additional message provided.'}</p></div>
         </section>
-      </div>
-      <aside className="admin-request-modal__aside">
         <section className="request-panel request-contact">
           <div className="request-panel__heading"><span>Contact</span><strong>Reach the guest</strong></div>
           <a href={`mailto:${booking.email}`}><AdminIcon name="mail" /><span><small>Email</small>{booking.email}</span></a>
@@ -930,6 +932,9 @@ function BookingRequestModal({ booking, onClose, updateStatus, updateDates }) {
           <BookingStatusActions booking={booking} updateStatus={updateStatus} />
           {!statusActions[booking.status] && <strong className="booking-status-workflow-complete">{statusLabels[booking.status]}</strong>}
         </section>
+      </div>
+      <aside className="admin-request-modal__aside">
+        <BookingFinance key={booking.id} bookingId={booking.id} />
       </aside>
     </div>
   </dialog>;
@@ -1494,7 +1499,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
     setNotice('');
   };
 
-  return <div className="admin-shell">
+  return <BookingFinanceContext.Provider value={{ csrfToken, onLogout, onSaved: load }}><div className={`admin-shell${activeView === 'analytics' ? ' admin-shell--analytics' : ''}`}>
     <aside className="admin-sidebar">
       <span className="admin-wordmark admin-sidebar__label">ODIDEPSE</span>
       <nav aria-label="Admin navigation"><span className="admin-sidebar__label">Workspace</span>{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-sidebar__label">{item.label}</span></button>)}</nav>
@@ -1506,6 +1511,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
       {activeView === 'dashboard' && <header><div><span className="admin-kicker">Daily operations</span><h1>Good day, {user.display_name.split(' ')[0]}.</h1></div><div className="admin-avatar">{user.display_name.charAt(0).toUpperCase()}</div></header>}
       <nav className="admin-mobile-nav" aria-label="Admin sections">{navItems.map(item => <button type="button" key={item.id} className={activeView === item.id ? 'active' : ''} aria-current={activeView === item.id ? 'page' : undefined} title={item.label} onClick={() => navigate(item.id)}><AdminIcon name={item.icon} /><span className="admin-mobile-nav__label">{item.label}</span></button>)}</nav>
       {loading ? <div className="admin-section-loading"><span>Loading resort data…</span></div> : <>
+        {activeView === 'analytics' && <AnalyticsPage onLogout={onLogout} />}
         {activeView === 'notifications' && <Notifications csrfToken={csrfToken} onLogout={onLogout} onRefresh={load} focus={notificationFocus} />}
         {activeView === 'dashboard' && <OperationsDashboard bookings={bookings} notice={notice} setNotice={setNotice} onOpenBookings={intent => { navigate('bookings'); setNavigationIntent(intent); }} />}
         {activeView === 'bookings' && <BookingsView navigationIntent={navigationIntent} bookings={bookings} accommodations={accommodations} notice={notice} setNotice={setNotice} updateStatus={updateStatus} updateDates={updateDates} ManualBookingModal={ManualBookingModal} csrfToken={csrfToken} canUndoRoomMove={canUndoRoomMove} onBookingSaved={async data => { if (data.reference) setNotice(`Booking ${data.reference} saved.`); await load(); }} />}
@@ -1518,7 +1524,7 @@ function AdminWorkspace({ user, csrfToken, onLogout, ManualBookingModal }) {
         }} />}
       </>}
     </main>
-  </div>;
+  </div></BookingFinanceContext.Provider>;
 }
 
 export default function AdminPage({ ManualBookingModal }) {

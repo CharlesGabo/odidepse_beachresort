@@ -364,6 +364,7 @@ function BookingModal({ open, onClose, initialStay = '', initialDate = '', initi
     if (selectedStayPlan.length) body.stay_plan = selectedStayPlan.map(({ stay_id, quantity }) => ({ stay_id: Number(stay_id), quantity: Number(quantity) }));
     const soleActivityId = selectedActivities.length === 1 ? Number(selectedActivities[0]) : null;
     body.service_id = Number.isInteger(soleActivityId) ? soleActivityId : null;
+    body.activity_ids = selectedActivities.map(Number);
     try {
       const response = await fetch(manual ? '/api/admin/create-booking.php' : '/api/bookings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(manual ? { 'X-CSRF-Token': csrfToken } : {}), ...(chatDraft ? { 'X-Chat-CSRF': chatDraft.csrf } : {}) }, body: JSON.stringify(body) });
       const data = await response.json();

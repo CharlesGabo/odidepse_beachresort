@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/shared/database.php';
 require_once dirname(__DIR__) . '/resort/resort.php';
 require_once __DIR__ . '/booking-interpreter.php';
+require_once dirname(__DIR__) . '/bookings/booking-reporting.php';
 
 final class FacebookWorkflowError extends RuntimeException {}
 
@@ -1634,6 +1635,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules, array $i
             $update = $db->prepare('UPDATE bookings SET guest_name = ?, email = ?, phone = ?, check_in = ?, check_out = ?, guests = ?, stay_type = ?, stay_id = ?, stay_plan_json = ?, service_id = ?, service_name = ?, message = ? WHERE id = ? AND status = \'pending\'');
             $update->execute([$data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $stayId, $stayPlanJson, $serviceId, $serviceName, $bookingMessage, $editingBookingId]);
             require_once dirname(__DIR__) . '/notifications/notifications.php';
+            bookingReportingCapture($db, $editingBookingId, 'facebook', $activityIds);
             notificationBookingEvent($db, $editingBookingId, 'updated', key: 'messenger-update:' . $eventId, previousBooking: $booking);
             $reference = (string) $booking['reference_code'];
             $data['reference'] = $reference;
@@ -1650,6 +1652,7 @@ function facebookConversationReply(PDO $db, array $event, array $rules, array $i
         $insert->execute([$reference, $data['guest_name'], $data['email'] ?? '', $data['phone'] ?? '', $data['check_in'], $data['check_out'], (int) $data['guests'], $data['stay_name'], $bookingMessage, $stayId, $stayPlanJson, $serviceId, $serviceName]);
         $bookingId = (int) $db->lastInsertId();
         require_once dirname(__DIR__) . '/notifications/notifications.php';
+        bookingReportingCapture($db, $bookingId, 'facebook', $activityIds);
         notificationBookingEvent($db, $bookingId, 'created');
         $data['reference'] = $reference;
         facebookConversationSave($db, (int) $conversation['id'], 'completed', $data, $eventId, $bookingId);

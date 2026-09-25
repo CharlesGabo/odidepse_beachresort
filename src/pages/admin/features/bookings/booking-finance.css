@@ -1,0 +1,22 @@
+.booking-finance { margin-top: 20px; border: 1px solid #ddd8ce; border-radius: 14px; padding: 20px; background: #fffefb; color: #263d36; }
+.booking-finance__heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.booking-finance h3,.booking-finance h4 { margin: 8px 0 14px; }
+.booking-finance__totals { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.booking-finance__totals dt { font-size: 12px; color: #57665e; }
+.booking-finance__totals dd { margin: 4px 0; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.booking-finance form { display: grid; gap: 12px; margin: 14px 0; }
+.booking-finance label { display: grid; gap: 6px; font-size: 13px; }
+.booking-finance input,.booking-finance select { min-width: 0; width: 100%; padding: 10px; background: white; border: 1px solid #c9cfc8; border-radius: 6px; font: inherit; color: inherit; }
+.booking-finance button,.booking-finance-dialog > div > button,.booking-finance-confirm { padding: 10px 14px; border: 1px solid #bbc7be; background: #eff4ec; border-radius: 7px; color: #254a3b; cursor: pointer; font: inherit; font-size: 12px; }
+.booking-finance button:disabled,.booking-finance-confirm:disabled { opacity: .5; cursor: default; }
+.booking-finance summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+.booking-finance p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.booking-finance__notice { padding: 12px; background: #f9edcc; border-radius: 8px; }
+.booking-finance__entries article { padding: 15px 0; border-top: 1px solid #e5e5dc; }
+.booking-finance__entries .is-voided { color: #6f746e; }
+.booking-finance-dialog { width: min(660px,calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; border: 0; border-radius: 18px; background: #faf9f4; }
+.booking-finance-dialog::backdrop { background: #17282199; }
+.booking-finance-dialog h2 { font-size: 20px; }
+.booking-finance-confirm { margin-top: 18px; }
+.booking-finance :focus-visible { outline: 2px solid #277f62; outline-offset: 3px; }
+@media(max-width:600px) { .booking-finance { padding: 14px; } .booking-finance__heading { flex-wrap: wrap; } }

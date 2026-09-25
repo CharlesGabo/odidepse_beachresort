@@ -244,6 +244,23 @@ Never patch minified files in production as the source of truth. Make the change
 
 ## 8. Safe migration order
 
+### Resort analytics and booking finance (migration 016)
+
+The new reporting implementation uses additive `016_resort_analytics.sql`, compatible
+with the older local migration-013 fields. It does not require the older analytics
+branch's forecasting, AI, or mock-data features. The local database must be backed
+up before maintenance-account migration; then run the local-only
+`scripts/operations/setup-analytics.php --backfill-only` to capture historical room
+estimates and activity selections. See `scripts/local/analytics.md` for report
+definitions and verification. The application database user retains its existing
+limited privileges. No local setup command is authorization to release to production.
+
+For an explicitly authorized release, apply the additive schema first and deploy
+the frontend, report endpoints, finance module and booking capture changes together.
+Production backfill requires a separately reviewed maintenance procedure; the local
+setup command deliberately rejects production targets. Roll back application files
+if needed while preserving finance columns, audit records and payment history.
+
 ### Shared booking interpreter
 
 Apply additive `015_facebook_conversation_jobs.sql` with the maintenance account before deploying the conversation-worker changes. It adds a job kind without changing existing bookings. Deploy the webhook and shared automation/worker modules together; retain the existing recovery cron. Start with `GEMINI_BOOKING_INTERPRETER_ENABLED=0`, verify queued deterministic conversations, then enable the shared interpreter deliberately. No local credentials should be copied. Without the migration, the new webhook falls back to synchronous deterministic processing. Before rolling back to older worker code, disable interpretation and drain or reconcile queued conversation jobs, which older workers cannot process. Keep the additive enum migration when rolling back application files.

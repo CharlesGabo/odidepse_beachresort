@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/includes/shared/api.php';
 require_once dirname(__DIR__) . '/includes/shared/database.php';
 require_once dirname(__DIR__) . '/includes/resort/resort.php';
 require_once dirname(__DIR__) . '/includes/notifications/notifications.php';
+require_once dirname(__DIR__) . '/includes/bookings/booking-reporting.php';
 
 requireMethod('POST');
 $manualBooking = defined('ADMIN_MANUAL_BOOKING') && ADMIN_MANUAL_BOOKING === true;
@@ -37,6 +38,7 @@ $guests = filter_var($data['guests'] ?? null, FILTER_VALIDATE_INT, ['options' =>
 $stayId = $data['stay_id'] ?? null;
 $stayPlanInput = $data['stay_plan'] ?? [];
 $serviceId = $data['service_id'] ?? null;
+$activityIds = $data['activity_ids'] ?? null;
 if (!$manualBooking) require_once dirname(__DIR__) . '/includes/automations/facebook-automations.php';
 
 $errors = [];
@@ -47,6 +49,7 @@ if ($guests === false) $errors['guests'] = 'Guests must be between 1 and 100.';
 if ($stayId !== null && (!is_int($stayId) || $stayId < 1)) $errors['stay_id'] = 'Choose a valid stay.';
 if (!is_array($stayPlanInput) || count($stayPlanInput) > 10) $errors['stay_plan'] = 'Choose a valid room arrangement.';
 if ($serviceId !== null && (!is_int($serviceId) || $serviceId < 1)) $errors['service_id'] = 'Choose a valid service.';
+if ($activityIds !== null && (!is_array($activityIds) || !array_is_list($activityIds) || count($activityIds) > 100 || count(array_filter($activityIds, static fn($id) => !is_int($id) || $id < 1)) > 0)) $errors['activity_ids'] = 'Choose valid activities.';
 
 try {
     $checkIn = new DateTimeImmutable((string) ($data['check_in'] ?? ''), new DateTimeZone('Asia/Manila'));
@@ -151,6 +154,11 @@ try {
         $query->execute([$serviceId]); $serviceRecord = $query->fetch();
         if (!$serviceRecord) { $db->rollBack(); jsonResponse(['status' => 'error', 'message' => 'This service is no longer listed. Refresh and choose another service.'], 422); }
     }
+    if ($activityIds !== null) {
+        $allowedActivities = array_map('intval', $db->query('SELECT id FROM resort_services WHERE enabled=1 AND archived=0')->fetchAll(PDO::FETCH_COLUMN));
+        if (array_diff($activityIds, $allowedActivities)) { $db->rollBack(); jsonResponse(['message' => 'A selected activity is no longer listed. Refresh and try again.'], 422); }
+        $activityIds = array_values(array_unique($activityIds));
+    }
     if (!$manualBooking) $db->prepare('INSERT INTO request_attempts (identifier_hash, attempted_at) VALUES (?, NOW())')->execute([$identifier]);
     $reference = 'OD-' . date('ym') . '-' . strtoupper(bin2hex(random_bytes(3)));
     // A stable unique reference prevents duplicate insertion even if PHP stops after commit but before saving the session.
@@ -159,6 +167,7 @@ try {
     $statement = $db->prepare('INSERT INTO bookings (reference_code, guest_name, email, phone, check_in, check_out, guests, stay_type, message, status, stay_id, stay_plan_json, service_id, service_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'pending\', ?, ?, ?, ?)');
     $statement->execute([$reference, $name, strtolower($email), $phone, $checkIn->format('Y-m-d'), $checkOut->format('Y-m-d'), $guests, $stayPlan !== [] ? $stayType : ($stayRecord['name'] ?? null), $message ?: null, $stayRecord['id'] ?? null, $stayPlanJson, $serviceRecord['id'] ?? null, $serviceRecord['name'] ?? null]);
     $bookingId = (int) $db->lastInsertId();
+    bookingReportingCapture($db, $bookingId, $facebookLeadId !== null ? 'facebook' : ($manualBooking ? 'manual' : ($chatToken !== null ? 'website_chat' : 'website')), $activityIds);
     if ($facebookLeadId !== null) {
         $db->prepare("UPDATE facebook_events SET booking_id = ?, status = 'converted', needs_attention = 0, revision = revision + 1 WHERE id = ?")->execute([$bookingId, $facebookLeadId]);
         facebookAudit($db, (int) $_SESSION['admin_user']['id'], 'lead_converted', 'event', $facebookLeadId);
