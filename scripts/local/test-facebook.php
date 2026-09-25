@@ -14,6 +14,8 @@ try {
     checkFacebook(facebookCategory('This is a separate question') === 'general', 'Keyword boundaries avoid partial-word matches');
     checkFacebook(facebookCategory('Is a room avalable next weekend?') === 'booking', 'Conservative booking typo matching');
     checkFacebook(facebookCategory('What amnities do you have?') === 'amenities', 'Conservative amenity typo matching');
+    checkFacebook(facebookCategory('do you have jet skis as well') === 'amenities', 'Jet ski question is an amenities inquiry');
+    checkFacebook(facebookCategory('How much is jet ski?') === 'amenities', 'Activity-price question does not enter room-rate flow');
     checkFacebook(facebookCategory('Please send your locaton') === 'location', 'Conservative location typo matching');
     checkFacebook(facebookCategory('Next weekend for 5 guests') === 'booking', 'Dates plus party size imply booking intent');
     checkFacebook(facebookCategory('Guests: 5') === 'booking', 'Label-first guest count starts booking flow');
@@ -249,6 +251,21 @@ try {
     $directBody = "Dates: {$checkIn->format('F j')} to {$checkOut->format('j, Y')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 5\nName: Maria Santos\nEmail: maria@example.test\nPhone: 09171234567";
     $directCategory = facebookCategory($directBody);
     $directInsert = $db->prepare("INSERT INTO facebook_events (source,page_id,sender_id,kind,guest_name,body,last_customer_message_at,category) VALUES ('facebook',?,?, 'message','Messenger guest',?,CURRENT_TIMESTAMP,?)");
+    $optionStart = $checkIn->modify('+200 days');
+    $optionEnd = $optionStart->modify('+2 days');
+    $offeredRooms = facebookConversationStayOptions($db, 5, $optionStart->format('Y-m-d'), $optionEnd->format('Y-m-d'), null, 100);
+    checkFacebook(count($offeredRooms) >= 4, 'Four numbered Messenger room options exist for selection regression');
+    checkFacebook(facebookConversationOfferedStayChoice('4 guests', ['options' => $offeredRooms]) === null, 'Explicit guest-count update is not treated as option four');
+    $optionSender = 'option-choice-' . bin2hex(random_bytes(4));
+    $optionData = json_encode(['check_in' => $optionStart->format('Y-m-d'), 'check_out' => $optionEnd->format('Y-m-d'), 'guests' => 5, 'options' => $offeredRooms], JSON_THROW_ON_ERROR);
+    $db->prepare("INSERT INTO facebook_conversations (page_id,sender_id,state,data_json) VALUES (?,?,'awaiting_booking_details',?)")->execute([$page, $optionSender, $optionData]);
+    $directInsert->execute([$page, $optionSender, '4', 'general']);
+    $optionReply = facebookConversationReply($db, ['id' => (int) $db->lastInsertId(), 'page_id' => $page, 'sender_id' => $optionSender, 'body' => '4', 'category' => 'general'], facebookDefaultRules());
+    $optionQuery = $db->prepare('SELECT data_json FROM facebook_conversations WHERE page_id = ? AND sender_id = ?');
+    $optionQuery->execute([$page, $optionSender]);
+    $selectedData = json_decode((string) $optionQuery->fetchColumn(), true, 32, JSON_THROW_ON_ERROR);
+    checkFacebook(($selectedData['guests'] ?? null) === 5 && ($selectedData['stay_id'] ?? null) === $offeredRooms[3]['id']
+        && str_contains($optionReply, 'Room: ' . $offeredRooms[3]['name']), 'Messenger selects fourth offered room without changing guest count');
     $directInsert->execute([$page, $directSender, $directBody, $directCategory]);
     $directReply = facebookConversationReply($db, ['id' => (int) $db->lastInsertId(), 'page_id' => $page, 'sender_id' => $directSender, 'guest_name' => 'Messenger guest', 'body' => $directBody, 'category' => $directCategory], facebookDefaultRules());
     checkFacebook($directCategory === 'booking' && str_contains($directReply, '5 guests') && str_contains($directReply, 'maria@example.test') && str_contains($directReply, '+639171234567') && str_contains($directReply, 'PENDING'), 'Complete labelled details start and complete Messenger booking flow without saying booking: ' . $directCategory . ' / ' . $directReply);
@@ -278,6 +295,11 @@ try {
     checkFacebook(str_contains($initialReply, facebookDefaultRules()['guided_replies']['start']) && str_contains($initialReply, facebookDefaultRules()['guided_replies']['ask_booking_details']) && !str_contains($initialReply, 'Name: Needed'), 'Empty booking start gives friendly shared instructions instead of an empty checklist');
     $sideReply = facebookConversationReply($db, $addMessage('What amenities do you have?', 'amenities'), facebookDefaultRules());
     checkFacebook(str_contains($sideReply, 'amenities include') && !str_contains($sideReply, 'progress is saved') && !str_contains($sideReply, 'CONFIRM'), 'Side question is answered without booking-flow instructions');
+    $jetSkiReply = facebookConversationReply($db, $addMessage('do you have jet skis as well', 'amenities'), facebookDefaultRules());
+    checkFacebook(str_contains($jetSkiReply, 'jet ski rentals are available upon inquiry') && !str_contains($jetSkiReply, 'clarify'), 'Messenger answers jet ski FAQ during booking');
+    $tagalogFaqReply = facebookConversationReply($db, $addMessage('nagsa-sakay po kayo ng jetski dyan', 'amenities'), facebookDefaultRules(),
+        ['intent' => 'faq', 'fields' => [], 'ambiguous' => [], 'status' => 'used']);
+    checkFacebook(str_contains($tagalogFaqReply, 'jet ski rentals are available upon inquiry'), 'Messenger AI intent preserves deterministic amenity reply');
     $allDetails = "Dates: {$checkIn->format('F j')} to {$checkOut->format('j, Y')}\nCheck in: 2 PM\nCheck out: 11 AM\nGuests: 2 guests\nRoom: BEST FIT\nName: Maria Santos\nEmail: maria@example.test\nPhone: 0917 123 4567\nActivities: {$chatService['name']}\nNotes: Birthday stay";
     $summaryReply = facebookConversationReply($db, $addMessage($allDetails, 'general'), facebookDefaultRules());
     checkFacebook(str_contains($summaryReply, 'PENDING') && str_contains($summaryReply, 'Check-in 2:00 PM · Check-out 11:00 AM') && str_contains($summaryReply, 'Suggested room:') && str_contains($summaryReply, $chatService['name']) && str_contains($summaryReply, 'Birthday stay'), 'Messenger summary includes shared activities and notes');

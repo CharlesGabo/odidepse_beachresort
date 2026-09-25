@@ -244,6 +244,10 @@ Never patch minified files in production as the source of truth. Make the change
 
 ## 8. Safe migration order
 
+### Shared booking interpreter
+
+Apply additive `015_facebook_conversation_jobs.sql` with the maintenance account before deploying the conversation-worker changes. It adds a job kind without changing existing bookings. Deploy the webhook and shared automation/worker modules together; retain the existing recovery cron. Start with `GEMINI_BOOKING_INTERPRETER_ENABLED=0`, verify queued deterministic conversations, then enable the shared interpreter deliberately. No local credentials should be copied. Without the migration, the new webhook falls back to synchronous deterministic processing. Before rolling back to older worker code, disable interpretation and drain or reconcile queued conversation jobs, which older workers cannot process. Keep the additive enum migration when rolling back application files.
+
 Prefer backward-compatible database releases:
 
 1. Add new nullable columns/tables/indexes.

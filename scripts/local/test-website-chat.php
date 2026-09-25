@@ -13,6 +13,30 @@ try {
     $rules['templates']['general'] = 'Shared fallback';
     chatCheck(websiteChatReply($db, $chat, 'Hello', $rules, static fn() => null)['reply'] === 'Shared fallback', 'AI failure fallback');
     chatCheck(websiteChatReply($db, $chat, 'Hello', $rules, static fn() => 'Hello po')['source'] === 'ai', 'AI routing');
+    $faqChat = ['state' => 'booking', 'data' => ['guests' => 6, 'interpretation_pending' => ['check_out']], 'history' => [], 'csrf' => 'faq'];
+    $faqBefore = $faqChat;
+    $faqResult = websiteChatReply($db, $faqChat, 'do you have jet skis as well', $rules,
+        static fn() => 'Jet ski rental is available upon inquiry.',
+        static function (): never { throw new RuntimeException('FAQ reached booking interpreter'); });
+    chatCheck($faqResult['source'] === 'ai' && str_contains($faqResult['reply'], 'Jet ski rental') && $faqChat === $faqBefore, 'Website AI answers activity question without changing pending booking');
+    $faqFallback = websiteChatReply($db, $faqChat, 'do you have jet skis as well', $rules, static fn() => null);
+    chatCheck($faqFallback['source'] === 'fallback' && str_contains($faqFallback['reply'], 'jet ski') && $faqChat === $faqBefore, 'Website activity FAQ fallback keeps pending booking');
+    $generalFaq = websiteChatReply($db, $faqChat, 'What time is check-in?', $rules, static fn() => 'Staff can advise the check-in time.');
+    chatCheck($generalFaq['source'] === 'ai' && $faqChat === $faqBefore, 'General support question uses AI during booking');
+    $tagalogFaq = websiteChatReply($db, $faqChat, 'nagsa-sakay po kayo ng jetski dyan', $rules,
+        static fn() => 'May jet ski rental po, subject to staff confirmation. Gusto ninyong isama sa stay inquiry?',
+        static fn() => ['intent' => 'faq', 'fields' => [], 'ambiguous' => []]);
+    chatCheck($tagalogFaq['source'] === 'ai' && str_contains($tagalogFaq['reply'], 'jet ski') && $faqChat === $faqBefore, 'Unusual Tagalog amenity inquiry is routed by AI without changing booking');
+    $tagalogFallback = websiteChatReply($db, $faqChat, 'nagsa-sakay po kayo ng jetski dyan', $rules,
+        static fn() => null, static fn() => ['intent' => 'faq', 'fields' => [], 'ambiguous' => []]);
+    chatCheck($tagalogFallback['source'] === 'fallback' && $faqChat === $faqBefore, 'AI support failure keeps booking draft intact');
+    chatCheck(!facebookConversationInformationQuestion('Can I add jet ski to my booking?'), 'Activity booking requests are not treated as FAQ');
+    $continuedChat = ['state' => 'booking', 'data' => ['check_in' => '2027-10-10', 'check_out' => '2027-10-12'], 'history' => [], 'csrf' => 'continued'];
+    $continuedReply = websiteChatReply($db, $continuedChat, 'Check in 2 PM, check out 11 AM', $rules, null,
+        static fn() => ['intent' => 'booking', 'fields' => [], 'ambiguous' => ['guests']]);
+    chatCheck(($continuedChat['data']['check_in_time'] ?? '') === '14:00' && ($continuedChat['data']['check_out_time'] ?? '') === '11:00'
+        && !isset($continuedChat['data']['interpretation_pending']) && str_contains($continuedReply['reply'], 'Total pax: NOT PROVIDED YET')
+        && !str_contains($continuedReply['reply'], 'Please clarify your total number of guests'), 'Time follow-up keeps dates and asks normally for missing guests');
     $friendlyStart = ['state' => 'idle', 'data' => [], 'history' => [], 'csrf' => 'friendly'];
     $friendlyReply = websiteChatReply($db, $friendlyStart, 'Booking', $rules)['reply'];
     chatCheck(str_contains($friendlyReply, facebookGuidedReply($rules, 'start')) && str_contains($friendlyReply, facebookGuidedReply($rules, 'ask_booking_details')) && !str_contains($friendlyReply, 'Name: Needed'), 'Website booking start uses friendly shared instructions');
@@ -96,6 +120,15 @@ try {
     chatCheck($chat['state'] === 'rates', 'Partial rate state');
     websiteChatReply($db, $chat, $start->format('Y-m-d') . ' to ' . $end->format('Y-m-d') . ', 5 guests', $rules);
     chatCheck($chat['state'] === 'rates' && !empty($chat['data']['options']), 'Rate options');
+    $offeredRooms = $chat['data']['options'];
+    chatCheck(count($offeredRooms) >= 4, 'Four numbered room options are available for selection regression');
+    $partyChangeChat = $chat;
+    websiteChatReply($db, $partyChangeChat, '4 guests', $rules);
+    chatCheck(($partyChangeChat['data']['guests'] ?? null) === 4, 'Explicit four-guest update remains a guest-count change');
+    $chosenRoom = websiteChatReply($db, $chat, '4', $rules);
+    chatCheck(($chat['data']['guests'] ?? null) === 5 && ($chat['data']['stay_id'] ?? null) === $offeredRooms[3]['id']
+        && $chat['state'] === 'booking' && str_contains($chosenRoom['reply'], 'Room: ' . $offeredRooms[3]['name'])
+        && !str_contains($chosenRoom['reply'], 'Suitable options for your group'), 'Fourth option is selected without changing five guests or repeating options');
     $answer = websiteChatReply($db, $chat, 'Booking', $rules);
     chatCheck(!str_contains($answer['reply'], 'For the website booking form'), 'Website omits redundant channel wording');
     $services = resortEntities($db, 'services', false);
@@ -123,6 +156,10 @@ try {
     chatCheck(!str_contains($redacted, 'example.test') && !str_contains($redacted, '917') && !str_contains($redacted, 'ABC123'), 'PII redaction');
     $payload = websiteChatGeminiPayload(resortSnapshot($db), 'Hello');
     chatCheck(!str_contains(json_encode($payload), 'maria@example.test'), 'Booking identity excluded from AI');
+    chatCheck(str_contains($payload['systemInstruction']['parts'][0]['text'], 'next step toward a stay'), 'Guest-support prompt offers a relevant sales next step');
+    $supportContext = websiteChatSupportContext(['state' => 'booking', 'data' => ['guests' => 6, 'check_in' => '2027-10-10', 'email' => 'private@example.test', 'guest_name' => 'Private Guest']]);
+    $contextPayload = websiteChatGeminiPayload(resortSnapshot($db), 'May jetski ba?', $supportContext);
+    chatCheck($supportContext['guests'] === 6 && $supportContext['booking_in_progress'] && !str_contains(json_encode($contextPayload), 'private@example.test') && !str_contains(json_encode($contextPayload), 'Private Guest'), 'Sales context includes only non-sensitive booking progress');
     chatCheck(websiteChatGeminiText(['promptFeedback' => ['blockReason' => 'SAFETY']]) === null, 'Safety fallback');
     chatCheck(websiteChatGeminiText(['candidates' => [['finishReason' => 'MAX_TOKENS']]]) === null, 'Truncated response fallback');
     chatCheck(websiteChatGeminiText(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => 'Welcome']]]]]]) === 'Welcome', 'Valid provider response');

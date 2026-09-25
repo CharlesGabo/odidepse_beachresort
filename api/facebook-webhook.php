@@ -63,12 +63,15 @@ function webhookInsertEvent(PDO $db, array $event, array $rules): ?int
         facebookAudit($db, null, 'sender_name_queued', 'event', $id);
     }
     if (($rules['prepare_replies'] ?? false) && $event['kind'] === 'message' && ($event['automatic_reply'] ?? true)) {
-        $reply = facebookConversationReply($db, ['id' => $id] + $event, $rules);
-        $includeAutomaticNotice = trim($reply) !== trim(facebookConversationPrompt('handoff', $rules));
-        if ($reply !== '' && facebookQueueReply($db, $id, $reply, true, $includeAutomaticNotice)) {
-            facebookAudit($db, null, 'automatic_reply_queued', 'event', $id);
-            $photoCount = facebookQueueNativeRoomPhotos($db, $id, (string) $event['page_id'], (string) $event['sender_id']);
-            if ($photoCount > 0) facebookAudit($db, null, 'suggested_room_photos_queued', 'event', $id);
+        if (facebookConversationJobsAvailable($db)) {
+            $db->prepare("INSERT IGNORE INTO facebook_jobs (event_id, kind, dedupe_key, payload, status) VALUES (?, 'conversation', ?, '', 'pending')")
+                ->execute([$id, 'conversation:event:' . $id]);
+        } else {
+            // Rolling upgrades retain deterministic service until migration 015 is applied.
+            $reply = facebookConversationReply($db, ['id' => $id] + $event, $rules);
+            if ($reply !== '' && facebookQueueReply($db, $id, $reply, true, trim($reply) !== trim(facebookConversationPrompt('handoff', $rules)))) {
+                facebookQueueNativeRoomPhotos($db, $id, (string) $event['page_id'], (string) $event['sender_id']);
+            }
         }
     }
     return $id;

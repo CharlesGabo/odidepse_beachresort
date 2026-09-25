@@ -4,6 +4,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/facebook-automations.php';
 require_once dirname(__DIR__) . '/resort/stay-photos.php';
 
+function facebookConversationJobsAvailable(PDO $db): bool
+{
+    $column = $db->query("SHOW COLUMNS FROM facebook_jobs LIKE 'kind'")->fetch();
+    return is_array($column) && str_contains($column['Type'], "'conversation'");
+}
+
 function workerFailJob(PDO $db, int $jobId, string $code): void
 {
     $db->beginTransaction();
@@ -23,13 +29,20 @@ function workerClaimReply(PDO $db, array $eventIds = []): ?array
     $db->beginTransaction();
     try {
         $eventIds = array_values(array_unique(array_filter($eventIds, static fn(mixed $id): bool => is_int($id) && $id > 0)));
+        // Conversation work is transactional and replayable; delivery jobs are not.
+        $db->exec("UPDATE facebook_jobs SET status = 'retry_wait', next_attempt_at = CURRENT_TIMESTAMP WHERE kind = 'conversation' AND status = 'processing' AND updated_at < CURRENT_TIMESTAMP - INTERVAL 2 MINUTE");
         $eventFilter = $eventIds === [] ? '' : ' AND j.event_id IN (' . implode(',', array_fill(0, count($eventIds), '?')) . ')';
         $query = $db->prepare("SELECT j.*, e.source, e.page_id, e.sender_id, e.guest_name, e.body, e.category, e.status AS event_status,
                 TIMESTAMPDIFF(SECOND, e.last_customer_message_at, CURRENT_TIMESTAMP) AS message_age_seconds
             FROM facebook_jobs j
             INNER JOIN facebook_events e ON e.id = j.event_id
-            WHERE j.kind IN ('reply','profile_fetch')
+            WHERE j.kind IN ('reply','profile_fetch','conversation')
               AND (j.status = 'pending' OR (j.status = 'retry_wait' AND j.next_attempt_at <= CURRENT_TIMESTAMP))
+              AND (j.kind <> 'conversation' OR NOT EXISTS (
+                  SELECT 1 FROM facebook_jobs earlier JOIN facebook_events prior ON prior.id = earlier.event_id
+                  WHERE earlier.kind = 'conversation' AND prior.page_id = e.page_id AND prior.sender_id = e.sender_id
+                    AND earlier.id < j.id AND earlier.status IN ('pending','processing','retry_wait','failed')
+              ))
               {$eventFilter}
             ORDER BY j.id ASC LIMIT 1 FOR UPDATE");
         $query->execute($eventIds);
@@ -41,6 +54,41 @@ function workerClaimReply(PDO $db, array $eventIds = []): ?array
         $job['attempts'] = (int) $job['attempts'] + 1;
         $db->commit();
         return $job;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
+
+function workerProcessConversation(PDO $db, array $job, ?callable $provider = null): void
+{
+    $query = $db->prepare('SELECT * FROM facebook_conversations WHERE page_id = ? AND sender_id = ?');
+    $query->execute([$job['page_id'], $job['sender_id']]);
+    $snapshot = $query->fetch() ?: [];
+    $data = json_decode($snapshot['data_json'] ?? '{}', true, 32, JSON_THROW_ON_ERROR);
+    $rules = facebookSettings($db)['rules'];
+    $interpretation = bookingInterpret($db, $job['body'], $snapshot['state'] ?? 'idle', $data, $job['category'], $provider);
+    $db->beginTransaction();
+    try {
+        $lease = $db->prepare("SELECT status, attempts FROM facebook_jobs WHERE id = ? FOR UPDATE");
+        $lease->execute([(int) $job['id']]); $currentJob = $lease->fetch();
+        if (!$currentJob || $currentJob['status'] !== 'processing' || (int) $currentJob['attempts'] !== (int) $job['attempts']) { $db->rollBack(); return; }
+        $eventQuery = $db->prepare('SELECT *, TIMESTAMPDIFF(SECOND,last_customer_message_at,CURRENT_TIMESTAMP) AS age FROM facebook_events WHERE id = ? FOR UPDATE');
+        $eventQuery->execute([(int) $job['event_id']]); $event = $eventQuery->fetch();
+        $query = $db->prepare('SELECT revision FROM facebook_conversations WHERE page_id = ? AND sender_id = ? FOR UPDATE');
+        $query->execute([$job['page_id'], $job['sender_id']]);
+        if ((int) ($query->fetchColumn() ?: 0) !== (int) ($snapshot['revision'] ?? 0)) $interpretation = [];
+        $currentRules = facebookSettings($db)['rules'];
+        if ($event && $event['status'] !== 'resolved' && (int) $event['age'] >= 0 && (int) $event['age'] <= 86400 && !empty($currentRules['prepare_replies'])) {
+            $reply = facebookConversationReply($db, $event, $currentRules, $interpretation);
+            if ($reply !== '' && facebookQueueReply($db, (int) $event['id'], $reply, true, trim($reply) !== trim(facebookConversationPrompt('handoff', $currentRules)))) {
+                facebookQueueNativeRoomPhotos($db, (int) $event['id'], $event['page_id'], $event['sender_id']);
+                facebookAudit($db, null, 'automatic_reply_queued', 'event', (int) $event['id']);
+            }
+            if (in_array($interpretation['status'] ?? '', ['used', 'fallback'], true)) facebookAudit($db, null, 'interpreter_' . ($interpretation['ambiguous'] ? 'ambiguous' : $interpretation['status']), 'event', (int) $event['id']);
+        }
+        $db->prepare("UPDATE facebook_jobs SET status = 'succeeded', error_code = NULL WHERE id = ?")->execute([(int) $job['id']]);
+        $db->commit();
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
         throw $error;
@@ -144,6 +192,14 @@ function facebookRunDeliveryWorker(array $eventIds = [], int $maximumJobs = 10, 
         $messageAge = filter_var($job['message_age_seconds'], FILTER_VALIDATE_INT);
         $withinWindow = $messageAge !== false && $messageAge >= 0 && $messageAge <= 86400;
         $validSender = $job['source'] === 'facebook' && hash_equals($pageId, (string) $job['page_id']) && is_string($job['sender_id']) && $job['sender_id'] !== '';
+        if ($job['kind'] === 'conversation') {
+            if (!$validSender || !$withinWindow || $job['event_status'] === 'resolved') {
+                $db->prepare("UPDATE facebook_jobs SET status = 'cancelled', error_code = 'ineligible_conversation' WHERE id = ? AND status = 'processing'")->execute([(int) $job['id']]);
+                continue;
+            }
+            workerProcessConversation($db, $job);
+            continue;
+        }
         if ($job['kind'] === 'profile_fetch') {
             if (!$validSender) {
                 workerFailJob($db, (int) $job['id'], 'ineligible_profile');

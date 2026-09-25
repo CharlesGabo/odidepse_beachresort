@@ -68,4 +68,4 @@ Complete `TEMPLATE_CHECKLIST.md` before using a copy for another project. Never 
 
 # Website booking assistant
 
-The homepage chat shares Facebook Automations reply rules and opens a prefilled booking form for visitor review. Configure optional server-side Gemini using [Website Chat setup](scripts/local/website-chat.md).
+The homepage chat shares Facebook Automations reply rules and opens a prefilled booking form for visitor review. Optional Gemini booking interpretation is shared with Messenger and disabled by default; Messenger interpretation requires migration 015 and the existing worker. Configure it using [Website Chat setup](scripts/local/website-chat.md).
