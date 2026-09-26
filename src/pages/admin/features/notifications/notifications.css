@@ -16,6 +16,7 @@
 .notification-table td,.notification-table th { padding:12px; border-bottom:1px solid #d8e2dd; vertical-align:top; overflow-wrap:anywhere; }
 .notification-table small { display:block; margin-top:6px; color:#576b61; }
 .notification-table__number { width:52px; color:#607168; font-weight:800; white-space:nowrap; }
+.notification-table__attempts { min-width:72px; overflow-wrap:normal; white-space:nowrap; }
 .notification-table tr.is-notification-highlighted td { background:#fff2df; animation:notificationTarget 2.6s ease-out both; }
 @keyframes notificationTarget { 0%,45% { background:#f7d9a7; } 100% { background:#fff2df; } }
 .notification-table__actions { display:flex; flex-wrap:nowrap; gap:6px; white-space:nowrap; }

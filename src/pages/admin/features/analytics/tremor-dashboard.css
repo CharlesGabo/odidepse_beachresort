@@ -62,7 +62,7 @@
 .bi-kpi-trigger > strong { display: block; color: #0f172a; font-size: clamp(22px, 2.2vw, 31px); font-weight: 700; letter-spacing: -.045em; line-height: 1.2; margin: 12px 0 7px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .bi-kpi-trigger .bi-kpi-hint { display: block; margin-top: auto; color: #4f46e5; font-size: 10px; font-weight: 700; }
 .bi-kpi.is-selected { border-color: #a5b4fc; box-shadow: 0 0 0 2px #e0e7ff, 0 8px 24px rgba(79,70,229,.06); }
-.bi-kpi small { color: #94a3b8; font-size: 10.5px; }
+.bi-kpi small { color: #64748b; font-size: 11.5px; font-weight: 500; }
 .bi-kpi-rule { left: 19px; bottom: 16px; width: 30px; height: 3px; border-radius: 5px; opacity: .8; }
 .bi-kpi small { padding-bottom: 15px; }
 .bi-quality { border: 1px solid #d1fae5; border-radius: 9px; background: #f0fdf7; padding: 13px 17px; margin: 16px 0 0; color: #517366; }
@@ -104,8 +104,12 @@
 .bi-panel-mark { color: #cbd5e1; }
 .bi-legend { color: #64748b; font-size: 10.5px; gap: 8px 18px; margin-bottom: 8px; }
 .bi-legend i, .bi-breakdown i { width: 8px; height: 8px; }
+.bi-trend-latest { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px 18px; min-height: 16px; margin: 1px 4px -12px 64px; font-size: 10.5px; font-weight: 600; }
+.bi-trend-latest strong { font-weight: 800; }
 .bi-trend svg { margin-top: 4px; }
 .bi-trend svg text { font-family: inherit; font-size: 10px; fill: #94a3b8; }
+.bi-trend svg .bi-trend-end-label { font-weight: 700; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.bi-trend svg .bi-trend-bar-label { font-size: 9px; font-weight: 700; paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .bi-chart-data { border-color: #f1f5f9; margin-top: 5px; }
 .bi-chart-data summary { color: #6366f1; font-size: 11px; font-weight: 600; }
 .bi-page table { font-size: 11px; }
@@ -146,7 +150,7 @@
   .bi-kpis { gap: 9px; }
   .bi-kpi { min-height: 134px; padding: 14px; }
   .bi-kpi-trigger > strong { font-size: clamp(19px, 5vw, 24px); }
-  .bi-kpi small { font-size: 10px; }
+  .bi-kpi small { font-size: 11px; }
   .bi-kpi-rule { left: 14px; bottom: 12px; }
   .bi-panel { padding: 17px; }
   .bi-filters { padding: 15px; }

@@ -286,7 +286,7 @@ try {
         'confirmed' => ['checked_in', 'cancelled'],
         'checked_in' => ['completed'],
         'completed' => [],
-        'cancelled' => [],
+        'cancelled' => ['checked_in'],
     ];
     $currentStatus = (string) $booking['status'];
     if (!in_array($status, $transitions[$currentStatus] ?? [], true)) {
@@ -294,7 +294,14 @@ try {
         jsonResponse(['status' => 'error', 'message' => 'This booking status cannot skip or repeat a processing step. Refresh the page and try again.'], 409);
     }
 
-    $assignments = bookingRoomAssignments($rows, resortEntities($db, 'stays', true));
+    $allocationRows = $rows;
+    if ($currentStatus === 'cancelled' && in_array($status, ['confirmed', 'checked_in'], true)) {
+        foreach ($allocationRows as &$allocationRow) {
+            if ((int) $allocationRow['id'] === $id) $allocationRow['status'] = $status;
+        }
+        unset($allocationRow);
+    }
+    $assignments = bookingRoomAssignments($allocationRows, resortEntities($db, 'stays', true));
     if (in_array($status, ['confirmed', 'checked_in'], true)) {
         $bookingPlan = json_decode((string) ($booking['stay_plan_json'] ?? ''), true);
         if (is_array($bookingPlan) && $bookingPlan !== []) {
@@ -314,7 +321,12 @@ try {
         }
     }
     $pin = $db->prepare('UPDATE bookings SET room_index = ? WHERE id = ? AND room_index IS NULL');
-    foreach ($rows as $row) if (!empty($assignments[$row['id']]) && in_array($row['status'], ['pending', 'confirmed', 'checked_in'], true)) $pin->execute([$assignments[$row['id']], $row['id']]);
+    foreach ($rows as $row) {
+        $isActivatedTarget = (int) $row['id'] === $id && in_array($status, ['confirmed', 'checked_in'], true);
+        if (!empty($assignments[$row['id']]) && (in_array($row['status'], ['pending', 'confirmed', 'checked_in'], true) || $isActivatedTarget)) {
+            $pin->execute([$assignments[$row['id']], $row['id']]);
+        }
+    }
     $statement = $db->prepare('UPDATE bookings SET status = ?, updated_at = NOW() WHERE id = ? AND status = ?');
     $statement->execute([$status, $id, $currentStatus]);
     if ($statement->rowCount() !== 1) {

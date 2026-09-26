@@ -27,8 +27,12 @@ const statusActions = {
     { status: 'confirmed', label: 'Confirm', tone: 'primary' },
     { status: 'cancelled', label: 'Cancel', tone: 'danger' },
   ],
-  confirmed: [{ status: 'checked_in', label: 'Check in', tone: 'primary' }],
+  confirmed: [
+    { status: 'checked_in', label: 'Check in', tone: 'primary' },
+    { status: 'cancelled', label: 'Cancel booking', tone: 'danger' },
+  ],
   checked_in: [{ status: 'completed', label: 'Check out', tone: 'checked-in' }],
+  cancelled: [{ status: 'checked_in', label: 'Correct to checked in', tone: 'primary' }],
   no_show: [
     { status: 'checked_in', label: 'Correct to checked in', tone: 'primary' },
     { status: 'cancelled', label: 'Cancel booking', tone: 'danger' },
@@ -43,7 +47,7 @@ function BookingStatusActions({ booking, updateStatus }) {
   return <div className="booking-status-actions" aria-label={`Actions for ${booking.guest_name}`}>
     {actions.map(action => <button type="button" className={`booking-status-action booking-status-action--${action.tone}`} key={action.status}
       onClick={() => setSelectedAction(action)}>{action.label}</button>)}
-    {selectedAction && <BookingEmailConfirmation booking={booking} status={selectedAction.status} label={selectedAction.label} onClose={() => setSelectedAction(null)} onConfirm={details => updateStatus(booking.id, selectedAction.status, details)} />}
+    {selectedAction && <BookingEmailConfirmation booking={booking} status={selectedAction.status} label={selectedAction.label} onClose={() => setSelectedAction(null)} onConfirm={details => updateStatus(booking.id, selectedAction.status, { ...details, expected_updated_at: booking.updated_at })} />}
   </div>;
 }
 
@@ -1273,7 +1277,7 @@ function BookingsView({ bookings, accommodations, notice, setNotice, updateStatu
     <section className="booking-board admin-view" aria-labelledby="bookings-heading">
     <div className="booking-board__head">
       <div className="booking-board__summary"><div><h2 id="bookings-heading">Booking requests</h2><p>{visibleActiveBookings.length} {visibleActiveBookings.length === 1 ? 'reservation' : 'reservations'}</p></div><button type="button" className="filter-row__add-booking booking-board__mobile-add" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
-      <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search active bookings" placeholder="Search guest or reference" value={activeQuery} onChange={event => setActiveQuery(event.target.value)} /></label>
+      <label className="admin-search"><AdminIcon name="search" /><input aria-label="Search booking requests" placeholder="Search bookings by guest or reference" value={activeQuery} onChange={event => setActiveQuery(event.target.value)} /></label>
     </div>
     <div className="filter-row">{['all', 'pending', 'confirmed', 'checked_in'].map(value => <button type="button" key={value} className={activeFilter === value ? 'active' : ''} onClick={() => setActiveFilter(value)}>{value === 'all' ? 'All' : statusLabels[value]}</button>)}<button type="button" className="filter-row__add-booking" onClick={() => setManualBookingOpen(true)}>+ Add booking</button></div>
     {notice && <p className="admin-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></p>}
